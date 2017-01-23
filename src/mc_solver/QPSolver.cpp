@@ -264,6 +264,14 @@ void QPSolver::fillTorque(const mc_solver::DynamicsConstraint& dynamicsConstrain
   {
     robot().mbc().jointTorque = rbd::vectorToDof(robot().mb(), Eigen::VectorXd::Zero(robot().mb().nrDof()));
   }
+
+  std::size_t i = robots().robotIndex();
+  auto & tau = qpRes.robots_state[i].torque;
+  for(const auto & j : robot().mb().joints())
+  {
+    auto jIndex = robot().jointIndexByName(j.name());
+    tau[j.name()] = robot().mbc().jointTorque[jIndex];
+  }
 }
 
 }

@@ -12,6 +12,7 @@ struct RobotMsg
   std::map<std::string, std::vector<double>> q;
   std::map<std::string, std::vector<double>> alphaVec;
   Eigen::VectorXd alphaDVec;
+  std::map<std::string, std::vector<double>> torque;
 };
 
 }
