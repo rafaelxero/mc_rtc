@@ -8,7 +8,7 @@
 #include <mc_solver/msg/QPResult.h>
 
 #include <mc_rbdyn/Contact.h>
-#include <mc_rbdyn/robot.h>
+#include <mc_rbdyn/Robots.h>
 
 #include <Tasks/QPSolver.h>
 
@@ -201,6 +201,10 @@ public:
   tasks::qp::SolverData & data();
 
   void fillTorque(const mc_solver::DynamicsConstraint& dynamicsConstraint);
+
+  boost::timer::cpu_times solveTime();
+
+  boost::timer::cpu_times solveAndBuildTime();
 private:
   std::shared_ptr<mc_rbdyn::Robots> robots_p;
   double timeStep;

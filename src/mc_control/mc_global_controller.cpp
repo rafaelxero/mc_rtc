@@ -61,14 +61,12 @@ MCGlobalController::MCGlobalController(const std::string & conf,
   else
   {
     real_robots->load(*config.main_robot_module, config.main_robot_module->rsdf_dir);
-    publish_th = std::thread(std::bind(&MCGlobalController::publish_thread, this));
   }
+  mc_rtc::ROSBridge::set_publisher_timestep(config.publish_timestep);
 }
 
 MCGlobalController::~MCGlobalController()
 {
-  publish_th_running = false;
-  publish_th.join();
 }
 
 std::shared_ptr<mc_rbdyn::RobotModule> MCGlobalController::get_robot_module()
@@ -143,43 +141,105 @@ void MCGlobalController::init(const std::vector<double> & initq, const std::arra
 
 void MCGlobalController::setSensorPosition(const Eigen::Vector3d & pos)
 {
-  controller_->sensorPos = pos;
+  robot().bodySensor().position(pos);
+  real_robots->robot().bodySensor().position(pos);
+}
+
+void MCGlobalController::setSensorPositions(mc_rbdyn::Robot & robot,
+                                            const std::map<std::string, Eigen::Vector3d> & poses)
+{
+  for(const auto & p : poses)
+  {
+    robot.bodySensor(p.first).position(p.second);
+  }
 }
 
 void MCGlobalController::setSensorOrientation(const Eigen::Quaterniond & ori)
 {
-  controller_->sensorOri = ori;
+  robot().bodySensor().orientation(ori);
+  real_robots->robot().bodySensor().orientation(ori);
+}
+
+void MCGlobalController::setSensorOrientations(mc_rbdyn::Robot & robot,
+                                            const std::map<std::string, Eigen::Quaterniond> & oris)
+{
+  for(const auto & o : oris)
+  {
+    robot.bodySensor(o.first).orientation(o.second);
+  }
 }
 
 void MCGlobalController::setSensorLinearVelocity(const Eigen::Vector3d & vel)
 {
-  controller_->sensorLinearVel = vel;
+  robot().bodySensor().linearVelocity(vel);
+  real_robots->robot().bodySensor().linearVelocity(vel);
 }
 
+void MCGlobalController::setSensorLinearVelocities(mc_rbdyn::Robot & robot,
+                                                   const std::map<std::string, Eigen::Vector3d> & linearVels)
+{
+  for(const auto & lv : linearVels)
+  {
+    robot.bodySensor(lv.first).linearVelocity(lv.second);
+  }
+}
 
 void MCGlobalController::setSensorAngularVelocity(const Eigen::Vector3d & vel)
 {
-  controller_->sensorAngularVel = vel;
+  robot().bodySensor().angularVelocity(vel);
+  real_robots->robot().bodySensor().angularVelocity(vel);
+}
+
+void MCGlobalController::setSensorAngularVelocities(mc_rbdyn::Robot & robot,
+                                                    const std::map<std::string, Eigen::Vector3d> & angularVels)
+{
+  for(const auto & av : angularVels)
+  {
+    robot.bodySensor(av.first).angularVelocity(av.second);
+  }
 }
 
 void MCGlobalController::setSensorAcceleration(const Eigen::Vector3d & acc)
 {
-  controller_->sensorAcc = acc;
+  robot().bodySensor().acceleration(acc);
+  real_robots->robot().bodySensor().acceleration(acc);
+}
+
+void MCGlobalController::setSensorAccelerations(mc_rbdyn::Robot & robot,
+                                                const std::map<std::string, Eigen::Vector3d> & accels)
+{
+  for(const auto & a : accels)
+  {
+    robot.bodySensor(a.first).acceleration(a.second);
+  }
 }
 
 void MCGlobalController::setEncoderValues(const std::vector<double> & eValues)
 {
-  controller_->encoderValues = eValues;
+  robot().encoderValues(eValues);
 }
 
 void MCGlobalController::setJointTorques(const std::vector<double> & tValues)
 {
-  controller_->jointTorques = tValues;
+  robot().jointTorques(tValues);
 }
 
 void MCGlobalController::setWrenches(const std::map<std::string, sva::ForceVecd> & wrenches)
 {
-  controller_->setWrenches(wrenches);
+  setWrenches(controller_->robots().robotIndex(), wrenches);
+  for(const auto & w : wrenches)
+  {
+    real_robots->robot().forceSensor(w.first).wrench(w.second);
+  }
+}
+
+void MCGlobalController::setWrenches(unsigned int robotIndex, const std::map<std::string, sva::ForceVecd> & wrenches)
+{
+  auto & robot = controller_->robots().robot(robotIndex);
+  for(const auto & w : wrenches)
+  {
+    robot.forceSensor(w.first).wrench(w.second);
+  }
 }
 
 void MCGlobalController::setActualGripperQ(const std::map<std::string, std::vector<double>> & grippersQ)
@@ -227,19 +287,20 @@ bool MCGlobalController::run()
       logger_->log_header(current_ctrl, controller_);
     }
   }
-  const auto& real_q = controller_->getEncoderValues();
-  if(real_q.size() > 0)
+  const auto& real_q = robot().encoderValues();
+  if(config.update_real && real_q.size() > 0)
   {
     auto& real_robot = real_robots->robot();
     // Update free flyer
+
     if(!config.update_real_from_sensors)
     {
       real_robot.mbc().q[0] = robot().mbc().q[0];
     }
     else
     {
-      const auto & qt = controller_->sensorOri;
-      const auto & t = controller_->sensorPos;
+      const auto & qt = robot().bodySensor().orientation();
+      const auto & t = robot().bodySensor().position();
       real_robot.mbc().q[0] = {
         qt.w(), qt.x(), qt.y(), qt.z(),
         t.x(), t.y(), t.z()
@@ -267,12 +328,9 @@ bool MCGlobalController::run()
       logger_->log_data(*this, controller_);
     }
     if(!r) { running = false; }
-    return r;
   }
-  else
-  {
-    return false;
-  }
+  publish_robots();
+  return running;
 }
 
 const mc_solver::QPResultMsg & MCGlobalController::send(const double & t)
@@ -382,7 +440,7 @@ double MCGlobalController::timestep()
 
 const std::vector<std::string> & MCGlobalController::ref_joint_order()
 {
-  return controller_->ref_joint_order;
+  return robot().refJointOrder();
 }
 
 bool MCGlobalController::AddController(const std::string & name)
@@ -473,36 +531,27 @@ bool MCGlobalController::EnableController(const std::string & name)
   }
 }
 
-void MCGlobalController::publish_thread()
+void MCGlobalController::publish_robots()
 {
-  while(publish_th_running)
+  // Publish controlled robot
+  if(config.publish_control_state)
   {
-    const auto start = std::chrono::high_resolution_clock::now();
-
-    // Publish controlled robot
-    if(config.publish_control_state)
+    mc_rtc::ROSBridge::update_robot_publisher("control", timestep(), robot(), gripperJoints(), gripperQ());
+  }
+  // Publish environment state
+  if(config.publish_env_state)
+  {
+    const auto & robots = controller_->robots();
+    for(size_t i = 1; i < robots.robots().size(); ++i)
     {
-      mc_rtc::ROSBridge::update_robot_publisher("control", timestep(), robot(), Eigen::Vector3d::Zero(), controller_->getSensorOrientation(), controller_->getSensorAngularVelocity(), controller_->getSensorAcceleration(), gripperJoints(), gripperQ(), controller_->getWrenches());
+      mc_rtc::ROSBridge::update_robot_publisher("control/env_" + std::to_string(i), timestep(), robots.robot(i), {}, {});
     }
-    if(config.publish_env_state)
-    {
-      const auto & robots = controller_->robots();
-      for(size_t i = 1; i < robots.robots().size(); ++i)
-      {
-        std::stringstream ss;
-        ss << "control/env_" << i;
-        mc_rtc::ROSBridge::update_robot_publisher(ss.str(), timestep(), robots.robot(i), Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(), Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(), {}, {}, {});
-      }
-    }
-
-    if(config.publish_real_state)
-    {
-      auto& real_robot = real_robots->robot();
-      mc_rtc::ROSBridge::update_robot_publisher("real", timestep(), real_robot, Eigen::Vector3d::Zero(), controller_->getSensorOrientation(), controller_->getSensorAngularVelocity(), controller_->getSensorAcceleration(), gripperJoints(), gripperQ(), controller_->getWrenches());
-    }
-
-    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now()-start).count();
-    std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<long>(1000 * config.publish_timestep) - elapsed));
+  }
+  // Publish real robot
+  if(config.publish_real_state)
+  {
+    auto& real_robot = real_robots->robot();
+    mc_rtc::ROSBridge::update_robot_publisher("real", timestep(), real_robot, gripperJoints(), gripperQ());
   }
 }
 

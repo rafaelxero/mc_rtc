@@ -19,14 +19,16 @@ mc_rbdyn/GripperSurface.cpp
 mc_rbdyn/surface_utils.cpp
 mc_rbdyn/surface_hull.cpp
 mc_rbdyn/Contact.cpp
-mc_rbdyn/robot.cpp
+mc_rbdyn/Robot.cpp
+mc_rbdyn/Robots.cpp
+mc_rbdyn/stance.cpp
 mc_rbdyn/stance.cpp
 mc_rbdyn/StanceConfig.cpp
 mc_rbdyn/PolygonInterpolator.cpp
 mc_rbdyn/polygon_utils.cpp
 mc_rbdyn/RobotLoader.cpp
 mc_rbdyn/Collision.cpp
-mc_rbdyn/calibrator.cpp
+mc_rbdyn/ForceSensor.cpp
 )
 
 set(mc_rbdyn_HDR
@@ -38,8 +40,8 @@ set(mc_rbdyn_HDR
 ../include/mc_rbdyn/PlanarSurface.h
 ../include/mc_rbdyn/polygon_utils.h
 ../include/mc_rbdyn/PolygonInterpolator.h
-../include/mc_rbdyn/robot.h
-../include/mc_rbdyn/robot.hpp
+../include/mc_rbdyn/Robot.h
+../include/mc_rbdyn/Robots.h
 ../include/mc_rbdyn/RobotLoader.h
 ../include/mc_rbdyn/RobotModule.h
 ../include/mc_rbdyn/SCHAddon.h
@@ -50,7 +52,11 @@ set(mc_rbdyn_HDR
 ../include/mc_rbdyn/surface_hull.h
 ../include/mc_rbdyn/surface_utils.h
 ../include/mc_rbdyn/Collision.h
-../include/mc_rbdyn/calibrator.h
+../include/mc_rbdyn/ForceSensor.h
+../include/mc_rbdyn/Flexibility.h
+../include/mc_rbdyn/Springs.h
+../include/mc_rbdyn/Base.h
+../include/mc_rbdyn/BodySensor.h
 )
 
 add_library(mc_rbdyn SHARED ${mc_rbdyn_SRC} ${mc_rbdyn_HDR})
@@ -125,6 +131,8 @@ mc_tasks/AddRemoveContactTask.cpp
 mc_tasks/MoveContactTask.cpp
 mc_tasks/TrajectoryTask.cpp
 mc_tasks/ComplianceTask.cpp
+mc_tasks/GazeTask.cpp
+mc_tasks/PositionBasedVisServoTask.cpp
 )
 
 set(mc_tasks_HDR
@@ -144,6 +152,8 @@ set(mc_tasks_HDR
 ../include/mc_tasks/TrajectoryTaskGeneric.h
 ../include/mc_tasks/TrajectoryTaskGeneric.hpp
 ../include/mc_tasks/ComplianceTask.h
+../include/mc_tasks/GazeTask.h
+../include/mc_tasks/PositionBasedVisServoTask.h
 )
 
 add_library(mc_tasks SHARED ${mc_tasks_SRC} ${mc_tasks_HDR})
