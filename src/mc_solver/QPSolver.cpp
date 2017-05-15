@@ -193,13 +193,15 @@ void QPSolver::__fillResult()
     const mc_rbdyn::Robot & robot = robots().robot(i);
     auto & q = qpRes.robots_state[i].q;
     auto & alphaVec = qpRes.robots_state[i].alphaVec;
+    auto & alphaDVec = qpRes.robots_state[i].alphaDVec;
     for(const auto & j : robot.mb().joints())
     {
       auto jIndex = robot.jointIndexByName(j.name());
       q[j.name()] = robot.mbc().q[jIndex];
       alphaVec[j.name()] = robot.mbc().alpha[jIndex];
+      alphaDVec[j.name()] = robot.mbc().alphaD[jIndex];
     }
-    qpRes.robots_state[i].alphaDVec = solver.alphaDVec(static_cast<int>(i));
+    //qpRes.robots_state[i].alphaDVec = solver.alphaDVec(static_cast<int>(i));
   }
   qpRes.lambdaVec = solver.lambdaVec();
 }
