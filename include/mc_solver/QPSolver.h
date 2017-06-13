@@ -131,6 +131,8 @@ public:
     constraint->removeFromSolver(solver);
   }
 
+  bool hasConstraint(tasks::qp::Constraint* constraint);
+
   /** Gives access to the tasks::qp::BilateralContact entity in the solver from a contact id
    * \param id The contact id of the contact
    * \return The tasks:qp::BilateralContact entity from the solver if id is valid, otherwise, the first element of the pair is -1 and the reference is invalid
@@ -201,7 +203,6 @@ public:
   tasks::qp::SolverData & data();
 
   void fillTorque(const mc_solver::DynamicsConstraint& dynamicsConstraint);
-
   void fillTorque(tasks::qp::MotionConstr* motionConstr);
 
   boost::timer::cpu_times solveTime();

@@ -100,6 +100,11 @@ void QPSolver::removeTask(mc_tasks::MetaTask * task)
   }
 }
 
+bool QPSolver::hasConstraint(tasks::qp::Constraint* constraint)
+{
+  return solver.hasConstraint(constraint);
+}
+
 std::pair<int, const tasks::qp::BilateralContact&> QPSolver::contactById(const tasks::qp::ContactId & id)
 {
   const std::vector<tasks::qp::BilateralContact> & contacts = solver.data().allContacts();
