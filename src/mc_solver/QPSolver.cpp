@@ -257,12 +257,12 @@ tasks::qp::SolverData & QPSolver::data()
 
 void QPSolver::fillTorque(const mc_solver::DynamicsConstraint& dynamicsConstraint)
 {
-  fillTorque(dynamicsConstraint.motionConstr);
+  fillTorque(dynamicsConstraint.motionConstr.get());
 }
 
-void QPSolver::fillTorque(const std::shared_ptr<tasks::qp::MotionConstr>& motionConstr)
+void QPSolver::fillTorque(tasks::qp::MotionConstr* motionConstr)
 {
-  if(solver.hasConstraint(motionConstr.get()))
+  if(solver.hasConstraint(motionConstr))
   {
     motionConstr->computeTorque(solver.alphaDVec(), solver.lambdaVec());
     robot().mbc().jointTorque = rbd::vectorToDof(robot().mb(), motionConstr->torque());

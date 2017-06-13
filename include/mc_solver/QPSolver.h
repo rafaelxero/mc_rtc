@@ -202,7 +202,7 @@ public:
 
   void fillTorque(const mc_solver::DynamicsConstraint& dynamicsConstraint);
 
-  void fillTorque(const std::shared_ptr<tasks::qp::MotionConstr>& motionConstr);
+  void fillTorque(tasks::qp::MotionConstr* motionConstr);
 
   boost::timer::cpu_times solveTime();
 
