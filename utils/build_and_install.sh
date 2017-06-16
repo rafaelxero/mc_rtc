@@ -191,7 +191,7 @@ else
   if [ $OS = Ubuntu ]
   then
     yaml_to_env "APT_DEPENDENCIES" $gitlab_ci_yml
-    APT_DEPENDENCIES=`echo $APT_DEPENDENCIES|sed -e's/libspacevecalg-dev//'|sed -e's/librbdyn-dev//'|sed -e's/libeigen-qld-dev//'|sed -e's/libsch-core-dev//'`
+    APT_DEPENDENCIES=`echo $APT_DEPENDENCIES|sed -e's/libspacevecalg-dev//'|sed -e's/librbdyn-dev//'|sed -e's/libeigen-qld-dev//'|sed -e's/libsch-core-dev//'|sed -e's/libtasks-qld-dev//'|sed -e's/libmc-rbdyn-urdf-dev//'|sed -e's/python-tasks//'|sed -e's/python-mc-rbdyn-urdf//'`
     APT_DEPENDENCIES="cmake build-essential gfortran doxygen libeigen3-dev python-pip $APT_DEPENDENCIES"
     if $INSTALL_APT_DEPENDENCIES
     then
@@ -245,10 +245,15 @@ build_git_dependency()
   fi
   mkdir -p $git_dep/build
   cd "$git_dep/build"
-  cmake .. -DCMAKE_INSTALL_PREFIX:STRING="$INSTALL_PREFIX" \
-           -DPYTHON_BINDING:BOOL=OFF \
-           -DCMAKE_BUILD_TYPE:STRING="$BUILD_TYPE" \
-           ${CMAKE_ADDITIONAL_OPTIONS}
+  if $WITH_PYTHON_SUPPORT
+  then cmake .. -DCMAKE_INSTALL_PREFIX:STRING="$INSTALL_PREFIX" \
+          -DCMAKE_BUILD_TYPE:STRING="$BUILD_TYPE" \
+          ${CMAKE_ADDITIONAL_OPTIONS}
+  else cmake .. -DCMAKE_INSTALL_PREFIX:STRING="$INSTALL_PREFIX" \
+          -DPYTHON_BINDING:BOOL=OFF \
+          -DCMAKE_BUILD_TYPE:STRING="$BUILD_TYPE" \
+          ${CMAKE_ADDITIONAL_OPTIONS}
+  fi
   make -j${BUILD_CORE}
   ${SUDO_CMD} make install
 }
@@ -257,7 +262,10 @@ build_git_dependency()
 ###############################
 yaml_to_env "GIT_DEPENDENCIES" $gitlab_ci_yml
 # Add some source dependencies
-GIT_DEPENDENCIES="jrl-umi3218/SpaceVecAlg jrl-umi3218/RBDyn jrl-umi3218/eigen-qld jrl-umi3218/sch-core ${GIT_DEPENDENCIES}"
+if $WITH_PYTHON_SUPPORT
+    then GIT_DEPENDENCIES="jrl-umi3218/Eigen3ToPython jrl-umi3218/SpaceVecAlg jrl-umi3218/RBDyn jrl-umi3218/eigen-qld jrl-umi3218/sch-core jrl-umi3218/sch-core-python jrl-umi3218/mc_rbdyn_urdf ${GIT_DEPENDENCIES}"
+    else GIT_DEPENDENCIES="jrl-umi3218/SpaceVecAlg jrl-umi3218/RBDyn jrl-umi3218/eigen-qld jrl-umi3218/sch-core jrl-umi3218/mc_rbdyn_urdf ${GIT_DEPENDENCIES}"
+fi
 for package in ${GIT_DEPENDENCIES}; do
   build_git_dependency "$package"
 done
@@ -336,6 +344,19 @@ else
   then
     CMAKE_ROBOT_OPTIONS="$CMAKE_ROBOT_OPTIONS -DHRP4_DESCRIPTION_PATH:STRING='${SOURCE_DIR}/hrp4/hrp4_description'"
   fi
+  if $WITH_PYTHON_SUPPORT
+  then   cmake ../ -DCMAKE_BUILD_TYPE:STRING="'$BUILD_TYPE'" \
+                -DCMAKE_INSTALL_PREFIX:STRING="'$INSTALL_PREFIX'" \
+                -DMC_ENV_DESCRIPTION_PATH:STRING="'$SOURCE_DIR/mc_rtc_ros_data/mc_env_description'" \
+                ${CMAKE_ROBOT_OPTIONS} \
+                ${CMAKE_ADDITIONAL_OPTIONS}
+  else   cmake ../ -DCMAKE_BUILD_TYPE:STRING="'$BUILD_TYPE'" \
+                -DPYTHON_BINDING:BOOL=OFF \
+                -DCMAKE_INSTALL_PREFIX:STRING="'$INSTALL_PREFIX'" \
+                -DMC_ENV_DESCRIPTION_PATH:STRING="'$SOURCE_DIR/mc_rtc_ros_data/mc_env_description'" \
+                ${CMAKE_ROBOT_OPTIONS} \
+                ${CMAKE_ADDITIONAL_OPTIONS}
+  fi
   cmake ../ -DCMAKE_BUILD_TYPE:STRING="'$BUILD_TYPE'" \
             -DCMAKE_INSTALL_PREFIX:STRING="'$INSTALL_PREFIX'" \
             -DMC_ENV_DESCRIPTION_PATH:STRING="'$SOURCE_DIR/mc_rtc_ros_data/mc_env_description'" \
@@ -370,26 +391,6 @@ then
   . $CATKIN_DIR/devel/setup.bash
 fi
 
-#############################
-#  --  Build mc_cython  --  #
-#############################
-if $WITH_PYTHON_SUPPORT
-then
-    cd $SOURCE_DIR
-    if [ ! -d mc_cython/.git ]
-    then
-      git_clone git@gite.lirmm.fr:multi-contact/mc_cython
-    cd mc_cython
-    else
-      cd mc_cython
-      git_update
-    fi
-    ${SUDO_CMD} pip install -r requirements.txt ${PIP_USER}
-    make -j$BUILD_CORE
-    # Make sure the python prefix exists
-    mkdir -p ${INSTALL_PREFIX}/lib/python`python -c "import sys;print '{0}.{1}'.format(sys.version_info.major, sys.version_info.minor)"`/site-packages
-    ${SUDO_CMD} make install
-fi
 ####################################################
 #  -- Setup VREP, vrep-api-wrapper and mc_vrep --  #
 ####################################################

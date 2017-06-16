@@ -228,6 +228,11 @@ const std::vector<Flexibility> & Robot::flexibility() const
   return flexibility_;
 }
 
+std::vector<Flexibility> & Robot::flexibility()
+{
+  return flexibility_;
+}
+
 const std::vector<double> & Robot::encoderValues() const
 {
   return encoderValues_;
@@ -315,6 +320,17 @@ const mc_rbdyn::Surface & Robot::surface(const std::string & sName) const
 const std::map<std::string, SurfacePtr> & Robot::surfaces() const
 {
   return surfaces_;
+}
+
+std::vector<std::string> Robot::availableSurfaces() const
+{
+  std::vector<std::string> ret;
+  ret.reserve(surfaces_.size());
+  for(const auto & s : surfaces_)
+  {
+    ret.push_back(s.first);
+  }
+  return ret;
 }
 
 Robot::convex_pair_t & Robot::convex(const std::string & cName)
@@ -445,6 +461,21 @@ mc_rbdyn::Surface & Robot::copySurface(const std::string & sName, const std::str
   nSurf->name(name);
   surfaces_[name] = nSurf;
   return *nSurf;
+}
+
+void mc_rbdyn::Robot::addSurface(SurfacePtr surface, bool doNotReplace)
+{
+    if(!hasBody(surface->bodyName()))
+    {
+      LOG_WARNING("Surface " << surface->name() << " attached to body " << surface->bodyName() << " but the robot " << name() << " has no such body.")
+      return;
+    }
+    if(hasSurface(surface->name()) && doNotReplace)
+    {
+      LOG_WARNING("Surface " << surface->name() << " already exists for the robot " << name() << ".")
+      return;
+    }
+    surfaces_[surface->name()] = std::move(surface);
 }
 
 std::vector< std::vector<double> > jointsParameters(const rbd::MultiBody & mb, const double & coeff)

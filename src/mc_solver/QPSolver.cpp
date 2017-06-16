@@ -62,6 +62,11 @@ QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
 {
 }
 
+QPSolver::QPSolver(double timeStep)
+: QPSolver{std::make_shared<mc_rbdyn::Robots>(), timeStep}
+{
+}
+
 void QPSolver::addConstraintSet(ConstraintSet & cs)
 {
   cs.addToSolver(robots().mbs(), solver);
@@ -290,7 +295,7 @@ void QPSolver::updateNrVars()
   solver.nrVars(robots_p->mbs(), uniContacts, biContacts);
 }
 
-double QPSolver::dt()
+double QPSolver::dt() const
 {
   return timeStep;
 }
