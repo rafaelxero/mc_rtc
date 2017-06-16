@@ -57,7 +57,8 @@ std::vector<mc_solver::ContactMsg> contactsMsgFromContacts
 namespace mc_solver
 {
 QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
-: robots_p(robots), timeStep(timeStep), solver()
+  : robots_p(robots), timeStep(timeStep), solver(),
+    first_run(true), pos_feedback(false), vel_feedback(false)
 {
 }
 
@@ -165,6 +166,37 @@ bool QPSolver::run()
   {
     t->update();
   }
+  
+  std::vector<std::vector<double>> q_prev(robot().mbc().q);
+  std::vector<std::vector<double>> alpha_prev(robot().mbc().alpha);
+
+  if(first_run)
+  {
+    encoder_prev = robot().encoderValues();
+    first_run = false;
+  }
+  else
+    encoder_prev.resize(robot().encoderValues().size(), 0.0);
+
+  const std::vector<double> & encoder = robot().encoderValues();
+
+  if (pos_feedback)
+  {
+    for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
+    {
+      const auto & jn = robot().refJointOrder()[i];
+      if(robot().hasJoint(jn))
+      {
+        size_t j = robot().jointIndexByName(jn);
+        robot().mbc().q[j][0] = encoder[i];
+        if (vel_feedback)
+          robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev[i]) / timeStep;
+      }
+    }
+  }
+
+  encoder_prev = encoder;
+  
   if(solver.solveNoMbcUpdate(robots_p->mbs(), robots_p->mbcs()))
   {
     for(size_t i = 0; i < robots_p->mbs().size(); ++i)
@@ -174,6 +206,14 @@ bool QPSolver::run()
       if(mb.nrDof() > 0)
       {
         solver.updateMbc(mbc, static_cast<int>(i));
+        
+        if (pos_feedback && i == static_cast<size_t>(robots().robotIndex()))
+        {
+          robot().mbc().q = q_prev;
+          if (vel_feedback)
+            robot().mbc().alpha = alpha_prev;
+        }
+        
         rbd::eulerIntegration(mb, mbc, timeStep);
         rbd::forwardKinematics(mb, mbc);
         rbd::forwardVelocity(mb, mbc);
@@ -284,6 +324,12 @@ void QPSolver::fillTorque(tasks::qp::MotionConstr* motionConstr)
     auto jIndex = robot().jointIndexByName(j.name());
     tau[j.name()] = robot().mbc().jointTorque[jIndex];
   }
+}
+
+void QPSolver::feedbackMode(bool pos_fb, bool vel_fb)
+{
+  pos_feedback = pos_fb;
+  vel_feedback = vel_fb;
 }
 
 boost::timer::cpu_times QPSolver::solveTime()

@@ -225,11 +225,18 @@ private:
   /** Latest result */
   QPResultMsg qpRes;
 
+  bool first_run;
+  bool pos_feedback;
+  bool vel_feedback;
+  std::vector<double> encoder_prev;
+
   /** Update qpRes from the latest run() */
   void __fillResult();
 public:
   /** \deprecated{Default constructor, not made for general usage} */
   QPSolver() {}
+
+  void feedbackMode(bool pos_fb, bool vel_fb);
 };
 
 }
