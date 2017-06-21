@@ -180,12 +180,17 @@ bool QPSolver::run()
     encoder_prev = robot().encoderValues();
     first_run = false;
   }
-  else
-    encoder_prev.resize(robot().encoderValues().size(), 0.0);
+  //else
+  //  encoder_prev.resize(robot().encoderValues().size(), 0.0);
 
   const std::vector<double> & encoder = robot().encoderValues();
 
-  if (pos_feedback)
+  const Eigen::Vector3d & pIn = robot().bodySensor().position();
+  const Eigen::Quaterniond & qtIn = robot().bodySensor().orientation();
+  const Eigen::Vector3d & velIn = robot().bodySensor().linearVelocity();
+  const Eigen::Vector3d & rateIn = robot().bodySensor().angularVelocity();
+  
+  if(pos_feedback)
   {
     for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
     {
@@ -194,13 +199,20 @@ bool QPSolver::run()
       {
         size_t j = robot().jointIndexByName(jn);
         robot().mbc().q[j][0] = encoder[i];
-        if (vel_feedback)
+        if(vel_feedback)
           robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev[i]) / timeStep;
       }
     }
+
+    robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
+    if(vel_feedback)
+      robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
   }
 
   encoder_prev = encoder;
+
+  rbd::forwardKinematics(robot().mb(), robot().mbc());
+  rbd::forwardVelocity(robot().mb(), robot().mbc());
   
   if(solver.solveNoMbcUpdate(robots_p->mbs(), robots_p->mbcs()))
   {
@@ -212,16 +224,19 @@ bool QPSolver::run()
       {
         solver.updateMbc(mbc, static_cast<int>(i));
         
-        if (pos_feedback && i == static_cast<size_t>(robots().robotIndex()))
+        if(pos_feedback && i == static_cast<size_t>(robots().robotIndex()))
         {
           robot().mbc().q = q_prev;
-          if (vel_feedback)
+          if(vel_feedback) {
+            std::cout << "Rafa, restoring alpha_prev" << std::endl;
             robot().mbc().alpha = alpha_prev;
+          }
         }
         
+        // ToDo: Not a good implementation, take out of the control loop somehow
         rbd::eulerIntegration(mb, mbc, timeStep);
-        rbd::forwardKinematics(mb, mbc);
-        rbd::forwardVelocity(mb, mbc);
+        //rbd::forwardKinematics(mb, mbc);
+        //rbd::forwardVelocity(mb, mbc);
       }
       success = true;
     }
