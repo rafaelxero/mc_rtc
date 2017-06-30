@@ -203,7 +203,6 @@ bool QPSolver::run()
           robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev[i]) / timeStep;
       }
     }
-
     robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
     if(vel_feedback)
       robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
@@ -227,16 +226,12 @@ bool QPSolver::run()
         if(pos_feedback && i == static_cast<size_t>(robots().robotIndex()))
         {
           robot().mbc().q = q_prev;
-          if(vel_feedback) {
-            std::cout << "Rafa, restoring alpha_prev" << std::endl;
+          if(vel_feedback)
             robot().mbc().alpha = alpha_prev;
-          }
         }
         
         // ToDo: Not a good implementation, take out of the control loop somehow
         rbd::eulerIntegration(mb, mbc, timeStep);
-        //rbd::forwardKinematics(mb, mbc);
-        //rbd::forwardVelocity(mb, mbc);
       }
       success = true;
     }
