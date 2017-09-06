@@ -58,7 +58,7 @@ namespace mc_solver
 {
 QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
   : robots_p(robots), timeStep(timeStep), solver(),
-    first_run(true), pos_feedback(false), vel_feedback(false)
+    first_run(true), pos_feedback(false), vel_feedback(false), ff_feedback(false)
 {
   if(timeStep <= 0)
   {
@@ -168,7 +168,7 @@ void QPSolver::setContacts(const std::vector<mc_rbdyn::Contact> & contacts)
   updateConstrSize();
 }
 
-bool QPSolver::run()
+bool QPSolver::run(double Md)
 {
   bool success = false;
   for(auto & t : metaTasks)
@@ -199,7 +199,7 @@ bool QPSolver::run()
     for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
     {
       const auto & jn = robot().refJointOrder()[i];
-      if(robot().hasJoint(jn))
+      if(robot().hasJoint(jn) && std::find(feedbackJoints.begin(), feedbackJoints.end(), jn) != feedbackJoints.end())
       {
         size_t j = robot().jointIndexByName(jn);
         robot().mbc().q[j][0] = encoder[i];
@@ -207,9 +207,11 @@ bool QPSolver::run()
           robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev[i]) / timeStep;
       }
     }
-    robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
-    if(vel_feedback)
-      robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
+    if(ff_feedback) {
+      robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
+      if(vel_feedback)
+        robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
+    }
   }
 
   encoder_prev = encoder;
@@ -235,7 +237,7 @@ bool QPSolver::run()
         }
         
         // ToDo: Not a good implementation, take out of the control loop somehow
-        rbd::eulerIntegration(mb, mbc, timeStep);
+        rbd::eulerIntegration(mb, mbc, timeStep, Md);
       }
       success = true;
     }
@@ -358,6 +360,16 @@ void QPSolver::feedbackMode(bool pos_fb, bool vel_fb)
 {
   pos_feedback = pos_fb;
   vel_feedback = vel_fb;
+}
+
+void QPSolver::enableFreeFlyerFeedback(bool ff_fb)
+{
+  ff_feedback = ff_fb;
+}
+
+void QPSolver::setFeedbackJoints(const std::vector<std::string> joint_names)
+{
+  feedbackJoints = joint_names;
 }
 
 boost::timer::cpu_times QPSolver::solveTime()

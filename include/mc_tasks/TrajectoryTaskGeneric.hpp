@@ -188,4 +188,10 @@ Eigen::VectorXd TrajectoryTaskGeneric<T>::speed() const
   return errorT->speed();
 }
 
+template<typename T>
+tasks::qp::Task* TrajectoryTaskGeneric<T>::get()
+{
+  return trajectoryT.get();
+}
+
 }

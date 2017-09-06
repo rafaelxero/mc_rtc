@@ -116,6 +116,8 @@ protected:
     t.removeFromSolver(solver);
   }
 
+ public:
+
   /*! \brief Update the task
    *
    * This function (usually) has to be called at every iteration of the solver

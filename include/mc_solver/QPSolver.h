@@ -114,7 +114,7 @@ public:
   {
     static_assert(std::is_base_of<mc_tasks::MetaTask, T>::value ||
                   std::is_base_of<tasks::qp::Task, T>::value,
-                  "You are trying to add a task that is neither a tasks::qp::Task or an mc_tasks::MetaTask");
+                  "You are trying to remove a task that is neither a tasks::qp::Task or an mc_tasks::MetaTask");
     if(task.get()) { removeTask(task.get()); }
   }
 
@@ -160,7 +160,7 @@ public:
    * If succesful, will update the robots' configurations
    * \return True if successful, false otherwise.
    */
-  bool run();
+  bool run(double Md = 0);
 
   /** Provides the result of run() for robots.robot()
    * \param curTime Unused
@@ -238,6 +238,8 @@ private:
   bool first_run;
   bool pos_feedback;
   bool vel_feedback;
+  bool ff_feedback;
+  std::vector<std::string> feedbackJoints;
   std::vector<double> encoder_prev;
 
   /** Update qpRes from the latest run() */
@@ -247,6 +249,8 @@ public:
   QPSolver() {}
 
   void feedbackMode(bool pos_fb, bool vel_fb);
+  void enableFreeFlyerFeedback(bool ff_fb);
+  void setFeedbackJoints(const std::vector<std::string> joint_names);
 };
 
 }
