@@ -160,7 +160,7 @@ public:
    * If succesful, will update the robots' configurations
    * \return True if successful, false otherwise.
    */
-  bool run(double Md = 0);
+  bool run();
 
   /** Provides the result of run() for robots.robot()
    * \param curTime Unused

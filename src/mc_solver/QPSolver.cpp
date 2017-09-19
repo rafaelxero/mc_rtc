@@ -168,7 +168,7 @@ void QPSolver::setContacts(const std::vector<mc_rbdyn::Contact> & contacts)
   updateConstrSize();
 }
 
-bool QPSolver::run(double Md)
+bool QPSolver::run()
 {
   bool success = false;
   for(auto & t : metaTasks)
@@ -237,7 +237,7 @@ bool QPSolver::run(double Md)
         }
         
         // ToDo: Not a good implementation, take out of the control loop somehow
-        rbd::eulerIntegration(mb, mbc, timeStep, Md);
+        rbd::eulerIntegration(mb, mbc, timeStep);
       }
       success = true;
     }
