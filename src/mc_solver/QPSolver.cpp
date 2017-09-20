@@ -58,7 +58,7 @@ namespace mc_solver
 {
 QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
   : robots_p(robots), timeStep(timeStep), solver(),
-    first_run(true), pos_feedback(false), vel_feedback(false), ff_feedback(false)
+    first_run(true), j_feedback(false), ff_feedback(false)
 {
   if(timeStep <= 0)
   {
@@ -175,17 +175,17 @@ bool QPSolver::run()
   {
     t->update();
   }
-  
-  std::vector<std::vector<double>> q_prev(robot().mbc().q);
-  std::vector<std::vector<double>> alpha_prev(robot().mbc().alpha);
+
+  mbcs_prev = robots().mbcs();
+
+  //std::vector<std::vector<double>> q_prev(robot().mbc().q);
+  //std::vector<std::vector<double>> alpha_prev(robot().mbc().alpha);
 
   if(first_run)
   {
     encoder_prev = robot().encoderValues();
     first_run = false;
   }
-  //else
-  //  encoder_prev.resize(robot().encoderValues().size(), 0.0);
 
   const std::vector<double> & encoder = robot().encoderValues();
 
@@ -194,7 +194,7 @@ bool QPSolver::run()
   const Eigen::Vector3d & velIn = robot().bodySensor().linearVelocity();
   const Eigen::Vector3d & rateIn = robot().bodySensor().angularVelocity();
   
-  if(pos_feedback)
+  if(j_feedback)
   {
     for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
     {
@@ -203,17 +203,16 @@ bool QPSolver::run()
       {
         size_t j = robot().jointIndexByName(jn);
         robot().mbc().q[j][0] = encoder[i];
-        if(vel_feedback)
-          robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev[i]) / timeStep;
+        robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev[i]) / timeStep;
       }
-    }
-    if(ff_feedback) {
-      robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
-      if(vel_feedback)
-        robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
     }
   }
 
+  if(ff_feedback) {
+    robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
+    robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
+  }
+  
   encoder_prev = encoder;
 
   rbd::forwardKinematics(robot().mb(), robot().mbc());
@@ -224,20 +223,23 @@ bool QPSolver::run()
     for(size_t i = 0; i < robots_p->mbs().size(); ++i)
     {
       rbd::MultiBody & mb = robots_p->mbs()[i];
-      rbd::MultiBodyConfig & mbc = robots_p->mbcs()[i];
+      // rbd::MultiBodyConfig & mbc = robots_p->mbcs()[i];
+      rbd::MultiBodyConfig & mbc = mbcs_prev[i];
       if(mb.nrDof() > 0)
       {
         solver.updateMbc(mbc, static_cast<int>(i));
         
-        if(pos_feedback && i == static_cast<size_t>(robots().robotIndex()))
-        {
-          robot().mbc().q = q_prev;
-          if(vel_feedback)
-            robot().mbc().alpha = alpha_prev;
-        }
+        // if(j_feedback && i == static_cast<size_t>(robots().robotIndex()))
+        // {
+          // robot().mbc().q = q_prev;
+          // robot().mbc().alpha = alpha_prev;
+        // }
         
         // ToDo: Not a good implementation, take out of the control loop somehow
+        // rbd::eulerIntegration(mb, mbc, timeStep);
         rbd::eulerIntegration(mb, mbc, timeStep);
+
+        robot().mbc() = mbc;
       }
       success = true;
     }
@@ -356,10 +358,9 @@ void QPSolver::fillTorque(tasks::qp::MotionConstr* motionConstr)
   }
 }
 
-void QPSolver::feedbackMode(bool pos_fb, bool vel_fb)
+void QPSolver::enableJointFeedback(bool j_fb)
 {
-  pos_feedback = pos_fb;
-  vel_feedback = vel_fb;
+  j_feedback = j_fb;
 }
 
 void QPSolver::enableFreeFlyerFeedback(bool ff_fb)

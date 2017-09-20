@@ -236,11 +236,11 @@ private:
   QPResultMsg qpRes;
 
   bool first_run;
-  bool pos_feedback;
-  bool vel_feedback;
+  bool j_feedback;
   bool ff_feedback;
   std::vector<std::string> feedbackJoints;
   std::vector<double> encoder_prev;
+  std::vector<rbd::MultiBodyConfig> mbcs_prev;
 
   /** Update qpRes from the latest run() */
   void __fillResult();
@@ -248,7 +248,7 @@ public:
   /** \deprecated{Default constructor, not made for general usage} */
   QPSolver() {}
 
-  void feedbackMode(bool pos_fb, bool vel_fb);
+  void enableJointFeedback(bool j_fb);
   void enableFreeFlyerFeedback(bool ff_fb);
   void setFeedbackJoints(const std::vector<std::string> joint_names);
 };
