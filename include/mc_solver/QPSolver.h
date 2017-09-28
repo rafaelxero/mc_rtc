@@ -240,10 +240,11 @@ private:
   bool ff_feedback;
   std::vector<std::string> feedbackJoints;
   std::vector<double> encoder_prev;
-  std::vector<rbd::MultiBodyConfig> mbcs_prev;
+  std::vector<rbd::MultiBodyConfig> mbcs_calc;
 
   /** Update qpRes from the latest run() */
-  void __fillResult();
+  void __fillResult(const rbd::MultiBodyConfig & mbc);
+
 public:
   /** \deprecated{Default constructor, not made for general usage} */
   QPSolver() {}

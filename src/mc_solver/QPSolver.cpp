@@ -176,14 +176,12 @@ bool QPSolver::run()
     t->update();
   }
 
-  mbcs_prev = robots().mbcs();
-
-  //std::vector<std::vector<double>> q_prev(robot().mbc().q);
-  //std::vector<std::vector<double>> alpha_prev(robot().mbc().alpha);
+  //mbcs_calc = robots().mbcs();
 
   if(first_run)
   {
     encoder_prev = robot().encoderValues();
+    mbcs_calc = robots().mbcs();
     first_run = false;
   }
 
@@ -223,27 +221,31 @@ bool QPSolver::run()
     for(size_t i = 0; i < robots_p->mbs().size(); ++i)
     {
       rbd::MultiBody & mb = robots_p->mbs()[i];
-      // rbd::MultiBodyConfig & mbc = robots_p->mbcs()[i];
-      rbd::MultiBodyConfig & mbc = mbcs_prev[i];
+      rbd::MultiBodyConfig & mbc_real = robots_p->mbcs()[i];
+      rbd::MultiBodyConfig & mbc_calc = mbcs_calc[i];
       if(mb.nrDof() > 0)
       {
-        solver.updateMbc(mbc, static_cast<int>(i));
-        
-        // if(j_feedback && i == static_cast<size_t>(robots().robotIndex()))
-        // {
-          // robot().mbc().q = q_prev;
-          // robot().mbc().alpha = alpha_prev;
-        // }
-        
-        // ToDo: Not a good implementation, take out of the control loop somehow
-        // rbd::eulerIntegration(mb, mbc, timeStep);
-        rbd::eulerIntegration(mb, mbc, timeStep);
+        solver.updateMbc(mbc_real, static_cast<int>(i));
+        solver.updateMbc(mbc_calc, static_cast<int>(i));
 
-        robot().mbc() = mbc;
+        std::vector<std::vector<double>> mbc_real_alphaD = mbc_real.alphaD;
+        std::vector<std::vector<double>> mbc_calc_alphaD = mbc_calc.alphaD;
+        
+        if(!j_feedback)
+        {
+          rbd::eulerIntegration(mb, mbc_real, timeStep);
+          mbc_calc = mbc_real;
+        }
+        else
+        {
+          rbd::eulerIntegration(mb, mbc_calc, timeStep);
+        }
+
+        //robot().mbc() = mbc;
       }
       success = true;
     }
-    __fillResult();
+    __fillResult(mbcs_calc[robots().robotIndex()]);
   }
   return success;
 }
@@ -253,7 +255,7 @@ const QPResultMsg & QPSolver::send(double/*curTime*/)
   return qpRes;
 }
 
-void QPSolver::__fillResult()
+void QPSolver::__fillResult(const rbd::MultiBodyConfig & mbc)
 {
   qpRes.robots_state.resize(robots().robots().size());
   for(unsigned int i = 0; i < robots().robots().size(); ++i)
@@ -265,11 +267,13 @@ void QPSolver::__fillResult()
     for(const auto & j : robot.mb().joints())
     {
       auto jIndex = robot.jointIndexByName(j.name());
-      q[j.name()] = robot.mbc().q[jIndex];
-      alphaVec[j.name()] = robot.mbc().alpha[jIndex];
-      alphaDVec[j.name()] = robot.mbc().alphaD[jIndex];
+      // q[j.name()] = robot.mbc().q[jIndex];
+      q[j.name()] = mbc.q[jIndex];
+      // alphaVec[j.name()] = robot.mbc().alpha[jIndex];
+      alphaVec[j.name()] = mbc.alpha[jIndex];
+      // alphaDVec[j.name()] = robot.mbc().alphaD[jIndex];
+      alphaDVec[j.name()] = mbc.alphaD[jIndex];
     }
-    //qpRes.robots_state[i].alphaDVec = solver.alphaDVec(static_cast<int>(i));
   }
   qpRes.lambdaVec = solver.lambdaVec();
 }
