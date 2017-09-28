@@ -3,7 +3,11 @@
 #include <cmath>
 #include <mc_solver/QPSolver.h>
 
+#include <mc_rtc/log/Logger.h>
+
 #include <mc_tasks/api.h>
+
+#include <mc_rtc/Configuration.h>
 
 namespace mc_tasks
 {
@@ -19,6 +23,18 @@ struct MC_TASKS_DLLAPI MetaTask
 {
 friend struct mc_solver::QPSolver;
 public:
+  /** Set a name for the task
+   *
+   * This name will be used to identify the task in logs, GUI...
+   *
+   * The name should be set before being added to the solver.
+   *
+   */
+  void name(const std::string & name) { name_ = name; }
+
+  /** Get the name of the task */
+  const std::string & name() const { return name_; }
+
   /*! \brief Reset the task */
   virtual void reset() = 0;
 
@@ -87,6 +103,9 @@ public:
    *
    */
   virtual Eigen::VectorXd speed() const = 0;
+
+  /*! \brief Load parameters from a Configuration object */
+  virtual void load(mc_solver::QPSolver & solver, const mc_rtc::Configuration & config);
 protected:
   /*! \brief Add the task to a solver
    *
@@ -129,6 +148,28 @@ protected:
   {
     t.update();
   }
+
+  /** Add entries to the logger
+   *
+   * This will be called by the solver if it holds a valid logger instance when
+   * the task is added.
+   *
+   * The default implementation adds nothing to the log.
+   */
+
+  virtual void addToLogger(mc_rtc::Logger &) {}
+
+  /** Remove entries from the logger
+   *
+   * This will be called by the solver when the task is removed.
+   *
+   * The default implementation removes nothing from the log.
+   */
+  virtual void removeFromLogger(mc_rtc::Logger &) {}
+
+  std::string name_;
 };
+
+using MetaTaskPtr = std::shared_ptr<MetaTask>;
 
 }

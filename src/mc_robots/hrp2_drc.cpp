@@ -5,6 +5,9 @@
 
 #include <fstream>
 
+#include <boost/filesystem.hpp>
+namespace bfs = boost::filesystem;
+
 namespace mc_robots
 {
 
@@ -12,7 +15,6 @@ HRP2DRCCommonRobotModule::HRP2DRCCommonRobotModule()
 : RobotModule(mc_rtc::HRP2_DRC_DESCRIPTION_PATH, "hrp2_drc", std::string(mc_rtc::HRP2_DRC_DESCRIPTION_PATH) + "/urdf/hrp2drc.urdf")
 {
   virtualLinks.push_back("base_link");
-  virtualLinks.push_back("Accelerometer");
   virtualLinks.push_back("l_gripper");
   virtualLinks.push_back("r_gripper");
   virtualLinks.push_back("xtion_link");
@@ -129,7 +131,11 @@ std::map<std::string, std::pair<std::string, std::string> > HRP2DRCCommonRobotMo
   std::map<std::string, std::pair<std::string, std::string> > res;
   for(const auto & f : files)
   {
-    res[f.first] = std::pair<std::string, std::string>(f.second.first, convexPath + f.second.second + "-ch.txt");
+    bfs::path fpath(convexPath + f.second.second + "-ch.txt");
+    if(bfs::exists(fpath))
+    {
+      res[f.first] = std::pair<std::string, std::string>(f.second.first, convexPath + f.second.second + "-ch.txt");
+    }
   }
   return res;
 }
@@ -165,10 +171,17 @@ std::map<std::string, std::vector<double> > HRP2DRCCommonRobotModule::halfSittin
   {
     if(j.name() != "Root")
     {
-      res[j.name()] = halfSitting.at(j.name());
-      for(auto & ji : res[j.name()])
+      if(halfSitting.count(j.name()))
       {
-        ji = M_PI*ji/180;
+        res[j.name()] = halfSitting.at(j.name());
+        for(auto & ji : res[j.name()])
+        {
+          ji = M_PI*ji/180;
+        }
+      }
+      else
+      {
+        res[j.name()] = j.zeroParam();
       }
     }
   }
@@ -234,24 +247,25 @@ HRP2DRCRobotModule::HRP2DRCRobotModule()
   readUrdf("hrp2drc", filteredLinks);
 
   _springs.springsBodies = {"LLEG_LINK5", "RLEG_LINK5"};
+
+  auto fileByBodyName = stdCollisionsFiles(mb);
+  _convexHull = getConvexHull(fileByBodyName);
+  _bounds = nominalBounds(limits);
+  _stance = halfSittingPose(mb);
 }
 
 const std::map<std::string, std::pair<std::string, std::string> > & HRP2DRCRobotModule::convexHull() const
 {
-  auto fileByBodyName = stdCollisionsFiles(mb);
-  const_cast<HRP2DRCRobotModule*>(this)->_convexHull = getConvexHull(fileByBodyName);
   return _convexHull;
 }
 
 const std::vector< std::map<std::string, std::vector<double> > > & HRP2DRCRobotModule::bounds() const
 {
-  const_cast<HRP2DRCRobotModule*>(this)->_bounds = nominalBounds(limits);
   return _bounds;
 }
 
 const std::map<std::string, std::vector<double> > & HRP2DRCRobotModule::stance() const
 {
-  const_cast<HRP2DRCRobotModule*>(this)->_stance = halfSittingPose(mb);
   return _stance;
 }
 
@@ -261,24 +275,24 @@ HRP2DRCGripperRobotModule::HRP2DRCGripperRobotModule()
   readUrdf("hrp2drc", filteredLinks);
 
   _springs.springsBodies = {"LLEG_LINK5", "RLEG_LINK5"};
+  auto fileByBodyName = stdCollisionsFiles(mb);
+  _convexHull = getConvexHull(fileByBodyName);
+  _bounds = nominalBounds(limits);
+  _stance = halfSittingPose(mb);
 }
 
 const std::map<std::string, std::pair<std::string, std::string> > & HRP2DRCGripperRobotModule::convexHull() const
 {
-  auto fileByBodyName = stdCollisionsFiles(mb);
-  const_cast<HRP2DRCGripperRobotModule*>(this)->_convexHull = getConvexHull(fileByBodyName);
   return _convexHull;
 }
 
 const std::vector< std::map<std::string, std::vector<double> > > & HRP2DRCGripperRobotModule::bounds() const
 {
-  const_cast<HRP2DRCGripperRobotModule*>(this)->_bounds = nominalBounds(limits);
   return _bounds;
 }
 
 const std::map<std::string, std::vector<double> > & HRP2DRCGripperRobotModule::stance() const
 {
-  const_cast<HRP2DRCGripperRobotModule*>(this)->_stance = halfSittingPose(mb);
   return _stance;
 }
 

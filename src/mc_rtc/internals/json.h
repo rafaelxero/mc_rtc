@@ -5,6 +5,11 @@
 
 #define RAPIDJSON_HAS_STDSTRING 1
 #define RAPIDJSON_PARSE_DEFAULT_FLAGS rapidjson::kParseCommentsFlag | rapidjson::kParseTrailingCommasFlag
+#define RAPIDJSON_NO_SIZETYPEDEFINE
+namespace rapidjson
+{
+    typedef size_t SizeType;
+}
 
 #include "rapidjson/document.h"
 #include "rapidjson/ostreamwrapper.h"
@@ -107,6 +112,16 @@ inline rapidjson::Value toJSON(std::string value, rapidjson::Document::Allocator
 }
 
 template<>
+inline rapidjson::Value toJSON(Eigen::Vector2d value, rapidjson::Document::AllocatorType & allocator)
+{
+  rapidjson::Value ret(rapidjson::kArrayType);
+  ret.Reserve(2, allocator);
+  ret.PushBack(value(0), allocator);
+  ret.PushBack(value(1), allocator);
+  return ret;
+}
+
+template<>
 inline rapidjson::Value toJSON(Eigen::Vector3d value, rapidjson::Document::AllocatorType & allocator)
 {
   rapidjson::Value ret(rapidjson::kArrayType);
@@ -152,6 +167,36 @@ inline rapidjson::Value toJSON(Eigen::Quaterniond value, rapidjson::Document::Al
   ret.PushBack(value.x(), allocator);
   ret.PushBack(value.y(), allocator);
   ret.PushBack(value.z(), allocator);
+  return ret;
+}
+
+template<>
+inline rapidjson::Value toJSON(Eigen::Matrix3d value, rapidjson::Document::AllocatorType & allocator)
+{
+  rapidjson::Value ret(rapidjson::kArrayType);
+  ret.Reserve(9, allocator);
+  for(size_t i = 0; i < 3; ++i)
+  {
+    for(size_t j = 0; j < 3; ++j)
+    {
+      ret.PushBack(value(i,j), allocator);
+    }
+  }
+  return ret;
+}
+
+template<>
+inline rapidjson::Value toJSON(Eigen::Matrix6d value, rapidjson::Document::AllocatorType & allocator)
+{
+  rapidjson::Value ret(rapidjson::kArrayType);
+  ret.Reserve(36, allocator);
+  for(size_t i = 0; i < 6; ++i)
+  {
+    for(size_t j = 0; j < 6; ++j)
+    {
+      ret.PushBack(value(i,j), allocator);
+    }
+  }
   return ret;
 }
 

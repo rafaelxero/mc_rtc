@@ -1,5 +1,8 @@
 #include <mc_tasks/GazeTask.h>
 
+#include <mc_tasks/MetaTaskLoader.h>
+#include <mc_rbdyn/configuration_io.h>
+
 namespace mc_tasks
 {
 
@@ -11,6 +14,7 @@ GazeTask::GazeTask(const std::string & bodyName,
   : TrajectoryTaskGeneric<tasks::qp::GazeTask>(robots, robotIndex, stiffness, weight)
 {
     finalize(robots.mbs(), static_cast<int>(rIndex), bodyName, point2d, depthEstimate, X_b_gaze);
+    name_ = "gaze_" + robots.robot(robotIndex).name() + "_" + bodyName;
 }
 
 GazeTask::GazeTask(const std::string & bodyName,
@@ -21,6 +25,7 @@ GazeTask::GazeTask(const std::string & bodyName,
   : TrajectoryTaskGeneric<tasks::qp::GazeTask>(robots, robotIndex, stiffness, weight)
 {
     finalize(robots.mbs(), static_cast<int>(rIndex), bodyName, point3d, X_b_gaze);
+    name_ = "gaze_" + robots.robot(robotIndex).name() + "_" + bodyName;
 }
 
 void GazeTask::reset()
@@ -38,6 +43,19 @@ void GazeTask::error(const Eigen::Vector3d & point3d, const Eigen::Vector2d & po
   errorT->error(point3d, point2d_ref);
 }
 
+}
 
+namespace
+{
+
+static bool registered = mc_tasks::MetaTaskLoader::register_load_function("gaze",
+  [](mc_solver::QPSolver & solver,
+     const mc_rtc::Configuration & config)
+  {
+    auto t = std::make_shared<mc_tasks::GazeTask>(config("body"), Eigen::Vector3d::Zero(), config("X_b_gaze"), solver.robots(), config("robotIndex"));
+    t->load(solver, config);
+    return t;
+  }
+);
 
 }

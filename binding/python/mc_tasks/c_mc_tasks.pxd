@@ -18,6 +18,8 @@ cdef extern from "<memory>" namespace "std" nogil:
 
 cdef extern from "<mc_tasks/MetaTask.h>" namespace "mc_tasks":
   cdef cppclass MetaTask:
+    string name()
+    void name(string)
     void reset()
     void dimWeight(const c_eigen.VectorXd &)
     c_eigen.VectorXd dimWeight()
@@ -84,4 +86,15 @@ cdef extern from "<mc_tasks/EndEffectorTask.h>" namespace "mc_tasks":
 cdef extern from "<mc_tasks/RelativeEndEffectorTask.h>" namespace "mc_tasks":
   cdef cppclass RelativeEndEffectorTask(EndEffectorTask):
     RelativeEndEffectorTask(const string &, const c_mc_rbdyn.Robots &,
-                    unsigned int, unsigned int, double, double)
+                    unsigned int, const string &, double, double)
+
+cdef extern from "<mc_tasks/ComplianceTask.h>" namespace "mc_tasks":
+  pair[double, double] defaultFGain
+  pair[double, double] defaultTGain
+
+  cdef cppclass ComplianceTask(MetaTask):
+    ComplianceTask(const c_mc_rbdyn.Robots &,
+                   unsigned int, const string &,
+                   double, double, double, double, double,
+                   pair[double, double], pair[double, double])
+    void setTargetWrench(const c_sva.ForceVecd&)

@@ -132,7 +132,7 @@ cdef extern from "<mc_rbdyn/Robots.h>" namespace "mc_rbdyn":
     const Robot & robot()
     const Robot & env()
 
-    Robot & load(const RobotModule&, const string&, PTransformd*, const string&)
+    Robot & load(const RobotModule&, PTransformd*, const string&)
 
     const Robot & robot(unsigned int)
 
@@ -167,12 +167,26 @@ cdef extern from "<mc_rbdyn/Robot.h>" namespace "mc_rbdyn":
     const MultiBodyConfig& mbc()
     const MultiBodyGraph& mbg()
 
+    vector[vector[double]]& q()
+    vector[vector[double]]& alpha()
+    vector[vector[double]]& alphaD()
+    vector[vector[double]]& jointTorque()
+
+    vector[PTransformd]& bodyPosW()
+    vector[MotionVecd]& bodyVelW()
+    vector[MotionVecd]& bodyVelB()
+    vector[MotionVecd]& bodyAccB()
+
     vector[vector[double]]& ql()
     vector[vector[double]]& qu()
     vector[vector[double]]& vl()
     vector[vector[double]]& vu()
     vector[vector[double]]& tl()
     vector[vector[double]]& tu()
+
+    Vector3d com()
+    Vector3d comVelocity()
+    Vector3d comAcceleration()
 
     const vector[Flexibility]& flexibility()
 
@@ -194,12 +208,25 @@ cdef extern from "<mc_rbdyn/Robot.h>" namespace "mc_rbdyn":
 
     map[string, vector[double]] stance()
 
-  shared_ptr[Robots] loadRobot(const RobotModule&, const string&, PTransformd *, const string&)
-  shared_ptr[Robots] loadRobots(const vector[RobotModulePtr]&, const vector[string]&)
-  shared_ptr[Robots] loadRobotAndEnv(const RobotModule&, const string&, const RobotModule&,
-      const string&)
-  shared_ptr[Robots] loadRobotAndEnv(const RobotModule&, const string&, const RobotModule&,
-      const string&, PTransformd*, const string&)
+    void forwardKinematics()
+    void forwardKinematics(MultiBodyConfig& mbc)
+    void forwardVelocity()
+    void forwardVelocity(MultiBodyConfig& mbc)
+    void forwardAcceleration()
+    void forwardAcceleration(MotionVecd & A_0)
+    void forwardAcceleration(MultiBodyConfig & mbc)
+    void forwardAcceleration(MultiBodyConfig & mbc, MotionVecd & A_0)
+
+    void eulerIntegration(double step)
+    void eulerIntegration(MultiBodyConfig & mbc, double step)
+
+    PTransformd posW()
+    void posW(PTransformd pt)
+
+  shared_ptr[Robots] loadRobot(const RobotModule&, PTransformd *, const string&)
+  shared_ptr[Robots] loadRobots(const vector[RobotModulePtr]&)
+  shared_ptr[Robots] loadRobotAndEnv(const RobotModule&, const RobotModule&)
+  shared_ptr[Robots] loadRobotAndEnv(const RobotModule&, const RobotModule&, PTransformd*, const string&)
   shared_ptr[Robots] loadRobotFromUrdf(const string&, const string&, cppbool, const
       vector[string]&, cppbool, PTransformd*, const string&)
 
@@ -320,6 +347,7 @@ cdef extern from "<mc_rbdyn/stance.h>" namespace "mc_rbdyn":
         const vector[Contact] & stabContacts)
     const vector[Contact]& contacts()
     const vector[vector[double]]& q()
+    void q(const vector[vector[double]]&)
     const vector[Contact]& geomContacts()
     void geomContacts(const vector[Contact]&)
     const vector[Contact]& stabContacts()
@@ -466,13 +494,16 @@ cdef extern from "<mc_rbdyn/contact_transform.h>" namespace "mc_rbdyn":
 cdef extern from "mc_rbdyn_wrapper.hpp" namespace "mc_rbdyn":
   string CollisionToString(const Collision &)
   #FIXME Work-around the lack of variadic template support
-  RobotModulePtr get_robot_module(const string&)
-  RobotModulePtr get_robot_module(const string&, const cppbool&)
-  RobotModulePtr get_robot_module(const string&, const string&, const string&)
+  RobotModulePtr get_robot_module(const string&) except +
+  RobotModulePtr get_robot_module(const string&, const cppbool&) except +
+  RobotModulePtr get_robot_module_str "mc_rbdyn::get_robot_module"(const string&, const string&) except +
+  RobotModulePtr get_robot_module(const string&, const string&, const string&) except +
   #XXX
+  vector[string] available_robots()
   Robots& const_cast_robots(const Robots&)
   Robot& const_cast_robot(const Robot&)
   ForceSensor& const_cast_force_sensor(const ForceSensor &)
+  BodySensor& const_cast_body_sensor(const BodySensor &)
   Surface& const_cast_surface(const Surface&)
   Contact& const_cast_contact(const Contact&)
   vector[Contact]& const_cast_contact_vector(const vector[Contact]&)
@@ -489,4 +520,8 @@ cdef extern from "mc_rbdyn_wrapper.hpp" namespace "mc_rbdyn":
   PolygonInterpolator * polygonInterpolatorFromTuplePairs(const vector[pair[pair[double, double], pair[double, double]]]&)
   #FIXME Work-around lack of array support
   vector[double] robotModuleDefaultAttitude(RobotModulePtr rm)
+  #XXX
+  #FIXME Lack of support for vector[T,A] in Cython 0.20
+  unsigned int getBodySensorsSize[T](T &)
+  (BodySensor&) getBodySensor[T](T &, unsigned int)
   #XXX

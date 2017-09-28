@@ -22,6 +22,12 @@ from libcpp.vector cimport vector
 from libcpp cimport bool as cppbool
 
 import json
+import warnings
+
+def deprecated():
+  warnings.simplefilter('always', category=DeprecationWarning)
+  warnings.warn("This call is deprecated", DeprecationWarning)
+  warnings.simplefilter('ignore', category=DeprecationWarning)
 
 # Hold python object that have to be kept alive
 global __MODULE_OBJECTS__
@@ -153,6 +159,11 @@ cdef class BodySensor(object):
 cdef BodySensor BodySensorFromRef(c_mc_rbdyn.BodySensor & bs):
     cdef BodySensor ret = BodySensor(skip_alloc = True)
     ret.impl = &(bs)
+    return ret
+
+cdef BodySensor BodySensorFromCRef(const c_mc_rbdyn.BodySensor & bs):
+    cdef BodySensor ret = BodySensor(skip_alloc = True)
+    ret.impl = &(c_mc_rbdyn.const_cast_body_sensor(bs))
     return ret
 
 cdef class ForceSensor(object):
@@ -302,6 +313,13 @@ cdef class RobotModule(object):
       ret.append(ForceSensorFromCRef(deref(it)))
       preinc(it)
     return ret
+  def bodySensors(self):
+    assert(self.impl.get())
+    size = c_mc_rbdyn.getBodySensorsSize(deref(self.impl))
+    ret = []
+    for i in range(size):
+        ret.append(BodySensorFromCRef(c_mc_rbdyn.getBodySensor(deref(self.impl), i)))
+    return ret
   def springs(self):
     assert(self.impl.get())
     return SpringsFromC(deref(self.impl).springs())
@@ -353,10 +371,16 @@ cdef class RobotModule(object):
     def __get__(self):
       assert(self.impl.get())
       return rbdyn.MultiBodyFromC(deref(self.impl).mb, copy = False)
+    def __set__(self, rbdyn.MultiBody mb):
+      assert(self.impl.get())
+      deref(self.impl).mb = deref(mb.impl)
   property mbc:
     def __get__(self):
       assert(self.impl.get())
       return rbdyn.MultiBodyConfigFromC(deref(self.impl).mbc, copy = False)
+    def __set__(self, rbdyn.MultiBodyConfig mbc):
+      assert(self.impl.get())
+      deref(self.impl).mbc = deref(mbc.impl)
   property mbg:
     def __get__(self):
       assert(self.impl.get())
@@ -381,12 +405,31 @@ cdef class RobotModuleVector(object):
       for rm in args:
         self.__addRM(rm)
 
+class RobotLoader(object):
+  @staticmethod
+  def get_robot_module(string name, *args):
+    cdef shared_ptr[c_mc_rbdyn.RobotModule] rm
+    if len(args) == 0:
+      rm = c_mc_rbdyn.get_robot_module(name)
+    elif len(args) == 1:
+      rm = c_mc_rbdyn.get_robot_module(name, args[0])
+    elif len(args) == 2:
+      rm = c_mc_rbdyn.get_robot_module(name, args[0], args[1])
+    else:
+      raise TypeError("Wrong arguments passed to get_robot_module")
+    return RobotModuleFromC(rm)
+  @staticmethod
+  def available_robots():
+    return c_mc_rbdyn.available_robots()
 
 def get_robot_module(string name, *args):
   if len(args) == 0:
     return RobotModuleFromC(c_mc_rbdyn.get_robot_module(name))
   elif len(args) == 1:
-    return RobotModuleFromC(c_mc_rbdyn.get_robot_module(name, args[0]))
+    if isinstance(args[0], bool):
+      return RobotModuleFromC(c_mc_rbdyn.get_robot_module(name, args[0]))
+    else:
+      return RobotModuleFromC(c_mc_rbdyn.get_robot_module_str(name, args[0]))
   elif len(args) == 2:
     return RobotModuleFromC(c_mc_rbdyn.get_robot_module(name, args[0], args[1]))
   else:
@@ -405,19 +448,26 @@ cdef class Robots(object):
       raise TypeError("Wrong arguments passed to Robots ctor")
 
   def robots(self):
-    cdef const vector[c_mc_rbdyn.Robot] & rV = deref(self.impl).robots()
     end = deref(self.impl).robots().end()
     it = deref(self.impl).robots().begin()
     ret = []
     while it != end:
       ret.append(RobotFromC(deref(it)))
+      preinc(it)
     return ret
 
-  def load(self, RobotModule module, surfaceDir, sva.PTransformd base = None, bName = ""):
+  def load(self, RobotModule module, *args):
     cdef c_sva.PTransformd * b = NULL
-    if base is not None:
-      b = base.impl
-    return RobotFromC(deref(self.impl).load(deref(module.impl), surfaceDir, b, bName))
+    bName = ""
+    if len(args):
+      if isinstance(args[0], sva.PTransformd):
+        b = (<sva.PTransformd>(args[0])).impl
+        if len(args) > 1:
+          bName = args[1]
+      else:
+        deprecated()
+        return self.load(module, *args[1:])
+    return RobotFromC(deref(self.impl).load(deref(module.impl), b, bName))
 
   def mbs(self):
     return rbdyn.MultiBodyVectorFromPtr(&(deref(self.impl).mbs()))
@@ -493,6 +543,13 @@ cdef class Robot(object):
       return BodySensorFromRef(self.impl.bodySensor())
     else:
       return BodySensorFromRef(self.impl.bodySensor(name))
+  def bodySensors(self):
+    self.__is_valid()
+    size = c_mc_rbdyn.getBodySensorsSize(deref(self.impl))
+    ret = []
+    for i in range(size):
+        ret.append(BodySensorFromCRef(c_mc_rbdyn.getBodySensor(deref(self.impl), i)))
+    return ret
   def hasBodySensor(self, name):
     self.__is_valid()
     return self.impl.hasBodySensor(name)
@@ -515,6 +572,75 @@ cdef class Robot(object):
     def __get__(self):
       self.__is_valid()
       return rbdyn.MultiBodyGraphFromC(self.impl.mbg(), False)
+
+  property q:
+    def __get__(self):
+      self.__is_valid()
+      return rbdyn.DoubleVectorVectorWrapperFromC(self.impl.q(), self)
+  property alpha:
+    def __get__(self):
+      self.__is_valid()
+      return rbdyn.DoubleVectorVectorWrapperFromC(self.impl.alpha(), self)
+  property alphaD:
+    def __get__(self):
+      self.__is_valid()
+      return rbdyn.DoubleVectorVectorWrapperFromC(self.impl.alphaD(), self)
+  property jointTorque:
+    def __get__(self):
+      self.__is_valid()
+      return rbdyn.DoubleVectorVectorWrapperFromC(self.impl.jointTorque(), self)
+  property bodyPosW:
+    def __get__(self):
+      self.__is_valid()
+      ret = []
+      end = self.impl.bodyPosW().end()
+      it = self.impl.bodyPosW().begin()
+      while it != end:
+        ret.append(sva.PTransformdFromC(deref(it)))
+        preinc(it)
+      return ret
+  property bodyVelW:
+    def __get__(self):
+      self.__is_valid()
+      ret = []
+      end = self.impl.bodyVelW().end()
+      it = self.impl.bodyVelW().begin()
+      while it != end:
+        ret.append(sva.MotionVecdFromC(deref(it)))
+        preinc(it)
+      return ret
+  property bodyVelB:
+    def __get__(self):
+      self.__is_valid()
+      ret = []
+      end = self.impl.bodyVelB().end()
+      it = self.impl.bodyVelB().begin()
+      while it != end:
+        ret.append(sva.MotionVecdFromC(deref(it)))
+        preinc(it)
+      return ret
+  property bodyAccB:
+    def __get__(self):
+      self.__is_valid()
+      ret = []
+      end = self.impl.bodyAccB().end()
+      it = self.impl.bodyAccB().begin()
+      while it != end:
+        ret.append(sva.MotionVecdFromC(deref(it)))
+        preinc(it)
+      return ret
+  property com:
+    def __get__(self):
+      self.__is_valid()
+      return eigen.Vector3dFromC(self.impl.com())
+  property comVelocity:
+    def __get__(self):
+      self.__is_valid()
+      return eigen.Vector3dFromC(self.impl.comVelocity())
+  property comAcceleration:
+    def __get__(self):
+      self.__is_valid()
+      return eigen.Vector3dFromC(self.impl.comAcceleration())
 
   property ql:
     def __get__(self):
@@ -591,6 +717,41 @@ cdef class Robot(object):
   def stance(self):
     self.__is_valid()
     return self.impl.stance()
+
+  def forwardKinematics(self, rbdyn.MultiBodyConfig mbc=None):
+    self.__is_valid()
+    if mbc is None:
+      self.impl.forwardKinematics()
+    else:
+      self.impl.forwardKinematics(deref(mbc.impl))
+
+  def forwardVelocity(self, rbdyn.MultiBodyConfig mbc=None):
+    self.__is_valid()
+    if mbc is None:
+      self.impl.forwardVelocity()
+    else:
+      self.impl.forwardVelocity(deref(mbc.impl))
+
+  def forwardAcceleration(self, rbdyn.MultiBodyConfig mbc=None, sva.MotionVecd A_0 = None):
+    self.__is_valid()
+    if mbc is None:
+      if A_0 is None:
+        self.impl.forwardAcceleration()
+      else:
+        self.impl.forwardAcceleration(deref(A_0.impl))
+    else:
+      if A_0 is None:
+        self.impl.forwardAcceleration(deref(mbc.impl))
+      else:
+        self.impl.forwardAcceleration(deref(mbc.impl), deref(A_0.impl))
+
+  def posW(self, sva.PTransformd pt = None):
+    self.__is_valid()
+    if pt is None:
+      return sva.PTransformdFromC(self.impl.posW())
+    else:
+      self.impl.posW(deref(pt.impl))
+
 
 cdef Robot RobotFromC(const c_mc_rbdyn.Robot & robot):
   cdef Robot ret = Robot()
@@ -1003,8 +1164,13 @@ cdef class Stance(object):
     return Stance(self)
   def contacts(self):
     return ContactVectorFromC(self.impl.contacts(), copy=False)
-  def q(self):
-    return self.impl.q()
+  property q:
+    def __get__(self):
+      return self.impl.q()
+    def __set__(self, value):
+      if not isinstance(value, rbdyn.DoubleVectorVectorWrapper):
+        value = rbdyn.DoubleVectorVectorWrapper(value)
+      self.impl.q(deref((<rbdyn.DoubleVectorVectorWrapper>value).v))
   property geomContacts:
     def __get__(self):
       return ContactVectorFromC(self.impl.geomContacts(), copy=False)
@@ -1034,13 +1200,26 @@ cdef Stance StanceFromC(const c_mc_rbdyn.Stance& s):
 
 cdef class StanceVector(object):
   def __dealloc__(self):
-    del self.v
-  def __cinit__(self):
-    pass
+    if self.__own_impl:
+      del self.v
+  def __cinit__(self, skip_alloc=False):
+    if skip_alloc:
+      __own_impl = False
+      self.v = NULL
+    else:
+      __own_impl = True
+      self.v = new vector[c_mc_rbdyn.Stance]()
   def __getitem__(self, idx):
     return StanceFromC(self.v.at(idx))
   def __len__(self):
     return self.v.size()
+  def __copy__(StanceVector self):
+    cdef StanceVector ret = StanceVector()
+    for i in range(len(self)):
+      ret.v.push_back(c_mc_rbdyn.Stance(self.v.at(i).q(), self.v.at(i).geomContacts(), self.v.at(i).stabContacts()))
+    return ret
+  def __deepcopy__(StanceVector self, memo):
+    return self.__copy__()
 
 cdef class StanceAction(object):
   def __cinit__(self):
@@ -1691,7 +1870,7 @@ def loadStances(Robots robots, filename):
   cdef vector[c_mc_rbdyn.Stance] * stances = new vector[c_mc_rbdyn.Stance]()
   cdef vector[shared_ptr[c_mc_rbdyn.StanceAction]] actions = vector[shared_ptr[c_mc_rbdyn.StanceAction]]()
   cdef vector[c_mc_rbdyn.PolygonInterpolator] * interpolators = new vector[c_mc_rbdyn.PolygonInterpolator]()
-  cdef StanceVector stances_ret = StanceVector()
+  cdef StanceVector stances_ret = StanceVector(skip_alloc=True)
   c_mc_rbdyn.loadStances(deref(robots.impl), filename, deref(stances), actions, deref(interpolators))
   actions_ret = []
   for i in range(actions.size()):
@@ -1715,27 +1894,30 @@ def saveStances(Robots robots, filename, stances_in, actions_in):
     actions.push_back(fake_shared_from_sa(sa))
   c_mc_rbdyn.pSaveStances(deref(robots.impl), filename, stances, actions)
 
-def loadRobot(RobotModule module, surfaceDir, sva.PTransformd base = None, bName = ""):
-  if base is None:
-    robots = RobotsFromPtr(c_mc_rbdyn.loadRobot(deref(module.impl.get()),
-      surfaceDir, NULL, bName))
-  else:
-    robots = RobotsFromPtr(c_mc_rbdyn.loadRobot(deref(module.impl.get()),
-      surfaceDir, base.impl, bName))
-  return robots
+def loadRobot(RobotModule module, *args):#sva.PTransformd base = None, bName = ""):
+  cdef c_sva.PTransformd * b = NULL
+  bName = ""
+  if len(args):
+    if isinstance(args[0], sva.PTransformd):
+      b = (<sva.PTransformd>(args[0])).impl;
+      if len(args) > 1:
+        bName = args[1]
+    else:
+      deprecated()
+      return loadRobot(module, *args[1:])
+  return RobotsFromPtr(c_mc_rbdyn.loadRobot(deref(module.impl.get()), b, bName))
 
-def loadRobots(robot_modules, surfaceDirs):
-  return RobotsFromPtr(c_mc_rbdyn.loadRobots(RobotModuleVector(robot_modules).v,
-    surfaceDirs))
+def loadRobots(robot_modules, robot_surface_dirs = None):
+  if robot_surface_dirs is not None:
+    deprecated()
+  return RobotsFromPtr(c_mc_rbdyn.loadRobots(RobotModuleVector(robot_modules).v))
 
-def loadRobotAndEnv(RobotModule module, surfaceDir, RobotModule envModule,
-    envSurfaceDir, sva.PTransformd base = None, bId = -1):
+def loadRobotAndEnv(RobotModule module, RobotModule envModule,
+                    sva.PTransformd base = None, bId = -1):
   if base is None:
-    return RobotsFromPtr(c_mc_rbdyn.loadRobotAndEnv(deref(module.impl.get()),
-      surfaceDir, deref(envModule.impl.get()), envSurfaceDir))
+    return RobotsFromPtr(c_mc_rbdyn.loadRobotAndEnv(deref(module.impl.get()), deref(envModule.impl.get())))
   else:
-    return RobotsFromPtr(c_mc_rbdyn.loadRobotAndEnv(deref(module.impl.get()),
-      surfaceDir, deref(envModule.impl.get()), envSurfaceDir, base.impl, bId))
+    return RobotsFromPtr(c_mc_rbdyn.loadRobotAndEnv(deref(module.impl.get()), deref(envModule.impl.get()), base.impl, bId))
 
 def loadRobotFromUrdf(name, urdf, withVirtualLinks = True, filteredLinks = [],
     fixed = False, sva.PTransformd base = None, bName = ""):

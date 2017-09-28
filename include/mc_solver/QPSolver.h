@@ -19,6 +19,11 @@ namespace mc_tasks
   struct MetaTask;
 }
 
+namespace mc_rtc
+{
+  struct Logger;
+}
+
 namespace mc_solver
 {
 
@@ -83,7 +88,11 @@ public:
     static_assert(std::is_base_of<mc_tasks::MetaTask, T>::value ||
                   std::is_base_of<tasks::qp::Task, T>::value,
                   "You are trying to add a task that is neither a tasks::qp::Task or an mc_tasks::MetaTask");
-    if(task.get()) { addTask(task.get()); }
+    if(task)
+    {
+      addTask(task.get());
+      shPtrTasksStorage.emplace_back(task);
+    }
   }
 
   /** Remove a task from the solver
@@ -115,7 +124,7 @@ public:
     static_assert(std::is_base_of<mc_tasks::MetaTask, T>::value ||
                   std::is_base_of<tasks::qp::Task, T>::value,
                   "You are trying to add a task that is neither a tasks::qp::Task or an mc_tasks::MetaTask");
-    if(task.get()) { removeTask(task.get()); }
+    if(task) { removeTask(task.get()); }
   }
 
   /** Add a constraint function from the solver
@@ -172,6 +181,11 @@ public:
   /** Gives access to the main robot in the solver */
   mc_rbdyn::Robot & robot();
 
+  /** Gives access to the robot with the given index in the solver */
+  mc_rbdyn::Robot & robot(unsigned int idx);
+  /** Gives access to the robot with the given index in the solver */
+  const mc_rbdyn::Robot & robot(unsigned int idx) const;
+
   /** Gives access to the environment robot in the solver (see mc_rbdyn::Robots) */
   const mc_rbdyn::Robot & env() const;
   /** Gives access to the environment robot in the solver (see mc_rbdyn::Robots) */
@@ -207,12 +221,16 @@ public:
    */
   tasks::qp::SolverData & data();
 
+  /** Use the dynamics constraint to fill torque in the main robot */
   void fillTorque(const mc_solver::DynamicsConstraint& dynamicsConstraint);
   void fillTorque(tasks::qp::MotionConstr* motionConstr);
 
   boost::timer::cpu_times solveTime();
 
   boost::timer::cpu_times solveAndBuildTime();
+
+  /** Set the logger for this solver instance */
+  void logger(std::shared_ptr<mc_rtc::Logger> logger);
 private:
   std::shared_ptr<mc_rbdyn::Robots> robots_p;
   double timeStep;
@@ -234,9 +252,13 @@ private:
   bool pos_feedback;
   bool vel_feedback;
   std::vector<double> encoder_prev;
+  std::vector<std::shared_ptr<void>> shPtrTasksStorage;
 
   /** Update qpRes from the latest run() */
   void __fillResult();
+
+  /** Pointer to the Logger */
+  std::shared_ptr<mc_rtc::Logger> logger_ = nullptr;
 public:
   /** \deprecated{Default constructor, not made for general usage} */
   QPSolver() {}

@@ -37,6 +37,8 @@ option(PYTHON_BINDING_USER_INSTALL "Install the Python bindings in user space" O
 
 option(BUILD_CONTROLLER_SAMPLES "Build sample controllers in the project" ON)
 option(DISABLE_TESTS "Disable unit tests" OFF)
+option(DISABLE_CONTROLLER_TESTS "Disable controller unit tests" OFF)
+option(DISABLE_ROBOT_TESTS "Disable RobotModule unit tests" OFF)
 
 SEARCH_FOR_EIGEN()
 
@@ -120,6 +122,7 @@ if(${ROSCPP_FOUND})
   add_required_dependency(nav_msgs)
   add_required_dependency(sensor_msgs)
   add_required_dependency(tf2_ros)
+  add_required_dependency(rosbag)
 else()
   set(DEFINE_HAS_ROS_MACRO "")
 endif()
@@ -148,6 +151,8 @@ endif()
 include_directories(3rd-party/RapidJSON)
 
 add_subdirectory(3rd-party)
+add_subdirectory(doc)
+add_subdirectory(idl)
 add_subdirectory(src)
 if(NOT ${DISABLE_TESTS})
   add_subdirectory(tests)

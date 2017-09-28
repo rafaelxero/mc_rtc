@@ -5,6 +5,7 @@
 #include <mc_rbdyn/RobotLoader.h>
 #include <mc_rbdyn/Contact.h>
 #include <mc_rbdyn/stance.h>
+#include <mc_rbdyn/RobotModule.h>
 #include <mc_rbdyn/StanceConfig.h>
 
 #include <memory>
@@ -39,6 +40,11 @@ RobotModulePtr get_robot_module(const std::string & name, const Args & ... args)
   return RobotLoader::get_robot_module(name, args...);
 }
 
+std::vector<std::string> available_robots()
+{
+  return RobotLoader::available_robots();
+}
+
 Robots& const_cast_robots(const Robots& rhs)
 {
   return const_cast<Robots&>(rhs);
@@ -52,6 +58,11 @@ Robot& const_cast_robot(const Robot& rhs)
 ForceSensor& const_cast_force_sensor(const ForceSensor & fs)
 {
   return const_cast<ForceSensor&>(fs);
+}
+
+BodySensor& const_cast_body_sensor(const BodySensor & bs)
+{
+  return const_cast<BodySensor&>(bs);
 }
 
 Surface& const_cast_surface(const Surface& rhs)
@@ -143,6 +154,18 @@ std::vector<double> robotModuleDefaultAttitude(RobotModulePtr rm)
     ret[i] = attitude[i];
   }
   return ret;
+}
+
+template<typename T>
+size_t getBodySensorsSize(const T & rm)
+{
+  return rm.bodySensors().size();
+}
+
+template<typename T>
+const BodySensor & getBodySensor(const T & rm, size_t i)
+{
+  return rm.bodySensors()[i];
 }
 
 }

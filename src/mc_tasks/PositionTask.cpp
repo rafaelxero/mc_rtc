@@ -18,6 +18,7 @@ PositionTask::PositionTask(const std::string & bodyName, const Eigen::Vector3d& 
 
   Eigen::Vector3d curPos = robot.mbc().bodyPosW[bIndex].translation();
   finalize(robots.mbs(), static_cast<int>(rIndex), bodyName, curPos, bodyPoint);
+  name_ = "position_" + robot.name() + "_" + bodyName;
 }
 
 
@@ -46,6 +47,26 @@ Eigen::Vector3d PositionTask::bodyPoint() const
 void PositionTask::bodyPoint(const Eigen::Vector3d& bodyPoint)
 {
   errorT->bodyPoint(bodyPoint);
+}
+
+void PositionTask::addToLogger(mc_rtc::Logger & logger)
+{
+  logger.addLogEntry(name_ + "_target",
+                     [this]()
+                     {
+                     return position();
+                     });
+  logger.addLogEntry(name_,
+                     [this]() -> const Eigen::Vector3d&
+                     {
+                     return robots.robot(rIndex).mbc().bodyPosW[bIndex].translation();
+                     });
+}
+
+void PositionTask::removeFromLogger(mc_rtc::Logger & logger)
+{
+  logger.removeLogEntry(name_ + "_target");
+  logger.removeLogEntry(name_);
 }
 
 }

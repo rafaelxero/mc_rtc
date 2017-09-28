@@ -1,9 +1,9 @@
 #include <mc_rbdyn/Contact.h>
 
 #include <mc_rbdyn/contact_transform.h>
-#include <mc_rbdyn/Robots.h>
-
+#include <mc_rbdyn/configuration_io.h>
 #include <mc_rbdyn/PlanarSurface.h>
+#include <mc_rbdyn/Robots.h>
 
 #include <mc_rtc/logging.h>
 
@@ -60,7 +60,7 @@ std::vector<sva::PTransformd> computePoints(const mc_rbdyn::Surface & robotSurfa
     const geos::geom::GeometryFactory & factory = *factory_ptr;
 
     // Create robot surf polygon
-    geos::geom::CoordinateSequence * robotPoints2dseq = factory.getCoordinateSequenceFactory()->create((std::size_t)0,0);
+    geos::geom::CoordinateSequence * robotPoints2dseq = factory.getCoordinateSequenceFactory()->create(static_cast<size_t>(0),0);
     for(const std::pair<double, double> & p : robotPoints2d)
     {
       robotPoints2dseq->add(geos::geom::Coordinate(p.first, p.second));
@@ -70,7 +70,7 @@ std::vector<sva::PTransformd> computePoints(const mc_rbdyn::Surface & robotSurfa
     geos::geom::Polygon * robotSurfPoly = factory.createPolygon(robotPoints2dshell, 0);
 
     // Create env surf polygon
-    geos::geom::CoordinateSequence * envPoints2dseq = factory.getCoordinateSequenceFactory()->create((std::size_t)0,0);
+    geos::geom::CoordinateSequence * envPoints2dseq = factory.getCoordinateSequenceFactory()->create(static_cast<size_t>(0),0);
     for(const std::pair<double, double> & p : envPoints2d)
     {
       envPoints2dseq->add(geos::geom::Coordinate(p.first, p.second));
@@ -130,6 +130,21 @@ Contact::Contact(const mc_rbdyn::Robots & robots, unsigned int r1Index, unsigned
   {
     impl->X_r2s_r1s = sva::PTransformd(*X_r2s_r1s);
   }
+}
+
+mc_rbdyn::Contact Contact::load(const mc_rbdyn::Robots & robots, const mc_rtc::Configuration & config)
+{
+  return mc_rtc::ConfigurationLoader<mc_rbdyn::Contact>::load(config, robots);
+}
+
+std::vector<mc_rbdyn::Contact> Contact::loadVector(const mc_rbdyn::Robots & robots, const mc_rtc::Configuration & config)
+{
+  std::vector<mc_rbdyn::Contact> ret;
+  for(const auto & c : config)
+  {
+    ret.emplace_back(load(robots, c));
+  }
+  return ret;
 }
 
 Contact::Contact(const Contact & contact)

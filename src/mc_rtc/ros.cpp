@@ -3,6 +3,7 @@
 #include <mc_rbdyn/Robots.h>
 
 #include <mc_rtc/logging.h>
+#include <mc_rtc/utils.h>
 
 #include <RBDyn/FK.h>
 
@@ -14,12 +15,11 @@
 #include <geometry_msgs/WrenchStamped.h>
 #include <tf2_ros/transform_broadcaster.h>
 
-#include <mutex>
-#include <queue>
 #include <thread>
 #endif
 
 #ifdef MC_RTC_HAS_ROS
+
 namespace mc_rtc
 {
 
@@ -183,7 +183,10 @@ public:
 
     if(seq % skip == 0)
     {
-      msgs.push({msg, tfs, imu, odom, ros_wrenches});
+      if(!msgs.push({msg, tfs, imu, odom, ros_wrenches}))
+      {
+        LOG_ERROR("Full ROS message publishing queue")
+      }
     }
   }
 
@@ -207,18 +210,18 @@ private:
 
   bool running;
   uint32_t seq;
-  std::queue<RobotStateData> msgs;
+  CircularBuffer<RobotStateData, 128> msgs;
   unsigned int rate;
   std::thread th;
 
   void publishThread()
   {
     ros::Rate rt(rate);
+    RobotStateData msg;
     while(running && ros::ok())
     {
-      while(msgs.size())
+      while(msgs.pop(msg))
       {
-        const auto & msg = msgs.front();
         try
         {
           j_state_pub.publish(msg.js);
@@ -242,7 +245,6 @@ private:
           LOG_ERROR("EXCEPTION WHILE PUBLISHING STATE")
           LOG_WARNING(e.what())
         }
-        msgs.pop();
       }
       rt.sleep();
     }
@@ -346,7 +348,7 @@ std::shared_ptr<ros::NodeHandle> ROSBridge::get_node_handle()
   return impl->nh;
 }
 
-void ROSBridge::set_publisher_timestep(double timestep)
+void ROSBridge::set_publisher_timestep(double /*timestep*/)
 {
 }
 

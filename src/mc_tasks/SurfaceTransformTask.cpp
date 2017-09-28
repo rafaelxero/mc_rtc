@@ -1,5 +1,8 @@
 #include <mc_tasks/SurfaceTransformTask.h>
 
+#include <mc_tasks/MetaTaskLoader.h>
+#include <mc_rbdyn/configuration_io.h>
+
 namespace mc_tasks
 {
 
@@ -11,6 +14,7 @@ SurfaceTransformTask::SurfaceTransformTask(const std::string & surfaceName, cons
   std::string bodyName = robot.surface(surfaceName).bodyName();
   sva::PTransformd curPos = robot.surface(surfaceName).X_0_s(robot);
   finalize(robots.mbs(), static_cast<int>(rIndex), bodyName, curPos, robot.surface(surfaceName).X_b_s());
+  name_ = "surface_transform_" + robot.name() + "_" + surfaceName;
 }
 
 void SurfaceTransformTask::reset()
@@ -29,5 +33,24 @@ void SurfaceTransformTask::target(const sva::PTransformd & pose)
 {
   errorT->target(pose);
 }
+
+}
+
+namespace
+{
+
+static bool registered = mc_tasks::MetaTaskLoader::register_load_function("surfaceTransform",
+  [](mc_solver::QPSolver & solver,
+     const mc_rtc::Configuration & config)
+  {
+    auto t = std::make_shared<mc_tasks::SurfaceTransformTask>(config("surface"), solver.robots(), config("robotIndex"));
+    if(config.has("target"))
+    {
+      t->target(config("target"));
+    }
+    t->load(solver, config);
+    return t;
+  }
+);
 
 }

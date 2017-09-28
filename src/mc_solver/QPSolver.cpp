@@ -60,6 +60,10 @@ QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
   : robots_p(robots), timeStep(timeStep), solver(),
     first_run(true), pos_feedback(false), vel_feedback(false)
 {
+  if(timeStep <= 0)
+  {
+    LOG_ERROR_AND_THROW(std::invalid_argument, "timeStep has to be > 0! timeStep = " << timeStep)
+  }
 }
 
 QPSolver::QPSolver(double timeStep)
@@ -88,12 +92,23 @@ void QPSolver::addTask(mc_tasks::MetaTask * task)
   {
     metaTasks.push_back(task);
     task->addToSolver(*this);
+    if(logger_)
+    {
+      task->addToLogger(*logger_);
+    }
+    LOG_INFO("Added task " << task->name())
   }
 }
 
 void QPSolver::removeTask(tasks::qp::Task * task)
 {
   solver.removeTask(task);
+  shPtrTasksStorage.erase(std::remove_if(
+    shPtrTasksStorage.begin(), shPtrTasksStorage.end(),
+    [task](const std::shared_ptr<void> & p)
+    {
+      return task == p.get();
+    }), shPtrTasksStorage.end());
 }
 
 void QPSolver::removeTask(mc_tasks::MetaTask * task)
@@ -103,6 +118,17 @@ void QPSolver::removeTask(mc_tasks::MetaTask * task)
   {
     metaTasks.erase(it);
     task->removeFromSolver(*this);
+    shPtrTasksStorage.erase(std::remove_if(
+      shPtrTasksStorage.begin(), shPtrTasksStorage.end(),
+      [task](const std::shared_ptr<void> & p)
+      {
+        return task == p.get();
+      }), shPtrTasksStorage.end());
+    if(logger_)
+    {
+      task->removeFromLogger(*logger_);
+    }
+    LOG_INFO("Removed task " << task->name())
   }
 }
 
@@ -265,6 +291,15 @@ mc_rbdyn::Robot & QPSolver::robot()
   return robots_p->robot();
 }
 
+mc_rbdyn::Robot & QPSolver::robot(unsigned int idx)
+{
+  return robots_p->robot(idx);
+}
+const mc_rbdyn::Robot & QPSolver::robot(unsigned int idx) const
+{
+  return robots_p->robot(idx);
+}
+
 const mc_rbdyn::Robot & QPSolver::env() const
 {
   return robots_p->env();
@@ -345,6 +380,25 @@ boost::timer::cpu_times QPSolver::solveTime()
 boost::timer::cpu_times QPSolver::solveAndBuildTime()
 {
   return solver.solveAndBuildTime();
+}
+
+void QPSolver::logger(std::shared_ptr<mc_rtc::Logger> logger)
+{
+  if(logger_)
+  {
+    for(auto t : metaTasks)
+    {
+      t->removeFromLogger(*logger_);
+    }
+  }
+  logger_ = logger;
+  if(logger_)
+  {
+    for(auto t : metaTasks)
+    {
+      t->addToLogger(*logger_);
+    }
+  }
 }
 
 }
