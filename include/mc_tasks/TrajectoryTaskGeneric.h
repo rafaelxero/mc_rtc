@@ -10,13 +10,26 @@
 namespace mc_tasks
 {
 
+struct TrajectoryTaskGenericCommon : public MetaTask
+{
+  virtual void stiffness(double stiffness) = 0;
+  virtual void setGains(double stiffness, double damping) = 0;
+  virtual void weight(double w) = 0;
+  
+  virtual double stiffness() const = 0;
+  virtual double damping() const = 0;
+  virtual double weight() const = 0;
+
+  virtual tasks::qp::Task* get() = 0;
+};
+
 /*! \brief Generic wrapper for a tasks::qp::TrajectoryTask
  *
  * This task is meant to be derived to build actual tasks
  *
  */
 template<typename T>
-struct TrajectoryTaskGeneric : public MetaTask
+struct TrajectoryTaskGeneric : public TrajectoryTaskGenericCommon
 {
 
   /*! \brief Constructor (auto damping)
@@ -69,7 +82,7 @@ struct TrajectoryTaskGeneric : public MetaTask
    * \param damping Task damping
    *
    */
-  void setGains(double stifness, double damping);
+  void setGains(double stiffness, double damping);
 
   /*! \brief Get the current task stiffness */
   double stiffness() const;
@@ -104,6 +117,9 @@ struct TrajectoryTaskGeneric : public MetaTask
   virtual Eigen::VectorXd speed() const override;
 
   void load(mc_solver::QPSolver & solver, const mc_rtc::Configuration & config) override;
+
+  tasks::qp::Task* get() override;
+  
 protected:
   /*! This function should be called to finalize the task creation, it will
    * create the actual tasks objects */

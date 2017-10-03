@@ -207,4 +207,10 @@ void TrajectoryTaskGeneric<T>::load(mc_solver::QPSolver & solver,
   }
 }
 
+template<typename T>
+tasks::qp::Task* TrajectoryTaskGeneric<T>::get()
+{
+  return trajectoryT.get();
+}
+
 }

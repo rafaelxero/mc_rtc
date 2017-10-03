@@ -123,8 +123,8 @@ public:
   {
     static_assert(std::is_base_of<mc_tasks::MetaTask, T>::value ||
                   std::is_base_of<tasks::qp::Task, T>::value,
-                  "You are trying to add a task that is neither a tasks::qp::Task or an mc_tasks::MetaTask");
-    if(task) { removeTask(task.get()); }
+                  "You are trying to remove a task that is neither a tasks::qp::Task or an mc_tasks::MetaTask");
+    if(task.get()) { removeTask(task.get()); }
   }
 
   /** Add a constraint function from the solver
@@ -249,21 +249,26 @@ private:
   QPResultMsg qpRes;
 
   bool first_run;
-  bool pos_feedback;
-  bool vel_feedback;
+  bool j_feedback;
+  bool ff_feedback;
+  std::vector<std::string> feedbackJoints;
   std::vector<double> encoder_prev;
+  std::vector<rbd::MultiBodyConfig> mbcs_calc;
   std::vector<std::shared_ptr<void>> shPtrTasksStorage;
 
   /** Update qpRes from the latest run() */
-  void __fillResult();
+  void __fillResult(const rbd::MultiBodyConfig & mbc);
 
   /** Pointer to the Logger */
   std::shared_ptr<mc_rtc::Logger> logger_ = nullptr;
+
 public:
   /** \deprecated{Default constructor, not made for general usage} */
   QPSolver() {}
 
-  void feedbackMode(bool pos_fb, bool vel_fb);
+  void enableJointFeedback(bool j_fb);
+  void enableFreeFlyerFeedback(bool ff_fb);
+  void setFeedbackJoints(const std::vector<std::string> joint_names);
 };
 
 }
