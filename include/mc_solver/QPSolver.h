@@ -196,6 +196,9 @@ public:
   /** Gives access to the robots controlled by this solver */
   mc_rbdyn::Robots & robots();
 
+  /** Values calculated by the QP Solver */
+  const std::vector<rbd::MultiBodyConfig> & mbcs_calc() const;
+
   /** Update number of variables
    *
    * This should be called when/if you add new robots into the scene after the
@@ -253,7 +256,7 @@ private:
   bool ff_feedback;
   std::vector<std::string> feedbackJoints;
   std::vector<double> encoder_prev;
-  std::vector<rbd::MultiBodyConfig> mbcs_calc;
+  std::vector<rbd::MultiBodyConfig> mbcs_calc_;
   std::vector<std::shared_ptr<void>> shPtrTasksStorage;
 
   /** Update qpRes from the latest run() */

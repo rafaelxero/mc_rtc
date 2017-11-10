@@ -15,10 +15,12 @@ struct TrajectoryTaskGenericCommon : public MetaTask
   virtual void stiffness(double stiffness) = 0;
   virtual void setGains(double stiffness, double damping) = 0;
   virtual void weight(double w) = 0;
+  virtual void dimWeight(const Eigen::VectorXd & dimW) = 0;
   
   virtual double stiffness() const = 0;
   virtual double damping() const = 0;
   virtual double weight() const = 0;
+  virtual Eigen::VectorXd dimWeight() const = 0;
 
   virtual tasks::qp::Task* get() = 0;
 };

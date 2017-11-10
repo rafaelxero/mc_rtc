@@ -198,12 +198,10 @@ bool QPSolver::run()
     t->update();
   }
 
-  //mbcs_calc = robots().mbcs();
-
   if(first_run)
   {
     encoder_prev = robot().encoderValues();
-    mbcs_calc = robots().mbcs();
+    mbcs_calc_ = robots().mbcs();
     first_run = false;
   }
 
@@ -244,7 +242,7 @@ bool QPSolver::run()
     {
       rbd::MultiBody & mb = robots_p->mbs()[i];
       rbd::MultiBodyConfig & mbc_real = robots_p->mbcs()[i];
-      rbd::MultiBodyConfig & mbc_calc = mbcs_calc[i];
+      rbd::MultiBodyConfig & mbc_calc = mbcs_calc_[i];
       if(mb.nrDof() > 0)
       {
         solver.updateMbc(mbc_real, static_cast<int>(i));
@@ -262,12 +260,10 @@ bool QPSolver::run()
         {
           rbd::eulerIntegration(mb, mbc_calc, timeStep);
         }
-
-        //robot().mbc() = mbc;
       }
       success = true;
     }
-    __fillResult(mbcs_calc[robots().robotIndex()]);
+    __fillResult(mbcs_calc_[robots().robotIndex()]);
   }
   return success;
 }
@@ -332,10 +328,16 @@ const mc_rbdyn::Robots & QPSolver::robots() const
   assert(robots_p);
   return *robots_p;
 }
+
 mc_rbdyn::Robots & QPSolver::robots()
 {
   assert(robots_p);
   return *robots_p;
+}
+
+const std::vector<rbd::MultiBodyConfig> & QPSolver::mbcs_calc() const
+{
+  return mbcs_calc_;
 }
 
 void QPSolver::updateConstrSize()
