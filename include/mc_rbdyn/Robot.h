@@ -35,10 +35,14 @@ struct MC_RBDYN_DLLAPI Robot
   #else
   friend class std::allocator<Robot>;
   #endif
+
 public:
+
   typedef std::pair<std::string, std::shared_ptr<sch::S_Polyhedron>> convex_pair_t;
   typedef std::pair<std::string, std::shared_ptr<sch::STP_BV>> stpbv_pair_t;
+
 public:
+
   Robot(Robot&&) = default;
   Robot& operator=(Robot&&) = default;
 
@@ -307,6 +311,7 @@ public:
   void posW(const sva::PTransformd & pt);
 
 private:
+
   std::string name_;
   Robots * robots;
   unsigned int robots_idx;
@@ -345,7 +350,9 @@ private:
   std::map<std::string, size_t> forceSensorsIndex_;
   /** Correspondance between bodies' names and attached force sensors */
   std::map<std::string, size_t> bodyForceSensors_;
+
 protected:
+
   Robot(const std::string & name, Robots & robots, unsigned int robots_idx,
         const std::map<std::string, sva::PTransformd> & bodyTransforms,
         const std::vector< std::vector<double> > & ql, const std::vector< std::vector<double> > & qu,
