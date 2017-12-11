@@ -61,7 +61,7 @@ QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
   : robots_p(robots), timeStep(timeStep), solver(),
     first_run(true), j_feedback(false), ff_feedback(false)
 {
-  mbcs_calc_ = std::make_shared<std::vector<rbd::MultiBodyConfig>>();
+  mbcs_calc_ = std::make_shared<std::vector<rbd::MultiBodyConfig>>(robots->mbcs());
   
   if(timeStep <= 0)
   {
@@ -204,7 +204,6 @@ bool QPSolver::run()
   if(first_run)
   {
     encoder_prev = robot().encoderValues();
-    *mbcs_calc_ = robots().mbcs();
     first_run = false;
   }
 
