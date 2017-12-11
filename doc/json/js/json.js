@@ -116,10 +116,12 @@ $(document).ready(function()
   'EndEffectorTask',
   'RelativeEndEffectorTask',
   'ComplianceTask',
+  'AdmittanceTask',
   'AddContactTask',
   'RemoveContactTask',
   'GazeTask',
   'PBVSTask',
+  'PostureTask',
   'SurfaceTransformTask',
   'VectorOrientationTask',
   ]

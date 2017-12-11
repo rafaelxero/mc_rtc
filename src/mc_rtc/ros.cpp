@@ -118,10 +118,18 @@ public:
     }
 
     imu.header = msg.header;
-    const auto & gsensor = robot.bodySensor().acceleration();
-    imu.linear_acceleration.x = gsensor.x();
-    imu.linear_acceleration.y = gsensor.y();
-    imu.linear_acceleration.z = gsensor.z();
+    const auto & imu_linear_acceleration = robot.bodySensor().acceleration();
+    imu.linear_acceleration.x = imu_linear_acceleration.x();
+    imu.linear_acceleration.y = imu_linear_acceleration.y();
+    imu.linear_acceleration.z = imu_linear_acceleration.z();
+    const auto & imu_angular_velocity = robot.bodySensor().angularVelocity();
+    imu.angular_velocity.x = imu_angular_velocity.x();
+    imu.angular_velocity.y = imu_angular_velocity.y();
+    imu.angular_velocity.z = imu_angular_velocity.z();
+    const auto &imu_orientation = robot.bodySensor().orientation();
+    imu.orientation.x = imu_orientation.x();
+    imu.orientation.y = imu_orientation.y();
+    imu.orientation.z = imu_orientation.z();
 
     nav_msgs::Odometry odom;
     odom.header = msg.header;
@@ -155,7 +163,7 @@ public:
       const sva::ForceVecd & wrench_sva = fs.wrench();
       geometry_msgs::WrenchStamped wrench_msg;
       wrench_msg.header = msg.header;
-      wrench_msg.header.frame_id = name;
+      wrench_msg.header.frame_id = prefix + name;
       wrench_msg.wrench.force.x = wrench_sva.force().x();
       wrench_msg.wrench.force.y = wrench_sva.force().y();
       wrench_msg.wrench.force.z = wrench_sva.force().z();
@@ -230,7 +238,7 @@ private:
           tf_caster.sendTransform(msg.tfs);
           for (const auto & wrench : msg.wrenches)
           {
-            const std::string & sensor_name = wrench.header.frame_id;
+            const std::string & sensor_name = wrench.header.frame_id.substr(prefix.length());
             if (wrenches_pub.count(sensor_name) == 0)
             {
               wrenches_pub.insert({
