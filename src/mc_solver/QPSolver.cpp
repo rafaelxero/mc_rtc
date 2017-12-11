@@ -60,6 +60,8 @@ QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
   : robots_p(robots), timeStep(timeStep), solver(),
     first_run(true), j_feedback(false), ff_feedback(false)
 {
+  mbcs_calc_ = std::make_shared<std::vector<rbd::MultiBodyConfig>>();
+  
   if(timeStep <= 0)
   {
     LOG_ERROR_AND_THROW(std::invalid_argument, "timeStep has to be > 0! timeStep = " << timeStep)
@@ -201,7 +203,7 @@ bool QPSolver::run()
   if(first_run)
   {
     encoder_prev = robot().encoderValues();
-    mbcs_calc_ = robots().mbcs();
+    *mbcs_calc_ = robots().mbcs();
     first_run = false;
   }
 
@@ -242,7 +244,7 @@ bool QPSolver::run()
     {
       rbd::MultiBody & mb = robots_p->mbs()[i];
       rbd::MultiBodyConfig & mbc_real = robots_p->mbcs()[i];
-      rbd::MultiBodyConfig & mbc_calc = mbcs_calc_[i];
+      rbd::MultiBodyConfig & mbc_calc = (*mbcs_calc_)[i];
       if(mb.nrDof() > 0)
       {
         solver.updateMbc(mbc_real, static_cast<int>(i));
@@ -263,7 +265,7 @@ bool QPSolver::run()
       }
       success = true;
     }
-    __fillResult(mbcs_calc_[robots().robotIndex()]);
+    __fillResult((*mbcs_calc_)[robots().robotIndex()]);
   }
   return success;
 }
@@ -335,7 +337,7 @@ mc_rbdyn::Robots & QPSolver::robots()
   return *robots_p;
 }
 
-const std::vector<rbd::MultiBodyConfig> & QPSolver::mbcs_calc() const
+const std::shared_ptr<std::vector<rbd::MultiBodyConfig>> QPSolver::mbcs_calc() const
 {
   return mbcs_calc_;
 }
