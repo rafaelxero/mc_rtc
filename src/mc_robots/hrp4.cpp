@@ -330,24 +330,25 @@ namespace mc_robots
     readUrdf("hrp4", filteredLinks);
 
     _springs.springsBodies = { "l_ankle", "r_ankle" }; //TODO: check these are the correct bodies
+
+    auto fileByBodyName = stdCollisionsFiles(mb);
+    _convexHull = getConvexHull(fileByBodyName);
+    _bounds = nominalBounds(limits);
+    _stance = halfSittingPose(mb);
   }
 
   const std::map<std::string, std::pair<std::string, std::string> > & HRP4NoHandRobotModule::convexHull() const
   {
-    auto fileByBodyName = stdCollisionsFiles(mb);
-    const_cast<HRP4NoHandRobotModule*>(this)->_convexHull = getConvexHull(fileByBodyName);
     return _convexHull;
   }
 
   const std::vector< std::map<std::string, std::vector<double> > > & HRP4NoHandRobotModule::bounds() const
   {
-    const_cast<HRP4NoHandRobotModule*>(this)->_bounds = nominalBounds(limits);
     return _bounds;
   }
 
   const std::map<std::string, std::vector<double> > & HRP4NoHandRobotModule::stance() const
   {
-    const_cast<HRP4NoHandRobotModule*>(this)->_stance = halfSittingPose(mb);
     return _stance;
   }
 
@@ -356,25 +357,40 @@ namespace mc_robots
     readUrdf("hrp4", filteredLinks);
 
     _springs.springsBodies = { "l_ankle", "r_ankle" }; //TODO: check these are the correct bodies
+    auto fileByBodyName = stdCollisionsFiles(mb);
+    _convexHull = getConvexHull(fileByBodyName);
+    _bounds = nominalBounds(limits);
+    _stance = halfSittingPose(mb);
   }
 
   const std::map<std::string, std::pair<std::string, std::string> > & HRP4WithHandRobotModule::convexHull() const
   {
-    auto fileByBodyName = stdCollisionsFiles(mb);
-    const_cast<HRP4WithHandRobotModule*>(this)->_convexHull = getConvexHull(fileByBodyName);
     return _convexHull;
   }
 
   const std::vector< std::map<std::string, std::vector<double> > > & HRP4WithHandRobotModule::bounds() const
   {
-    const_cast<HRP4WithHandRobotModule*>(this)->_bounds = nominalBounds(limits);
     return _bounds;
   }
 
   const std::map<std::string, std::vector<double> > & HRP4WithHandRobotModule::stance() const
   {
-    const_cast<HRP4WithHandRobotModule*>(this)->_stance = halfSittingPose(mb);
     return _stance;
   }
 
+  HRP4VREPRobotModule::HRP4VREPRobotModule()
+  {
+    readUrdf("hrp4_vrep", filteredLinks);
+
+    assert(_forceSensors[0].name() == "RightFootForceSensor");
+    assert(_forceSensors[1].name() == "LeftFootForceSensor");
+    _forceSensors[0] = mc_rbdyn::ForceSensor("RightFootForceSensor", "r_ankle", sva::PTransformd(Eigen::Vector3d(0., 0., 0.)));
+    _forceSensors[1] = mc_rbdyn::ForceSensor("LeftFootForceSensor", "l_ankle", sva::PTransformd(Eigen::Vector3d(0., 0., 0.)));
+
+    _springs.springsBodies = { "l_ankle", "r_ankle" }; //TODO: check these are the correct bodies
+    auto fileByBodyName = stdCollisionsFiles(mb);
+    _convexHull = getConvexHull(fileByBodyName);
+    _bounds = nominalBounds(limits);
+    _stance = halfSittingPose(mb);
+  }
 }
