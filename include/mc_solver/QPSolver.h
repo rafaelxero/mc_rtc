@@ -197,7 +197,7 @@ public:
   mc_rbdyn::Robots & robots();
 
   /** Values calculated by the QP Solver */
-  const std::vector<rbd::MultiBodyConfig> & mbcs_calc() const;
+  const std::shared_ptr<std::vector<rbd::MultiBodyConfig>> mbcs_calc() const;
 
   /** Update number of variables
    *
@@ -256,7 +256,7 @@ private:
   bool ff_feedback;
   std::vector<std::string> feedbackJoints;
   std::vector<double> encoder_prev;
-  std::vector<rbd::MultiBodyConfig> mbcs_calc_;
+  std::shared_ptr<std::vector<rbd::MultiBodyConfig>> mbcs_calc_;
   std::vector<std::shared_ptr<void>> shPtrTasksStorage;
 
   /** Update qpRes from the latest run() */
