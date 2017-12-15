@@ -227,12 +227,17 @@ bool QPSolver::run()
     for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
     {
       const auto & jn = robot().refJointOrder()[i];
+      size_t j = robot().jointIndexByName(jn);
       if(robot().hasJoint(jn))
       {
-        size_t j = robot().jointIndexByName(jn);
         robot().mbc().q[j][0] = encoder[i];
         robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev[i]) / timeStep;
       }
+      else
+	{
+	  robot().mbc().q[j][0] = mbcs_calc_->at(robots().robotIndex()).q[j][0];
+	  robot().mbc().alpha[j][0] = mbcs_calc_->at(robots().robotIndex()).alpha[j][0];
+	}
     }
   }
   
