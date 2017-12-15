@@ -59,9 +59,9 @@ namespace mc_solver
 {
 QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
   : robots_p(robots), timeStep(timeStep), solver(),
-    first_run(true), j_feedback(false), ff_feedback(false)
+    first_run(true), feedback(false)
 {
-  mbcs_calc_ = std::make_shared<std::vector<rbd::MultiBodyConfig>>(robots->mbcs());
+  mbcs_calc_ = std::make_shared<std::vector<rbd::MultiBodyConfig>>();
   
   if(timeStep <= 0)
   {
@@ -204,33 +204,36 @@ bool QPSolver::run()
   if(first_run)
   {
     encoder_prev = robot().encoderValues();
+    for(const auto & mb : robots().mbs())
+      {
+	mbcs_calc_->push_back(rbd::MultiBodyConfig(mb));
+	mbcs_calc_->back().zero(mb);
+      }
+    //(*mbcs_calc_) = robots().mbcs();
     first_run = false;
   }
 
   const std::vector<double> & encoder = robot().encoderValues();
-
   const Eigen::Vector3d & pIn = robot().bodySensor().position();
   const Eigen::Quaterniond & qtIn = robot().bodySensor().orientation();
   const Eigen::Vector3d & velIn = robot().bodySensor().linearVelocity();
   const Eigen::Vector3d & rateIn = robot().bodySensor().angularVelocity();
   
-  if(j_feedback)
+  if(feedback)
   {
+    robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
+    robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
+    
     for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
     {
       const auto & jn = robot().refJointOrder()[i];
-      if(robot().hasJoint(jn) && std::find(feedbackJoints.begin(), feedbackJoints.end(), jn) != feedbackJoints.end())
+      if(robot().hasJoint(jn))
       {
         size_t j = robot().jointIndexByName(jn);
         robot().mbc().q[j][0] = encoder[i];
         robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev[i]) / timeStep;
       }
     }
-  }
-
-  if(ff_feedback) {
-    robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
-    robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
   }
   
   encoder_prev = encoder;
@@ -249,11 +252,8 @@ bool QPSolver::run()
       {
         solver.updateMbc(mbc_real, static_cast<int>(i));
         solver.updateMbc(mbc_calc, static_cast<int>(i));
-
-        std::vector<std::vector<double>> mbc_real_alphaD = mbc_real.alphaD;
-        std::vector<std::vector<double>> mbc_calc_alphaD = mbc_calc.alphaD;
         
-        if(!j_feedback)
+        if(!feedback)
         {
           rbd::eulerIntegration(mb, mbc_real, timeStep);
           mbc_calc = mbc_real;
@@ -264,6 +264,24 @@ bool QPSolver::run()
         }
       }
       success = true;
+
+      /*
+      if (feedback && i == 0) {
+	Eigen::VectorXd alphaVec_ref(mb.nrDof());
+	Eigen::VectorXd alphaDVec_ref(mb.nrDof());
+	Eigen::VectorXd alphaVec_hat(mb.nrDof());
+	Eigen::VectorXd alphaDVec_hat(mb.nrDof());	
+	rbd::paramToVector(mbc_calc.alpha, alphaVec_ref);
+	rbd::paramToVector(mbc_calc.alphaD, alphaDVec_ref);
+	rbd::paramToVector(mbc_real.alpha, alphaVec_hat);
+	rbd::paramToVector(mbc_real.alphaD, alphaDVec_hat);
+	std::cout << "Rafa, alphaDVec_hat:" << std::endl << alphaDVec_hat.transpose() << std::endl;
+	std::cout << "Rafa, alphaDVec_ref:" << std::endl << alphaDVec_ref.transpose() << std::endl;
+	std::cout << "Rafa, alphaVec_hat:" << std::endl << alphaVec_hat.transpose() << std::endl;
+	std::cout << "Rafa, alphaVec_ref:" << std::endl << alphaVec_ref.transpose() << std::endl;
+	std::cout << "---" << std::endl;
+      }
+      */
     }
     __fillResult((*mbcs_calc_)[robots().robotIndex()]);
   }
@@ -388,19 +406,9 @@ void QPSolver::fillTorque(tasks::qp::MotionConstr* motionConstr)
   }
 }
 
-void QPSolver::enableJointFeedback(bool j_fb)
+void QPSolver::enableFeedback(bool fb)
 {
-  j_feedback = j_fb;
-}
-
-void QPSolver::enableFreeFlyerFeedback(bool ff_fb)
-{
-  ff_feedback = ff_fb;
-}
-
-void QPSolver::setFeedbackJoints(const std::vector<std::string> joint_names)
-{
-  feedbackJoints = joint_names;
+  feedback = fb;
 }
 
 boost::timer::cpu_times QPSolver::solveTime()
