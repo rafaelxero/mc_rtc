@@ -252,9 +252,7 @@ private:
   QPResultMsg qpRes;
 
   bool first_run;
-  bool j_feedback;
-  bool ff_feedback;
-  std::vector<std::string> feedbackJoints;
+  bool feedback;
   std::vector<double> encoder_prev;
   std::shared_ptr<std::vector<rbd::MultiBodyConfig>> mbcs_calc_;
   std::vector<std::shared_ptr<void>> shPtrTasksStorage;
@@ -269,9 +267,7 @@ public:
   /** \deprecated{Default constructor, not made for general usage} */
   QPSolver() {}
 
-  void enableJointFeedback(bool j_fb);
-  void enableFreeFlyerFeedback(bool ff_fb);
-  void setFeedbackJoints(const std::vector<std::string> joint_names);
+  void enableFeedback(bool fb);
 };
 
 }
