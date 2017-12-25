@@ -59,7 +59,7 @@ namespace mc_solver
 {
 QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
   : robots_p(robots), timeStep(timeStep), solver(),
-    first_run(true), feedback(false)
+    first_run(true), first_fb(true), feedback(false)
 {
   mbcs_calc_ = std::make_shared<std::vector<rbd::MultiBodyConfig>>();
   
@@ -204,13 +204,28 @@ bool QPSolver::run()
   if(first_run)
   {
     encoder_prev = robot().encoderValues();
-    for(const auto & mb : robots().mbs())
-      {
-	mbcs_calc_->push_back(rbd::MultiBodyConfig(mb));
-	mbcs_calc_->back().zero(mb);
-      }
-    //(*mbcs_calc_) = robots().mbcs();
+    (*mbcs_calc_) = robots().mbcs();
     first_run = false;
+  }
+
+  if(feedback && first_fb)
+  {
+    (*mbcs_calc_)[0].zero(robots().mbs()[0]);
+        
+    /*
+    for(const auto & mb : robots().mbs())
+    {
+      mbcs_calc_->push_back(rbd::MultiBodyConfig(mb));
+      mbcs_calc_->back().zero(mb);
+    }
+    */
+    first_fb = false;
+
+    rbd::MultiBody & mb = robots_p->mbs()[0];	  
+    rbd::MultiBodyConfig & mbc_calc = (*mbcs_calc_)[0];
+    Eigen::VectorXd alphaVec_ref = rbd::dofToVector(mb, mbc_calc.alpha);
+    std::cout << "Rafa, just after reinit" << std::endl;
+    std::cout << "alphaVec_ref:" << std::endl << alphaVec_ref.transpose() << std::endl;    
   }
 
   const std::vector<double> & encoder = robot().encoderValues();
@@ -265,7 +280,19 @@ bool QPSolver::run()
         }
         else
         {
+	  std::cout << "Rafa, before eulerIntegration:" << std::endl;
+	  Eigen::VectorXd alphaVec_ref = rbd::dofToVector(mb, mbc_calc.alpha);
+	  Eigen::VectorXd alphaVec_hat = rbd::dofToVector(mb, mbc_real.alpha);
+	  std::cout << "alphaVec_ref:" << std::endl << alphaVec_ref.transpose() << std::endl;
+	  std::cout << "alphaVec_hat:" << std::endl << alphaVec_hat.transpose() << std::endl;
+	  
           rbd::eulerIntegration(mb, mbc_calc, timeStep);
+
+	  std::cout << "Rafa, after eulerIntegration:" << std::endl;
+	  alphaVec_ref = rbd::dofToVector(mb, mbc_calc.alpha);
+	  alphaVec_hat = rbd::dofToVector(mb, mbc_real.alpha);
+	  std::cout << "alphaVec_ref:" << std::endl << alphaVec_ref.transpose() << std::endl;
+	  std::cout << "alphaVec_hat:" << std::endl << alphaVec_hat.transpose() << std::endl;	  
         }
       }
       success = true;
