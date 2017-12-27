@@ -224,8 +224,8 @@ bool QPSolver::run()
     rbd::MultiBody & mb = robots_p->mbs()[0];	  
     rbd::MultiBodyConfig & mbc_calc = (*mbcs_calc_)[0];
     Eigen::VectorXd alphaVec_ref = rbd::dofToVector(mb, mbc_calc.alpha);
-    std::cout << "Rafa, just after reinit" << std::endl;
-    std::cout << "alphaVec_ref:" << std::endl << alphaVec_ref.transpose() << std::endl;    
+    //std::cout << "Rafa, just after reinit" << std::endl;
+    //std::cout << "alphaVec_ref:" << std::endl << alphaVec_ref.transpose() << std::endl;    
   }
 
   const std::vector<double> & encoder = robot().encoderValues();
@@ -241,8 +241,10 @@ bool QPSolver::run()
     
     for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
     {
+      //std::cout << "Rafa, refJointOrder()[" << i << "] = " << robot().refJointOrder()[i] << std::endl;
       const auto & jn = robot().refJointOrder()[i];
       size_t j = robot().jointIndexByName(jn);
+      //std::cout << "Rafa, jointindex is " << j << std::endl;
       if(robot().hasJoint(jn))
       {
         robot().mbc().q[j][0] = encoder[i];
@@ -280,19 +282,22 @@ bool QPSolver::run()
         }
         else
         {
-	  std::cout << "Rafa, before eulerIntegration:" << std::endl;
-	  Eigen::VectorXd alphaVec_ref = rbd::dofToVector(mb, mbc_calc.alpha);
-	  Eigen::VectorXd alphaVec_hat = rbd::dofToVector(mb, mbc_real.alpha);
-	  std::cout << "alphaVec_ref:" << std::endl << alphaVec_ref.transpose() << std::endl;
-	  std::cout << "alphaVec_hat:" << std::endl << alphaVec_hat.transpose() << std::endl;
+	  //std::cout << "Rafa, before eulerIntegration:" << std::endl;
+	  //Eigen::VectorXd alphaVec_ref = rbd::dofToVector(mb, mbc_calc.alpha);
+	  //Eigen::VectorXd alphaVec_hat = rbd::dofToVector(mb, mbc_real.alpha);
+	  //Eigen::VectorXd alphaDVec_ref = rbd::dofToVector(mb, mbc_calc.alphaD);
+	  //std::cout << "alphaVec_ref(18:22) = " << alphaVec_ref.segment(18, 5).transpose() << std::endl;
+	  //std::cout << "alphaDVec_ref(18:22) = " << alphaDVec_ref.segment(18, 5).transpose() << std::endl;
+	  //std::cout << "alphaVec_hat:" << std::endl << alphaVec_hat.transpose() << std::endl;
 	  
           rbd::eulerIntegration(mb, mbc_calc, timeStep);
 
-	  std::cout << "Rafa, after eulerIntegration:" << std::endl;
-	  alphaVec_ref = rbd::dofToVector(mb, mbc_calc.alpha);
-	  alphaVec_hat = rbd::dofToVector(mb, mbc_real.alpha);
-	  std::cout << "alphaVec_ref:" << std::endl << alphaVec_ref.transpose() << std::endl;
-	  std::cout << "alphaVec_hat:" << std::endl << alphaVec_hat.transpose() << std::endl;	  
+	  //std::cout << "Rafa, after eulerIntegration:" << std::endl;
+	  //alphaVec_ref = rbd::dofToVector(mb, mbc_calc.alpha);
+	  //alphaVec_hat = rbd::dofToVector(mb, mbc_real.alpha);
+	  //std::cout << "alphaVec_ref(18:22) = " << alphaVec_ref.segment(18, 5).transpose() << std::endl;
+	  //std::cout << "alphaVec_hat(18:22) = " << alphaVec_hat.segment(18, 5).transpose() << std::endl;
+	  //std::cout << std::endl;
         }
       }
       success = true;
