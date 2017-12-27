@@ -252,7 +252,6 @@ private:
   QPResultMsg qpRes;
 
   bool first_run;
-  bool first_fb;
   bool feedback;
   std::vector<double> encoder_prev;
   std::shared_ptr<std::vector<rbd::MultiBodyConfig>> mbcs_calc_;

@@ -59,7 +59,7 @@ namespace mc_solver
 {
 QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
   : robots_p(robots), timeStep(timeStep), solver(),
-    first_run(true), first_fb(true), feedback(false)
+    first_run(true), feedback(false)
 {
   mbcs_calc_ = std::make_shared<std::vector<rbd::MultiBodyConfig>>();
   
@@ -208,26 +208,6 @@ bool QPSolver::run()
     first_run = false;
   }
 
-  if(feedback && first_fb)
-  {
-    (*mbcs_calc_)[0].zero(robots().mbs()[0]);
-        
-    /*
-    for(const auto & mb : robots().mbs())
-    {
-      mbcs_calc_->push_back(rbd::MultiBodyConfig(mb));
-      mbcs_calc_->back().zero(mb);
-    }
-    */
-    first_fb = false;
-
-    rbd::MultiBody & mb = robots_p->mbs()[0];	  
-    rbd::MultiBodyConfig & mbc_calc = (*mbcs_calc_)[0];
-    Eigen::VectorXd alphaVec_ref = rbd::dofToVector(mb, mbc_calc.alpha);
-    //std::cout << "Rafa, just after reinit" << std::endl;
-    //std::cout << "alphaVec_ref:" << std::endl << alphaVec_ref.transpose() << std::endl;    
-  }
-
   const std::vector<double> & encoder = robot().encoderValues();
   const Eigen::Vector3d & pIn = robot().bodySensor().position();
   const Eigen::Quaterniond & qtIn = robot().bodySensor().orientation();
@@ -241,10 +221,8 @@ bool QPSolver::run()
     
     for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
     {
-      //std::cout << "Rafa, refJointOrder()[" << i << "] = " << robot().refJointOrder()[i] << std::endl;
       const auto & jn = robot().refJointOrder()[i];
       size_t j = robot().jointIndexByName(jn);
-      //std::cout << "Rafa, jointindex is " << j << std::endl;
       if(robot().hasJoint(jn))
       {
         robot().mbc().q[j][0] = encoder[i];
@@ -282,43 +260,10 @@ bool QPSolver::run()
         }
         else
         {
-	  //std::cout << "Rafa, before eulerIntegration:" << std::endl;
-	  //Eigen::VectorXd alphaVec_ref = rbd::dofToVector(mb, mbc_calc.alpha);
-	  //Eigen::VectorXd alphaVec_hat = rbd::dofToVector(mb, mbc_real.alpha);
-	  //Eigen::VectorXd alphaDVec_ref = rbd::dofToVector(mb, mbc_calc.alphaD);
-	  //std::cout << "alphaVec_ref(18:22) = " << alphaVec_ref.segment(18, 5).transpose() << std::endl;
-	  //std::cout << "alphaDVec_ref(18:22) = " << alphaDVec_ref.segment(18, 5).transpose() << std::endl;
-	  //std::cout << "alphaVec_hat:" << std::endl << alphaVec_hat.transpose() << std::endl;
-	  
           rbd::eulerIntegration(mb, mbc_calc, timeStep);
-
-	  //std::cout << "Rafa, after eulerIntegration:" << std::endl;
-	  //alphaVec_ref = rbd::dofToVector(mb, mbc_calc.alpha);
-	  //alphaVec_hat = rbd::dofToVector(mb, mbc_real.alpha);
-	  //std::cout << "alphaVec_ref(18:22) = " << alphaVec_ref.segment(18, 5).transpose() << std::endl;
-	  //std::cout << "alphaVec_hat(18:22) = " << alphaVec_hat.segment(18, 5).transpose() << std::endl;
-	  //std::cout << std::endl;
         }
       }
       success = true;
-
-      /*
-      if (feedback && i == 0) {
-	Eigen::VectorXd alphaVec_ref(mb.nrDof());
-	Eigen::VectorXd alphaDVec_ref(mb.nrDof());
-	Eigen::VectorXd alphaVec_hat(mb.nrDof());
-	Eigen::VectorXd alphaDVec_hat(mb.nrDof());	
-	rbd::paramToVector(mbc_calc.alpha, alphaVec_ref);
-	rbd::paramToVector(mbc_calc.alphaD, alphaDVec_ref);
-	rbd::paramToVector(mbc_real.alpha, alphaVec_hat);
-	rbd::paramToVector(mbc_real.alphaD, alphaDVec_hat);
-	std::cout << "Rafa, alphaDVec_hat:" << std::endl << alphaDVec_hat.transpose() << std::endl;
-	std::cout << "Rafa, alphaDVec_ref:" << std::endl << alphaDVec_ref.transpose() << std::endl;
-	std::cout << "Rafa, alphaVec_hat:" << std::endl << alphaVec_hat.transpose() << std::endl;
-	std::cout << "Rafa, alphaVec_ref:" << std::endl << alphaVec_ref.transpose() << std::endl;
-	std::cout << "---" << std::endl;
-      }
-      */
     }
     __fillResult((*mbcs_calc_)[robots().robotIndex()]);
   }
