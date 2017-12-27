@@ -204,12 +204,7 @@ bool QPSolver::run()
   if(first_run)
   {
     encoder_prev = robot().encoderValues();
-    for(const auto & mb : robots().mbs())
-      {
-	mbcs_calc_->push_back(rbd::MultiBodyConfig(mb));
-	mbcs_calc_->back().zero(mb);
-      }
-    //(*mbcs_calc_) = robots().mbcs();
+    (*mbcs_calc_) = robots().mbcs();
     first_run = false;
   }
 
@@ -281,19 +276,6 @@ bool QPSolver::run()
         {
           rbd::eulerIntegration(mb, mbc_calc, timeStep);
         }
-
-	/*
-	if (feedback && i == 0) {
-	  std::cout << "Rafa, after integration:" << std::endl;
-	  Eigen::VectorXd alphaVec_ref(mb.nrDof());
-	  Eigen::VectorXd alphaDVec_ref(mb.nrDof());
-	  rbd::paramToVector(mbc_calc.alpha, alphaVec_ref);
-	  rbd::paramToVector(mbc_calc.alphaD, alphaDVec_ref);
-	  std::cout << "Rafa, alphaDVec_ref:" << std::endl << alphaDVec_ref.transpose() << std::endl;
-	  std::cout << "Rafa, alphaVec_ref:" << std::endl << alphaVec_ref.transpose() << std::endl;
-	  std::cout << "---" << std::endl;
-	}
-	*/
       }
       success = true;
     }
