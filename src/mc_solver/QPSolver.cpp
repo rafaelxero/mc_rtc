@@ -5,6 +5,7 @@
 #include <RBDyn/EulerIntegration.h>
 #include <RBDyn/FK.h>
 #include <RBDyn/FV.h>
+#include <RBDyn/FA.h>
 
 #include <mc_rbdyn/RobotModule.h>
 #include <mc_rbdyn/stance.h>
@@ -213,6 +214,8 @@ bool QPSolver::run()
   const Eigen::Quaterniond & qtIn = robot().bodySensor().orientation();
   const Eigen::Vector3d & velIn = robot().bodySensor().linearVelocity();
   const Eigen::Vector3d & rateIn = robot().bodySensor().angularVelocity();
+
+  // std::cout << "Rafa, qtIn = " << qtIn.w() << " " << qtIn.x() << " " << qtIn.y() << " " << qtIn.z() << std::endl;
   
   if(feedback)
   {
@@ -240,6 +243,7 @@ bool QPSolver::run()
 
   rbd::forwardKinematics(robot().mb(), robot().mbc());
   rbd::forwardVelocity(robot().mb(), robot().mbc());
+  rbd::forwardAcceleration(robot().mb(), robot().mbc());
   
   if(solver.solveNoMbcUpdate(robots_p->mbs(), robots_p->mbcs()))
   {
