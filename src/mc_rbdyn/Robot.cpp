@@ -139,6 +139,7 @@ Robot::Robot(Robots & robots, unsigned int robots_idx, bool loadFiles,
     std::string baseName = bName.empty() ? mb().body(0).name() : bName;
     mb() = mbg().makeMultiBody(baseName, mb().joint(0).type() == rbd::Joint::Fixed, *base);
     mbc() = rbd::MultiBodyConfig(mb());
+    fd_ = std::make_shared<rbd::ForwardDynamics>(mb());
   }
 
   mbc().zero(mb());
@@ -687,6 +688,17 @@ void Robot::forwardAcceleration(const sva::MotionVecd & A_0)
 void Robot::forwardAcceleration(rbd::MultiBodyConfig & mbc, const sva::MotionVecd & A_0) const
 {
   rbd::forwardAcceleration(mb(), mbc, A_0);
+}
+
+void Robot::forwardDynamics()
+{
+  fd_->computeH(mb(), mbc());
+  fd_->computeC(mb(), mbc());
+}
+
+const std::shared_ptr<rbd::ForwardDynamics> Robot::fd() const
+{
+  return fd_;
 }
 
 void mc_rbdyn::Robot::eulerIntegration(double step)

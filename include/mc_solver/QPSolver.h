@@ -11,6 +11,7 @@
 #include <mc_rbdyn/Robots.h>
 
 #include <Tasks/QPSolver.h>
+#include <RBDyn/IntegralTerm.h>
 
 #include <memory>
 
@@ -166,10 +167,13 @@ public:
 
   /** Run one iteration of the QP.
    *
-   * If succesful, will update the robots' configurations
+   * If successful, will update the robots' configurations
    * \return True if successful, false otherwise.
    */
-  bool run();
+  virtual bool run();
+
+  bool updateCurrentState();
+  bool solve();
 
   /** Provides the result of run() for robots.robot()
    * \param curTime Unused
@@ -234,7 +238,9 @@ public:
 
   /** Set the logger for this solver instance */
   void logger(std::shared_ptr<mc_rtc::Logger> logger);
-private:
+  
+ protected:
+  
   std::shared_ptr<mc_rbdyn::Robots> robots_p;
   double timeStep;
 
@@ -245,15 +251,17 @@ private:
 
   /** Holds MetaTask currently in the solver */
   std::vector<mc_tasks::MetaTask*> metaTasks;
-private:
+
+ protected:
+  
   /** The actual solver instance */
   tasks::qp::QPSolver solver;
   /** Latest result */
   QPResultMsg qpRes;
 
-  bool first_run;
-  bool feedback;
-  std::vector<double> encoder_prev;
+  bool first_run_;
+  bool feedback_;
+  std::vector<double> encoder_prev_;
   std::shared_ptr<std::vector<rbd::MultiBodyConfig>> mbcs_calc_;
   std::vector<std::shared_ptr<void>> shPtrTasksStorage;
 
@@ -264,12 +272,36 @@ private:
   std::shared_ptr<mc_rtc::Logger> logger_ = nullptr;
 
 public:
+  
   /** \deprecated{Default constructor, not made for general usage} */
   QPSolver() {}
 
   void enableFeedback(bool fb);
 };
 
+struct MC_SOLVER_DLLAPI IntTerm_QPSolver : public QPSolver
+{
+ public:
+
+  IntTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots,
+                   integral::IntegralTerm::IntegralTermType intTermType,
+                   integral::IntegralTerm::VelocityGainType velGainType,
+                   double lambda, double timeStep);
+
+  /** Constructor (the solver creates its own Robots instance)
+   * \param timeStep Timestep of the solver
+   */
+  IntTerm_QPSolver(integral::IntegralTerm::IntegralTermType intTermType,
+                   integral::IntegralTerm::VelocityGainType velGainType,
+                   double lambda, double timeStep);
+
+  bool run() override;
+
+ private:
+
+  std::shared_ptr<integral::IntegralTerm> intTerm_;
+};
+ 
 }
 
 #endif
