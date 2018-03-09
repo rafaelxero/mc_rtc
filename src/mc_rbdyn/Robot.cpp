@@ -139,7 +139,6 @@ Robot::Robot(Robots & robots, unsigned int robots_idx, bool loadFiles,
     std::string baseName = bName.empty() ? mb().body(0).name() : bName;
     mb() = mbg().makeMultiBody(baseName, mb().joint(0).type() == rbd::Joint::Fixed, *base);
     mbc() = rbd::MultiBodyConfig(mb());
-    fd_ = std::make_shared<rbd::ForwardDynamics>(mb());
   }
 
   mbc().zero(mb());
@@ -237,6 +236,8 @@ Robot::Robot(Robots & robots, unsigned int robots_idx, bool loadFiles,
 
   springs_ = module_.springs();
   flexibility_ = module_.flexibility();
+
+  fd_ = std::make_shared<rbd::ForwardDynamics>(mb());
 }
 
 std::string Robot::name() const

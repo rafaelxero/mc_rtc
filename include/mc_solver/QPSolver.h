@@ -172,7 +172,7 @@ public:
    */
   virtual bool run();
 
-  bool updateCurrentState();
+  void updateCurrentState();
   bool solve();
 
   /** Provides the result of run() for robots.robot()
@@ -279,27 +279,30 @@ public:
   void enableFeedback(bool fb);
 };
 
-struct MC_SOLVER_DLLAPI IntTerm_QPSolver : public QPSolver
+struct MC_SOLVER_DLLAPI IntglTerm_QPSolver : public QPSolver
 {
  public:
 
-  IntTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots,
-                   integral::IntegralTerm::IntegralTermType intTermType,
-                   integral::IntegralTerm::VelocityGainType velGainType,
-                   double lambda, double timeStep);
+  IntglTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
+                     integral::IntegralTerm::IntegralTermType intTermType,
+                     integral::IntegralTerm::VelocityGainType velGainType,
+                     double lambda);
 
   /** Constructor (the solver creates its own Robots instance)
    * \param timeStep Timestep of the solver
    */
-  IntTerm_QPSolver(integral::IntegralTerm::IntegralTermType intTermType,
-                   integral::IntegralTerm::VelocityGainType velGainType,
-                   double lambda, double timeStep);
+  IntglTerm_QPSolver(double timeStep,
+                     integral::IntegralTerm::IntegralTermType intTermType,
+                     integral::IntegralTerm::VelocityGainType velGainType,
+                     double lambda);
 
   bool run() override;
 
+  const std::shared_ptr<integral::IntegralTerm> intglTerm() const;
+
  private:
 
-  std::shared_ptr<integral::IntegralTerm> intTerm_;
+  std::shared_ptr<integral::IntegralTerm> intglTerm_;
 };
  
 }

@@ -201,12 +201,12 @@ bool QPSolver::run()
     t->update();
   }
 
-  void updateCurrentState();
+  updateCurrentState();
 
   return solve();  
 }
 
-bool QPSolver::updateCurrentState()
+void QPSolver::updateCurrentState()
 {
   if(first_run_)
   {
@@ -408,40 +408,46 @@ void QPSolver::enableFeedback(bool fb)
   feedback_ = fb;
 }
 
-IntTerm_QPSolver::IntTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots,
-                                   integral::IntegralTerm::IntegralTermType intTermType,
-                                   integral::IntegralTerm::VelocityGainType velGainType,
-                                   double lambda, double timeStep)
+IntglTerm_QPSolver::IntglTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
+                                       integral::IntegralTerm::IntegralTermType intTermType,
+                                       integral::IntegralTerm::VelocityGainType velGainType,
+                                       double lambda)
   : QPSolver(robots, timeStep)
 {
-  intTerm_ = std::make_shared<integral::IntegralTerm>(robots->mbs(),
-                                                      robots->robotIndex(),
-                                                      robots->robot().fd(),
-                                                      intTermType, velGainType, lambda);
+  intglTerm_ = std::make_shared<integral::IntegralTerm>(robots->mbs(),
+                                                        robots->robotIndex(),
+                                                        robots->robot().fd(),
+                                                        intTermType, velGainType, lambda);
 }
 
-IntTerm_QPSolver::IntTerm_QPSolver(integral::IntegralTerm::IntegralTermType intTermType,
-                                   integral::IntegralTerm::VelocityGainType velGainType,
-                                   double lambda, double timeStep)
+IntglTerm_QPSolver::IntglTerm_QPSolver(double timeStep,
+                                       integral::IntegralTerm::IntegralTermType intTermType,
+                                       integral::IntegralTerm::VelocityGainType velGainType,
+                                       double lambda)
   : QPSolver(timeStep)
 {
-  intTerm_ = std::make_shared<integral::IntegralTerm>(robots().mbs(),
-                                                      robots().robotIndex(), robot().fd(),
-                                                      intTermType, velGainType, lambda);
+  intglTerm_ = std::make_shared<integral::IntegralTerm>(robots().mbs(),
+                                                        robots().robotIndex(), robot().fd(),
+                                                        intTermType, velGainType, lambda);
 }
 
-bool IntTerm_QPSolver::run()
+bool IntglTerm_QPSolver::run()
 {
   for(auto & t : metaTasks)
   {
     t->update();
   }
 
-  void updateCurrentState();
+  updateCurrentState();
   
-  intTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
+  intglTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
   
   return solve();
+}
+
+const std::shared_ptr<integral::IntegralTerm> IntglTerm_QPSolver::intglTerm() const
+{
+  return intglTerm_;
 }
   
 boost::timer::cpu_times QPSolver::solveTime()
