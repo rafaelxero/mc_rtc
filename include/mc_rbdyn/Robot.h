@@ -9,23 +9,14 @@
 #include <sch/STP-BV/STP_BV.h>
 
 #include <mc_rbdyn/Base.h>
-#include <mc_rbdyn/BodySensor.h>
-#include <mc_rbdyn/Flexibility.h>
-#include <mc_rbdyn/ForceSensor.h>
-#include <mc_rbdyn/Springs.h>
+#include <mc_rbdyn/RobotModule.h>
 #include <mc_rbdyn/Surface.h>
 
 #include <memory>
 
-namespace mc_control
-{
-  struct MCController;
-}
-
 namespace mc_rbdyn
 {
 
-struct RobotModule;
 struct Robots;
 
 struct MC_RBDYN_DLLAPI Robot
@@ -281,8 +272,6 @@ public:
 
   const sva::PTransformd & collisionTransform(const std::string& cName) const;
 
-  void fixSurfaces();
-
   void loadRSDFFromDir(const std::string & surfaceDir);
 
   /** Return the robot's default stance (e.g. half-sitting for humanoid) */
@@ -370,6 +359,12 @@ protected:
   void copy(Robots & robots, unsigned int robots_idx, const Base & base) const;
   /** Copy existing Robot */
   void copy(Robots & robots, unsigned int robots_idx) const;
+
+  /** Used to set the surfaces' X_b_s correctly */
+  void fixSurfaces();
+
+  /** Used to set the collision transforms correctly */
+  void fixCollisionTransforms();
 private:
   Robot(const Robot&) = delete;
   Robot& operator=(const Robot&) = delete;
