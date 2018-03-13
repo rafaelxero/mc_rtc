@@ -67,8 +67,25 @@ void AdmittanceTask::reset()
 {
   SurfaceTransformTask::reset();
   X_0_target_ = SurfaceTransformTask::target();
-  targetWrench_ = sva::ForceVecd(Eigen::Vector6d::Zero());
   admittance_ = sva::ForceVecd(Eigen::Vector6d::Zero());
+  rpy_target_delta_ = Eigen::Vector3d::Zero();
+  targetWrench_ = sva::ForceVecd(Eigen::Vector6d::Zero());
+  trans_target_delta_ = Eigen::Vector3d::Zero();
+}
+
+void AdmittanceTask::resetPoseOffset()
+{
+  for (size_t i = 0; i < 3; i++)
+  {
+    if (admittance_.force()(i) < 1e-10)
+    {
+      trans_target_delta_(i) = 0.;
+    }
+    if (admittance_.couple()(i) < 1e-10)
+    {
+      rpy_target_delta_(i) = 0.;
+    }
+  }
 }
 
 void AdmittanceTask::addToLogger(mc_rtc::Logger & logger)
@@ -78,10 +95,21 @@ void AdmittanceTask::addToLogger(mc_rtc::Logger & logger)
                      {
                      return admittance_;
                      });
+  logger.addLogEntry(name_ + "_internal_target_pose",
+                     [this]()
+                     {
+                     return SurfaceTransformTask::target();
+                     });
   logger.addLogEntry(name_ + "_measured_wrench",
                      [this]() -> sva::ForceVecd
                      {
                      return measuredWrench();
+                     });
+  logger.addLogEntry(name_ + "_surface_pose",
+                     [this]()
+                     {
+                     const auto & robot = robots.robot();
+                     return robot.surface(surfaceName).X_0_s(robot);
                      });
   logger.addLogEntry(name_ + "_target_pose",
                      [this]() -> const sva::PTransformd &
@@ -98,7 +126,9 @@ void AdmittanceTask::addToLogger(mc_rtc::Logger & logger)
 void AdmittanceTask::removeFromLogger(mc_rtc::Logger & logger)
 {
   logger.removeLogEntry(name_ + "_admittance");
+  logger.removeLogEntry(name_ + "_internal_target_pose");
   logger.removeLogEntry(name_ + "_measured_wrench");
+  logger.removeLogEntry(name_ + "_surface_pose");
   logger.removeLogEntry(name_ + "_target_pose");
   logger.removeLogEntry(name_ + "_target_wrench");
 }
