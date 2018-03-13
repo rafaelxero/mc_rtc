@@ -68,6 +68,10 @@ struct TrajectoryTaskGeneric : public TrajectoryTaskGenericCommon
    */
   void refAccel(const Eigen::VectorXd & accel);
 
+  const Eigen::VectorXd& refVel();
+
+  const Eigen::VectorXd& refAccel();
+
   /*! \brief Set the task stiffness/damping
    *
    * Damping is automatically set to 2*sqrt(stiffness)

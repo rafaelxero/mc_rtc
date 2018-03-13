@@ -68,6 +68,18 @@ void TrajectoryTaskGeneric<T>::refAccel(const Eigen::VectorXd & accel)
 }
 
 template<typename T>
+const Eigen::VectorXd& TrajectoryTaskGeneric<T>::refVel()
+{
+  return trajectoryT->refVel();
+}
+
+template<typename T>
+const Eigen::VectorXd& TrajectoryTaskGeneric<T>::refAccel()
+{
+  return trajectoryT->refAccel();
+} 
+
+template<typename T>
 void TrajectoryTaskGeneric<T>::stiffness(double s)
 {
   setGains(s, 2*std::sqrt(s));
