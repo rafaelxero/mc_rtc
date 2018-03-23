@@ -216,6 +216,8 @@ void QPSolver::updateCurrentState()
   }
 
   const std::vector<double> & encoder = robot().encoderValues();
+  // Pierre debug
+  // auto encoder = robot().encoderValues();
   const Eigen::Vector3d & pIn = robot().bodySensor().position();
   const Eigen::Quaterniond & qtIn = robot().bodySensor().orientation();
   const Eigen::Vector3d & velIn = robot().bodySensor().linearVelocity();
@@ -225,11 +227,26 @@ void QPSolver::updateCurrentState()
   {
     robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
     robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
-    
+
+    // Pierre debug
+    // static double rtmp_value = 0;
+    // static double ltmp_value = 0;
     for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
     {
       const auto & jn = robot().refJointOrder()[i];
       size_t j = robot().jointIndexByName(jn);
+      // Pierre debug
+      /*
+      if(jn == "RTMP") { rtmp_value = encoder[i]; }
+      if(jn == "LTMP") { ltmp_value = encoder[i]; }
+      const auto & joint = robot().mb().joint(j);
+      if(joint.isMimic())
+      {
+        if(joint.mimicName() == "RTMP") { encoder[i] = rtmp_value * joint.mimicMultiplier() + joint.mimicOffset(); }
+        else { encoder[i] = ltmp_value * joint.mimicMultiplier() + joint.mimicOffset(); }
+      }
+      //if(jn == "RTMP" || jn == "RIMP") { std::cout << jn << " encoder " << encoder[i] << std::endl; }
+      */
       if(robot().hasJoint(jn))
       {
         robot().mbc().q[j][0] = encoder[i];
@@ -237,6 +254,8 @@ void QPSolver::updateCurrentState()
       }
       else
 	{
+          // Pierre debug
+          // std::cout << "ROBOT DOES NOT HAVE " << jn << std::endl;
 	  robot().mbc().q[j][0] = mbcs_calc_->at(robots().robotIndex()).q[j][0];
 	  robot().mbc().alpha[j][0] = mbcs_calc_->at(robots().robotIndex()).alpha[j][0];
 	}
@@ -255,7 +274,18 @@ void QPSolver::updateCurrentState()
 bool QPSolver::solve()
 {
   bool success = false;
-  
+
+  // Pierre debug
+  /*
+  std::cout << "Before solve\n";
+  std::cout 
+    << "calc\n"
+    << "RTMP " << (*mbcs_calc_)[0].q[robot().jointIndexByName("RTMP")][0] << " "
+    << "RIMP " << (*mbcs_calc_)[0].q[robot().jointIndexByName("RIMP")][0] << std::endl
+    << "real\n"
+    << "RTMP " << robot().mbc().q[robot().jointIndexByName("RTMP")][0] << " "
+    << "RIMP " << robot().mbc().q[robot().jointIndexByName("RIMP")][0] << std::endl;
+  */
   if(solver.solveNoMbcUpdate(robots_p->mbs(), robots_p->mbcs()))
   {
     for(size_t i = 0; i < robots_p->mbs().size(); ++i)
@@ -280,6 +310,19 @@ bool QPSolver::solve()
       }
       success = true;
     }
+
+    // Pierre debug
+    /*
+  std::cout << "After solve\n";
+  std::cout 
+    << "calc\n"
+    << "RTMP " << (*mbcs_calc_)[0].q[robot().jointIndexByName("RTMP")][0] << " "
+    << "RIMP " << (*mbcs_calc_)[0].q[robot().jointIndexByName("RIMP")][0] << std::endl
+    << "real\n"
+    << "RTMP " << robot().mbc().q[robot().jointIndexByName("RTMP")][0] << " "
+    << "RIMP " << robot().mbc().q[robot().jointIndexByName("RIMP")][0] << std::endl;
+    */
+    
     __fillResult((*mbcs_calc_)[robots().robotIndex()]);
   }
   return success;
