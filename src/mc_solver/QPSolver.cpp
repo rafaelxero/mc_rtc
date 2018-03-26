@@ -215,6 +215,10 @@ void QPSolver::updateCurrentState()
     first_run_ = false;
   }
 
+  //std::vector<std::string> thumbs = {"RTMP", "RTPIP", "RTDIP", "RIMP", "RIPIP", "RIDIP", "RMMP", "RMPIP", "RMDIP",
+  //				     "LTMP", "LTPIP", "LTDIP", "LIMP", "LIPIP", "LIDIP", "LMMP", "LMPIP", "LMDIP"
+  //}; // Rafa, this is a dirty patch
+
   const std::vector<double> & encoder = robot().encoderValues();
   // Pierre debug
   // auto encoder = robot().encoderValues();
@@ -249,8 +253,10 @@ void QPSolver::updateCurrentState()
       */
       if(robot().hasJoint(jn))
       {
-        robot().mbc().q[j][0] = encoder[i];
-        robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev_[i]) / timeStep;
+	//if (std::find(thumbs.begin(), thumbs.end(), jn) == thumbs.end()) { // Rafa, this is a dirty patch
+	  robot().mbc().q[j][0] = encoder[i];
+	  robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev_[i]) / timeStep;
+	//}
       }
       else
 	{
