@@ -238,7 +238,7 @@ void QPSolver::updateCurrentState()
     for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
     {
       const auto & jn = robot().refJointOrder()[i];
-      size_t j = robot().jointIndexByName(jn);
+
       // Pierre debug
       /*
       if(jn == "RTMP") { rtmp_value = encoder[i]; }
@@ -253,12 +253,15 @@ void QPSolver::updateCurrentState()
       */
       if(robot().hasJoint(jn))
       {
+        size_t j = robot().jointIndexByName(jn);
+        
 	//if (std::find(thumbs.begin(), thumbs.end(), jn) == thumbs.end()) { // Rafa, this is a dirty patch
-        std::cout << "Rafa, robot().mbc().q[" << j << "][0] = " << robot().mbc().q[j][0] << std::endl;
+        //std::cout << "Rafa, robot().mbc().q[" << j << "][0] = " << robot().mbc().q[j][0] << std::endl;
 	  robot().mbc().q[j][0] = encoder[i];
 	  robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev_[i]) / timeStep;
 	//}
       }
+      /*
       else
 	{
           // Pierre debug
@@ -266,6 +269,7 @@ void QPSolver::updateCurrentState()
 	  robot().mbc().q[j][0] = mbcs_calc_->at(robots().robotIndex()).q[j][0];
 	  robot().mbc().alpha[j][0] = mbcs_calc_->at(robots().robotIndex()).alpha[j][0];
 	}
+      */
     }
   }
   
@@ -483,20 +487,20 @@ IntglTerm_QPSolver::IntglTerm_QPSolver(double timeStep,
 
 bool IntglTerm_QPSolver::run()
 {
-  std::cout << "Rafa, before update metaTasks" << std::endl;
+  //std::cout << "Rafa, before update metaTasks" << std::endl;
   
   for(auto & t : metaTasks)
   {
     t->update();
   }
 
-  std::cout << "Rafa, before updateCurrentState()" << std::endl;
+  //std::cout << "Rafa, before updateCurrentState()" << std::endl;
 
   updateCurrentState();
   
   intglTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
 
-  std::cout << "Rafa, before solve()" << std::endl;
+  //std::cout << "Rafa, before solve()" << std::endl;
   
   return solve();
 }
