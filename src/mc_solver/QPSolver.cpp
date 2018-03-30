@@ -255,6 +255,9 @@ void QPSolver::updateCurrentState()
       {
         size_t j = robot().jointIndexByName(jn);
         
+        if(robot().mbc().q[j].size() == 0)
+          continue;
+        
 	//if (std::find(thumbs.begin(), thumbs.end(), jn) == thumbs.end()) { // Rafa, this is a dirty patch
         //std::cout << "Rafa, robot().mbc().q[" << j << "][0] = " << robot().mbc().q[j][0] << std::endl;
 	  robot().mbc().q[j][0] = encoder[i];
