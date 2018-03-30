@@ -215,13 +215,7 @@ void QPSolver::updateCurrentState()
     first_run_ = false;
   }
 
-  //std::vector<std::string> thumbs = {"RTMP", "RTPIP", "RTDIP", "RIMP", "RIPIP", "RIDIP", "RMMP", "RMPIP", "RMDIP",
-  //				     "LTMP", "LTPIP", "LTDIP", "LIMP", "LIPIP", "LIDIP", "LMMP", "LMPIP", "LMDIP"
-  //}; // Rafa, this is a dirty patch
-
   const std::vector<double> & encoder = robot().encoderValues();
-  // Pierre debug
-  // auto encoder = robot().encoderValues();
   const Eigen::Vector3d & pIn = robot().bodySensor().position();
   const Eigen::Quaterniond & qtIn = robot().bodySensor().orientation();
   const Eigen::Vector3d & velIn = robot().bodySensor().linearVelocity();
@@ -232,25 +226,10 @@ void QPSolver::updateCurrentState()
     robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
     robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
 
-    // Pierre debug
-    // static double rtmp_value = 0;
-    // static double ltmp_value = 0;
     for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
     {
       const auto & jn = robot().refJointOrder()[i];
 
-      // Pierre debug
-      /*
-      if(jn == "RTMP") { rtmp_value = encoder[i]; }
-      if(jn == "LTMP") { ltmp_value = encoder[i]; }
-      const auto & joint = robot().mb().joint(j);
-      if(joint.isMimic())
-      {
-        if(joint.mimicName() == "RTMP") { encoder[i] = rtmp_value * joint.mimicMultiplier() + joint.mimicOffset(); }
-        else { encoder[i] = ltmp_value * joint.mimicMultiplier() + joint.mimicOffset(); }
-      }
-      //if(jn == "RTMP" || jn == "RIMP") { std::cout << jn << " encoder " << encoder[i] << std::endl; }
-      */
       if(robot().hasJoint(jn))
       {
         size_t j = robot().jointIndexByName(jn);
@@ -258,21 +237,9 @@ void QPSolver::updateCurrentState()
         if(robot().mbc().q[j].size() == 0)
           continue;
         
-	//if (std::find(thumbs.begin(), thumbs.end(), jn) == thumbs.end()) { // Rafa, this is a dirty patch
-        //std::cout << "Rafa, robot().mbc().q[" << j << "][0] = " << robot().mbc().q[j][0] << std::endl;
-	  robot().mbc().q[j][0] = encoder[i];
-	  robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev_[i]) / timeStep;
-	//}
+        robot().mbc().q[j][0] = encoder[i];
+        robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev_[i]) / timeStep;
       }
-      /*
-      else
-	{
-          // Pierre debug
-          // std::cout << "ROBOT DOES NOT HAVE " << jn << std::endl;
-	  robot().mbc().q[j][0] = mbcs_calc_->at(robots().robotIndex()).q[j][0];
-	  robot().mbc().alpha[j][0] = mbcs_calc_->at(robots().robotIndex()).alpha[j][0];
-	}
-      */
     }
   }
   
@@ -289,17 +256,6 @@ bool QPSolver::solve()
 {
   bool success = false;
 
-  // Pierre debug
-  /*
-  std::cout << "Before solve\n";
-  std::cout 
-    << "calc\n"
-    << "RTMP " << (*mbcs_calc_)[0].q[robot().jointIndexByName("RTMP")][0] << " "
-    << "RIMP " << (*mbcs_calc_)[0].q[robot().jointIndexByName("RIMP")][0] << std::endl
-    << "real\n"
-    << "RTMP " << robot().mbc().q[robot().jointIndexByName("RTMP")][0] << " "
-    << "RIMP " << robot().mbc().q[robot().jointIndexByName("RIMP")][0] << std::endl;
-  */
   if(solver.solveNoMbcUpdate(robots_p->mbs(), robots_p->mbcs()))
   {
     for(size_t i = 0; i < robots_p->mbs().size(); ++i)
@@ -325,18 +281,6 @@ bool QPSolver::solve()
       success = true;
     }
 
-    // Pierre debug
-    /*
-  std::cout << "After solve\n";
-  std::cout 
-    << "calc\n"
-    << "RTMP " << (*mbcs_calc_)[0].q[robot().jointIndexByName("RTMP")][0] << " "
-    << "RIMP " << (*mbcs_calc_)[0].q[robot().jointIndexByName("RIMP")][0] << std::endl
-    << "real\n"
-    << "RTMP " << robot().mbc().q[robot().jointIndexByName("RTMP")][0] << " "
-    << "RIMP " << robot().mbc().q[robot().jointIndexByName("RIMP")][0] << std::endl;
-    */
-    
     __fillResult((*mbcs_calc_)[robots().robotIndex()]);
   }
   return success;
@@ -359,11 +303,8 @@ void QPSolver::__fillResult(const rbd::MultiBodyConfig & mbc)
     for(const auto & j : robot.mb().joints())
     {
       auto jIndex = robot.jointIndexByName(j.name());
-      // q[j.name()] = robot.mbc().q[jIndex];
       q[j.name()] = mbc.q[jIndex];
-      // alphaVec[j.name()] = robot.mbc().alpha[jIndex];
       alphaVec[j.name()] = mbc.alpha[jIndex];
-      // alphaDVec[j.name()] = robot.mbc().alphaD[jIndex];
       alphaDVec[j.name()] = mbc.alphaD[jIndex];
     }
   }
@@ -490,20 +431,14 @@ IntglTerm_QPSolver::IntglTerm_QPSolver(double timeStep,
 
 bool IntglTerm_QPSolver::run()
 {
-  //std::cout << "Rafa, before update metaTasks" << std::endl;
-  
   for(auto & t : metaTasks)
   {
     t->update();
   }
 
-  //std::cout << "Rafa, before updateCurrentState()" << std::endl;
-
   updateCurrentState();
   
   intglTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
-
-  //std::cout << "Rafa, before solve()" << std::endl;
   
   return solve();
 }
