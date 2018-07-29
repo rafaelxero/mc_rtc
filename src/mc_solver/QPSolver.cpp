@@ -242,6 +242,8 @@ void QPSolver::updateCurrentState()
       }
     }
   }
+
+  std::cout << "Rafa, timeStep = " << timeStep << std::endl;
   
   encoder_prev_ = encoder;
 
@@ -436,10 +438,13 @@ bool IntglTerm_QPSolver::run()
     t->update();
   }
 
+  std::cout << "Rafa, about to call updateCurrentState" << std::endl;
   updateCurrentState();
   
+  std::cout << "Rafa, about to call intglTerm_->computeTerm" << std::endl;
   intglTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
   
+  std::cout << "Rafa, about to call solve" << std::endl;
   return solve();
 }
 
