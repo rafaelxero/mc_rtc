@@ -267,21 +267,23 @@ bool QPSolver::solve()
       rbd::MultiBodyConfig & mbc_calc = (*mbcs_calc_)[i];
       if(mb.nrDof() > 0)
       {
-        solver.updateMbc(mbc_real, static_cast<int>(i));
-        solver.updateMbc(mbc_calc, static_cast<int>(i));
-        
         if(!feedback_)
         {
+          solver.updateMbc(mbc_real, static_cast<int>(i));
           rbd::eulerIntegration(mb, mbc_real, timeStep);
           mbc_calc = mbc_real;
         }
         else
         {
+          solver.updateMbc(mbc_calc, static_cast<int>(i));
           rbd::eulerIntegration(mb, mbc_calc, timeStep);
         }
       }
       success = true;
     }
+
+    std::cout << "Rafa, inside of QPSolver::solve, mbc_calc.alphaD = " << rbd::dofToVector(robots_p->mbs()[0], (*mbcs_calc_)[0].alphaD).transpose() << std::endl << std::endl;
+    std::cout << "Rafa, inside of QPSolver::solve, mbc_calc.alpha = " << rbd::dofToVector(robots_p->mbs()[0], (*mbcs_calc_)[0].alpha).transpose() << std::endl << std::endl;
 
     __fillResult((*mbcs_calc_)[robots().robotIndex()]);
   }
