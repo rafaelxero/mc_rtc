@@ -243,7 +243,7 @@ void QPSolver::updateCurrentState()
     }
   }
 
-  std::cout << "Rafa, timeStep = " << timeStep << std::endl;
+  // std::cout << "Rafa, timeStep = " << timeStep << std::endl;
   
   encoder_prev_ = encoder;
 
@@ -282,8 +282,8 @@ bool QPSolver::solve()
       success = true;
     }
 
-    std::cout << "Rafa, inside of QPSolver::solve, mbc_calc.alphaD = " << rbd::dofToVector(robots_p->mbs()[0], (*mbcs_calc_)[0].alphaD).transpose() << std::endl << std::endl;
-    std::cout << "Rafa, inside of QPSolver::solve, mbc_calc.alpha = " << rbd::dofToVector(robots_p->mbs()[0], (*mbcs_calc_)[0].alpha).transpose() << std::endl << std::endl;
+    // std::cout << "Rafa, inside of QPSolver::solve, mbc_calc.alphaD = " << rbd::dofToVector(robots_p->mbs()[0], (*mbcs_calc_)[0].alphaD).transpose() << std::endl << std::endl;
+    // std::cout << "Rafa, inside of QPSolver::solve, mbc_calc.alpha = " << rbd::dofToVector(robots_p->mbs()[0], (*mbcs_calc_)[0].alpha).transpose() << std::endl << std::endl;
 
     __fillResult((*mbcs_calc_)[robots().robotIndex()]);
   }
@@ -440,13 +440,13 @@ bool IntglTerm_QPSolver::run()
     t->update();
   }
 
-  std::cout << "Rafa, about to call updateCurrentState" << std::endl;
+  // std::cout << "Rafa, about to call updateCurrentState" << std::endl;
   updateCurrentState();
   
-  std::cout << "Rafa, about to call intglTerm_->computeTerm" << std::endl;
+  // std::cout << "Rafa, about to call intglTerm_->computeTerm" << std::endl;
   intglTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
   
-  std::cout << "Rafa, about to call solve" << std::endl;
+  // std::cout << "Rafa, about to call solve" << std::endl;
   return solve();
 }
 
