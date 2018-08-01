@@ -243,6 +243,9 @@ void QPSolver::updateCurrentState()
     }
   }
 
+  // std::cout << "Rafa, inside of QPSolver::updateCurrentState, q_hat = " << rbd::paramToVector(robot().mb(), robot().mbc().q).transpose() << std::endl << std::endl;
+  std::cout << "Rafa, inside of QPSolver::updateCurrentState, alpha_hat = " << rbd::dofToVector(robot().mb(), robot().mbc().alpha).transpose() << std::endl << std::endl;
+  
   // std::cout << "Rafa, timeStep = " << timeStep << std::endl;
   
   encoder_prev_ = encoder;
@@ -282,8 +285,9 @@ bool QPSolver::solve()
       success = true;
     }
 
-    // std::cout << "Rafa, inside of QPSolver::solve, mbc_calc.alphaD = " << rbd::dofToVector(robots_p->mbs()[0], (*mbcs_calc_)[0].alphaD).transpose() << std::endl << std::endl;
-    // std::cout << "Rafa, inside of QPSolver::solve, mbc_calc.alpha = " << rbd::dofToVector(robots_p->mbs()[0], (*mbcs_calc_)[0].alpha).transpose() << std::endl << std::endl;
+    // std::cout << "Rafa, inside of QPSolver::solve, alphaD_ref = " << rbd::dofToVector(robots_p->mbs()[0], (*mbcs_calc_)[0].alphaD).transpose() << std::endl << std::endl;
+    // std::cout << "Rafa, inside of QPSolver::solve, alpha_ref = " << rbd::dofToVector(robots_p->mbs()[0], (*mbcs_calc_)[0].alpha).transpose() << std::endl << std::endl;
+    // std::cout << "Rafa, inside of QPSolver::solve, alpha_hat = " << rbd::dofToVector(robots_p->mbs()[0], robots_p->mbcs()[0].alpha).transpose() << std::endl << std::endl;
 
     __fillResult((*mbcs_calc_)[robots().robotIndex()]);
   }
