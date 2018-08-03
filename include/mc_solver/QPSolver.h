@@ -146,7 +146,7 @@ public:
     constraint->removeFromSolver(solver);
   }
 
-  bool hasConstraint(tasks::qp::Constraint* constraint);
+  bool hasConstraint(const tasks::qp::Constraint* constraint);
 
   /** Gives access to the tasks::qp::BilateralContact entity in the solver from a contact id
    * \param id The contact id of the contact

@@ -136,7 +136,7 @@ void QPSolver::removeTask(mc_tasks::MetaTask * task)
   }
 }
 
-bool QPSolver::hasConstraint(tasks::qp::Constraint* constraint)
+bool QPSolver::hasConstraint(const tasks::qp::Constraint* constraint)
 {
   return solver.hasConstraint(constraint);
 }
@@ -162,6 +162,8 @@ Eigen::VectorXd QPSolver::lambdaVec(int cIndex) const
 
 void QPSolver::setContacts(const std::vector<mc_rbdyn::Contact> & contacts)
 {
+  // std::cout << "Rafa, entered to setContacts" << std::endl;
+  
   uniContacts.clear();
   biContacts.clear();
   qpRes.contacts.clear();
@@ -244,7 +246,7 @@ void QPSolver::updateCurrentState()
   }
 
   // std::cout << "Rafa, inside of QPSolver::updateCurrentState, q_hat = " << rbd::paramToVector(robot().mb(), robot().mbc().q).transpose() << std::endl << std::endl;
-  std::cout << "Rafa, inside of QPSolver::updateCurrentState, alpha_hat = " << rbd::dofToVector(robot().mb(), robot().mbc().alpha).transpose() << std::endl << std::endl;
+  // std::cout << "Rafa, inside of QPSolver::updateCurrentState, alpha_hat = " << rbd::dofToVector(robot().mb(), robot().mbc().alpha).transpose() << std::endl << std::endl;
   
   // std::cout << "Rafa, timeStep = " << timeStep << std::endl;
   
@@ -259,6 +261,8 @@ void QPSolver::updateCurrentState()
 
 bool QPSolver::solve()
 {
+  // std::cout << "Rafa, entered to QPSolver::solve" << std::endl;
+  
   bool success = false;
 
   if(solver.solveNoMbcUpdate(robots_p->mbs(), robots_p->mbcs()))
