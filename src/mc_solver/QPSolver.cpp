@@ -162,8 +162,6 @@ Eigen::VectorXd QPSolver::lambdaVec(int cIndex) const
 
 void QPSolver::setContacts(const std::vector<mc_rbdyn::Contact> & contacts)
 {
-  // std::cout << "Rafa, entered to setContacts" << std::endl;
-  
   uniContacts.clear();
   biContacts.clear();
   qpRes.contacts.clear();
@@ -245,11 +243,6 @@ void QPSolver::updateCurrentState()
     }
   }
 
-  // std::cout << "Rafa, inside of QPSolver::updateCurrentState, q_hat = " << rbd::paramToVector(robot().mb(), robot().mbc().q).transpose() << std::endl << std::endl;
-  // std::cout << "Rafa, inside of QPSolver::updateCurrentState, alpha_hat = " << rbd::dofToVector(robot().mb(), robot().mbc().alpha).transpose() << std::endl << std::endl;
-  
-  // std::cout << "Rafa, timeStep = " << timeStep << std::endl;
-  
   encoder_prev_ = encoder;
 
   rbd::forwardKinematics(robot().mb(), robot().mbc());
@@ -261,8 +254,6 @@ void QPSolver::updateCurrentState()
 
 bool QPSolver::solve()
 {
-  // std::cout << "Rafa, entered to QPSolver::solve" << std::endl;
-  
   bool success = false;
 
   if(solver.solveNoMbcUpdate(robots_p->mbs(), robots_p->mbcs()))
@@ -288,11 +279,7 @@ bool QPSolver::solve()
       }
       success = true;
     }
-
-    // std::cout << "Rafa, inside of QPSolver::solve, alphaD_ref = " << rbd::dofToVector(robots_p->mbs()[0], (*mbcs_calc_)[0].alphaD).transpose() << std::endl << std::endl;
-    // std::cout << "Rafa, inside of QPSolver::solve, alpha_ref = " << rbd::dofToVector(robots_p->mbs()[0], (*mbcs_calc_)[0].alpha).transpose() << std::endl << std::endl;
-    // std::cout << "Rafa, inside of QPSolver::solve, alpha_hat = " << rbd::dofToVector(robots_p->mbs()[0], robots_p->mbcs()[0].alpha).transpose() << std::endl << std::endl;
-
+    
     __fillResult((*mbcs_calc_)[robots().robotIndex()]);
   }
   return success;
@@ -448,13 +435,10 @@ bool IntglTerm_QPSolver::run()
     t->update();
   }
 
-  // std::cout << "Rafa, about to call updateCurrentState" << std::endl;
   updateCurrentState();
   
-  // std::cout << "Rafa, about to call intglTerm_->computeTerm" << std::endl;
   intglTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
   
-  // std::cout << "Rafa, about to call solve" << std::endl;
   return solve();
 }
 
