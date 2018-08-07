@@ -60,7 +60,7 @@ namespace mc_solver
 {
 QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
   : robots_p(robots), timeStep(timeStep), solver(),
-    first_run(true), feedback(false)
+    first_run_(true), feedback_(false)
 {
   mbcs_calc_ = std::make_shared<std::vector<rbd::MultiBodyConfig>>();
   
@@ -136,7 +136,7 @@ void QPSolver::removeTask(mc_tasks::MetaTask * task)
   }
 }
 
-bool QPSolver::hasConstraint(tasks::qp::Constraint* constraint)
+bool QPSolver::hasConstraint(const tasks::qp::Constraint* constraint)
 {
   return solver.hasConstraint(constraint);
 }
@@ -196,17 +196,23 @@ void QPSolver::setContacts(const std::vector<mc_rbdyn::Contact> & contacts)
 
 bool QPSolver::run()
 {
-  bool success = false;
   for(auto & t : metaTasks)
   {
     t->update();
   }
 
-  if(first_run)
+  updateCurrentState();
+
+  return solve();  
+}
+
+void QPSolver::updateCurrentState()
+{
+  if(first_run_)
   {
-    encoder_prev = robot().encoderValues();
+    encoder_prev_ = robot().encoderValues();
     (*mbcs_calc_) = robots().mbcs();
-    first_run = false;
+    first_run_ = false;
   }
 
   const std::vector<double> & encoder = robot().encoderValues();
@@ -215,37 +221,41 @@ bool QPSolver::run()
   const Eigen::Vector3d & velIn = robot().bodySensor().linearVelocity();
   const Eigen::Vector3d & rateIn = robot().bodySensor().angularVelocity();
 
-  // std::cout << "Rafa, qtIn = " << qtIn.w() << " " << qtIn.x() << " " << qtIn.y() << " " << qtIn.z() << std::endl;
-  
-  if(feedback)
+  if(feedback_)
   {
     robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
     robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
-    
+
     for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
     {
       const auto & jn = robot().refJointOrder()[i];
-      size_t j = robot().jointIndexByName(jn);
+
       if(robot().hasJoint(jn))
       {
+        size_t j = robot().jointIndexByName(jn);
+        
+        if(robot().mbc().q[j].size() == 0)
+          continue;
+        
         robot().mbc().q[j][0] = encoder[i];
-        robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev[i]) / timeStep;
-      }
-      else
-      {
-	std::cout << "Rafa, robot has no joint called " << jn << std::endl;
-	robot().mbc().q[j][0] = mbcs_calc_->at(robots().robotIndex()).q[j][0];
-	robot().mbc().alpha[j][0] = mbcs_calc_->at(robots().robotIndex()).alpha[j][0];
+        robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev_[i]) / timeStep;
       }
     }
   }
-  
-  encoder_prev = encoder;
+
+  encoder_prev_ = encoder;
 
   rbd::forwardKinematics(robot().mb(), robot().mbc());
   rbd::forwardVelocity(robot().mb(), robot().mbc());
   rbd::forwardAcceleration(robot().mb(), robot().mbc());
-  
+
+  robot().forwardDynamics();
+}
+
+bool QPSolver::solve()
+{
+  bool success = false;
+
   if(solver.solveNoMbcUpdate(robots_p->mbs(), robots_p->mbcs()))
   {
     for(size_t i = 0; i < robots_p->mbs().size(); ++i)
@@ -255,34 +265,21 @@ bool QPSolver::run()
       rbd::MultiBodyConfig & mbc_calc = (*mbcs_calc_)[i];
       if(mb.nrDof() > 0)
       {
-        solver.updateMbc(mbc_real, static_cast<int>(i));
-        solver.updateMbc(mbc_calc, static_cast<int>(i));
-
-	/*
-	if (feedback && i == 0) {
-	  std::cout << "Rafa, before integration:" << std::endl;
-	  Eigen::VectorXd alphaVec_ref(mb.nrDof());
-	  Eigen::VectorXd alphaDVec_ref(mb.nrDof());
-	  rbd::paramToVector(mbc_calc.alpha, alphaVec_ref);
-	  rbd::paramToVector(mbc_calc.alphaD, alphaDVec_ref);
-	  std::cout << "Rafa, alphaDVec_ref:" << std::endl << alphaDVec_ref.transpose() << std::endl;
-	  std::cout << "Rafa, alphaVec_ref:" << std::endl << alphaVec_ref.transpose() << std::endl;
-	  std::cout << "---" << std::endl;
-	}
-	*/
-        
-        if(!feedback)
+        if(!feedback_)
         {
+          solver.updateMbc(mbc_real, static_cast<int>(i));
           rbd::eulerIntegration(mb, mbc_real, timeStep);
           mbc_calc = mbc_real;
         }
         else
         {
+          solver.updateMbc(mbc_calc, static_cast<int>(i));
           rbd::eulerIntegration(mb, mbc_calc, timeStep);
         }
       }
       success = true;
     }
+    
     __fillResult((*mbcs_calc_)[robots().robotIndex()]);
   }
   return success;
@@ -305,11 +302,8 @@ void QPSolver::__fillResult(const rbd::MultiBodyConfig & mbc)
     for(const auto & j : robot.mb().joints())
     {
       auto jIndex = robot.jointIndexByName(j.name());
-      // q[j.name()] = robot.mbc().q[jIndex];
       q[j.name()] = mbc.q[jIndex];
-      // alphaVec[j.name()] = robot.mbc().alpha[jIndex];
       alphaVec[j.name()] = mbc.alpha[jIndex];
-      // alphaDVec[j.name()] = robot.mbc().alphaD[jIndex];
       alphaDVec[j.name()] = mbc.alphaD[jIndex];
     }
   }
@@ -408,9 +402,51 @@ void QPSolver::fillTorque(tasks::qp::MotionConstr* motionConstr)
 
 void QPSolver::enableFeedback(bool fb)
 {
-  feedback = fb;
+  feedback_ = fb;
 }
 
+IntglTerm_QPSolver::IntglTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
+                                       integral::IntegralTerm::IntegralTermType intTermType,
+                                       integral::IntegralTerm::VelocityGainType velGainType,
+                                       double lambda)
+  : QPSolver(robots, timeStep)
+{
+  intglTerm_ = std::make_shared<integral::IntegralTerm>(robots->mbs(),
+                                                        robots->robotIndex(),
+                                                        robots->robot().fd(),
+                                                        intTermType, velGainType, lambda);
+}
+
+IntglTerm_QPSolver::IntglTerm_QPSolver(double timeStep,
+                                       integral::IntegralTerm::IntegralTermType intTermType,
+                                       integral::IntegralTerm::VelocityGainType velGainType,
+                                       double lambda)
+  : QPSolver(timeStep)
+{
+  intglTerm_ = std::make_shared<integral::IntegralTerm>(robots().mbs(),
+                                                        robots().robotIndex(), robot().fd(),
+                                                        intTermType, velGainType, lambda);
+}
+
+bool IntglTerm_QPSolver::run()
+{
+  for(auto & t : metaTasks)
+  {
+    t->update();
+  }
+
+  updateCurrentState();
+  
+  intglTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
+  
+  return solve();
+}
+
+const std::shared_ptr<integral::IntegralTerm> IntglTerm_QPSolver::intglTerm() const
+{
+  return intglTerm_;
+}
+  
 boost::timer::cpu_times QPSolver::solveTime()
 {
   return solver.solveTime();

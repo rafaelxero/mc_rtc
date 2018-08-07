@@ -51,7 +51,7 @@ void DynamicsConstraint::build_constr(const mc_rbdyn::Robots & robots, unsigned 
     {
       sjList.push_back(tasks::qp::SpringJoint(flex.jointName, flex.K, flex.C, flex.O));
     }
-    motionConstr.reset(new tasks::qp::MotionSpringConstr(robots.mbs(), static_cast<int>(robotIndex), tBound, sjList));
+    motionConstr.reset(new tasks::qp::MotionSpringConstr(robots.mbs(), static_cast<int>(robotIndex), robot.fd(), tBound, sjList));
   }
   /*FIXME Implement?
   else if(robot.tlPoly.size() != 0)
@@ -59,7 +59,7 @@ void DynamicsConstraint::build_constr(const mc_rbdyn::Robots & robots, unsigned 
   } */
   else
   {
-    motionConstr.reset(new tasks::qp::MotionConstr(robots.mbs(), static_cast<int>(robotIndex), tBound));
+    motionConstr.reset(new tasks::qp::MotionConstr(robots.mbs(), static_cast<int>(robotIndex), robot.fd(), tBound));
   }
 }
 

@@ -3,6 +3,7 @@
 #include <RBDyn/MultiBody.h>
 #include <RBDyn/MultiBodyConfig.h>
 #include <RBDyn/MultiBodyGraph.h>
+#include <RBDyn/FD.h>
 
 #include <sch/S_Polyhedron/S_Polyhedron.h>
 #include <sch/STP-BV/STP_BV.h>
@@ -287,6 +288,9 @@ public:
   void forwardAcceleration(const sva::MotionVecd & A_0 = sva::MotionVecd(Eigen::Vector6d::Zero()));
   void forwardAcceleration(rbd::MultiBodyConfig & mbc, const sva::MotionVecd & A_0 = sva::MotionVecd(Eigen::Vector6d::Zero())) const;
 
+  void forwardDynamics();
+  const std::shared_ptr<rbd::ForwardDynamics> fd() const;
+  
   void eulerIntegration(double step);
   void eulerIntegration(rbd::MultiBodyConfig & mbc, double step) const;
 
@@ -340,6 +344,7 @@ private:
   std::map<std::string, size_t> forceSensorsIndex_;
   /** Correspondance between bodies' names and attached force sensors */
   std::map<std::string, size_t> bodyForceSensors_;
+  std::shared_ptr<rbd::ForwardDynamics> fd_;
 
 protected:
   /** Invoked by Robots parent instance after mb/mbc/mbg/RobotModule are stored
