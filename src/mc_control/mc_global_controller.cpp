@@ -70,6 +70,7 @@ MCGlobalController::MCGlobalController(const std::string & conf,
       c.second->logger().setup(config.log_policy, config.log_directory, config.log_template);
     }
   }
+  mc_rtc::ROSBridge::activate_services(*this);
 }
 
 MCGlobalController::~MCGlobalController()
@@ -118,7 +119,10 @@ void MCGlobalController::init(const std::vector<double> & initq, const std::arra
     start_log();
   }
   std::vector<std::vector<double>> q = robot().mbc().q;
-  q[0] = {std::begin(initAttitude), std::end(initAttitude)};
+  if(q[0].size() == 7)
+  {
+    q[0] = {std::begin(initAttitude), std::end(initAttitude)};
+  }
   const auto & rjo = ref_joint_order();
   for(size_t i = 0; i < rjo.size(); ++i)
   {
@@ -305,7 +309,7 @@ bool MCGlobalController::run()
     }
     else
     {
-      const auto & qt = robot().bodySensor().orientation();
+      const auto & qt = robot().bodySensor().orientation().inverse();
       const auto & t = robot().bodySensor().position();
       real_robot.mbc().q[0] = {
         qt.w(), qt.x(), qt.y(), qt.z(),
@@ -653,6 +657,15 @@ void MCGlobalController::setup_log()
               [controller]() -> const Eigen::Vector3d&
               {
                 return controller->robot().bodySensor().acceleration();
+              });
+  // Log system wall time as nanoseconds since epoch (can be used to manage synchronization with ros)
+  controller->logger().addLogEntry("timeWall",
+              []() -> uint64_t
+              {
+                uint64_t nanoseconds_since_epoch =
+                std::chrono::system_clock::now().time_since_epoch() /
+                std::chrono::nanoseconds(1);
+                return nanoseconds_since_epoch;
               });
   setup_logger_[current_ctrl] = true;
 }

@@ -232,10 +232,11 @@ bool QPSolver::run()
         robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev[i]) / timeStep;
       }
       else
-	{
-	  robot().mbc().q[j][0] = mbcs_calc_->at(robots().robotIndex()).q[j][0];
-	  robot().mbc().alpha[j][0] = mbcs_calc_->at(robots().robotIndex()).alpha[j][0];
-	}
+      {
+	std::cout << "Rafa, robot has no joint called " << jn << std::endl;
+	robot().mbc().q[j][0] = mbcs_calc_->at(robots().robotIndex()).q[j][0];
+	robot().mbc().alpha[j][0] = mbcs_calc_->at(robots().robotIndex()).alpha[j][0];
+      }
     }
   }
   
@@ -256,6 +257,19 @@ bool QPSolver::run()
       {
         solver.updateMbc(mbc_real, static_cast<int>(i));
         solver.updateMbc(mbc_calc, static_cast<int>(i));
+
+	/*
+	if (feedback && i == 0) {
+	  std::cout << "Rafa, before integration:" << std::endl;
+	  Eigen::VectorXd alphaVec_ref(mb.nrDof());
+	  Eigen::VectorXd alphaDVec_ref(mb.nrDof());
+	  rbd::paramToVector(mbc_calc.alpha, alphaVec_ref);
+	  rbd::paramToVector(mbc_calc.alphaD, alphaDVec_ref);
+	  std::cout << "Rafa, alphaDVec_ref:" << std::endl << alphaDVec_ref.transpose() << std::endl;
+	  std::cout << "Rafa, alphaVec_ref:" << std::endl << alphaVec_ref.transpose() << std::endl;
+	  std::cout << "---" << std::endl;
+	}
+	*/
         
         if(!feedback)
         {
