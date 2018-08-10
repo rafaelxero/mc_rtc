@@ -202,7 +202,7 @@ public:
 
   /** Values calculated by the QP Solver */
   const std::shared_ptr<std::vector<rbd::MultiBodyConfig>> mbcs_calc() const;
-
+  
   /** Update number of variables
    *
    * This should be called when/if you add new robots into the scene after the

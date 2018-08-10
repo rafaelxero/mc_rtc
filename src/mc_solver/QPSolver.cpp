@@ -247,7 +247,7 @@ void QPSolver::updateCurrentState()
 
   rbd::forwardKinematics(robot().mb(), robot().mbc());
   rbd::forwardVelocity(robot().mb(), robot().mbc());
-  rbd::forwardAcceleration(robot().mb(), robot().mbc());
+  // rbd::forwardAcceleration(robot().mb(), robot().mbc());
 
   robot().forwardDynamics();
 }
@@ -273,6 +273,7 @@ bool QPSolver::solve()
         }
         else
         {
+          solver.updateMbc(mbc_real, static_cast<int>(i));
           solver.updateMbc(mbc_calc, static_cast<int>(i));
           rbd::eulerIntegration(mb, mbc_calc, timeStep);
         }
