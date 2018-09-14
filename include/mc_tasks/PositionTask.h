@@ -58,6 +58,13 @@ public:
    */
   void position(const Eigen::Vector3d & pos);
 
+  /*! \brief Change the body position target by a given amount
+   *
+   * \param com Modification applied to the body position
+   *
+   */
+  void move_position(const Eigen::Vector3d & pos);
+  
   /*! \brief Get the body point being controlled
    */
   Eigen::Vector3d bodyPoint() const;
