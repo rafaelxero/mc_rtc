@@ -12,11 +12,11 @@ namespace mc_tasks
   WrenchTask::WrenchTask(const std::string & bodyName, const Eigen::Vector3d& bodyPoint,
                          const mc_rbdyn::Robots & robots, unsigned int robotIndex,
                          double weight) :
-    tasks::qp::WrenchTask(robots.mbs(), robotIndex, weight),
-    bodyName(bodyName), bIndex(0)
+    wt_(robots.mbs(), robotIndex, weight),
+    bodyName_(bodyName), bIndex_(0)
   {
-    const mc_rbdyn::Robot & robot = robots.robot(rIndex);
-    bIndex = robot.bodyIndexByName(bodyName);
+    const mc_rbdyn::Robot & robot = robots.robot(robotIndex);
+    bIndex_ = robot.bodyIndexByName(bodyName_);
   }
 
   void WrenchTask::reset()

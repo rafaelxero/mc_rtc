@@ -170,6 +170,7 @@ mc_tasks/CoPTask.cpp
 mc_tasks/GazeTask.cpp
 mc_tasks/PositionBasedVisServoTask.cpp
 mc_tasks/PostureTask.cpp
+mc_tasks/WrenchTask.cpp
 )
 set(mc_tasks_SRC ${mc_tasks_SRC} PARENT_SCOPE)
 
@@ -197,6 +198,7 @@ set(mc_tasks_HDR
 ../include/mc_tasks/GazeTask.h
 ../include/mc_tasks/PositionBasedVisServoTask.h
 ../include/mc_tasks/PostureTask.h
+../include/mc_tasks/WrenchTask.h
 )
 set(mc_tasks_HDR ${mc_tasks_HDR} PARENT_SCOPE)
 

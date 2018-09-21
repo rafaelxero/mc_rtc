@@ -1,5 +1,11 @@
 #pragma once
 
+#include <mc_rbdyn/Robots.h>
+#include <Tasks/QPTasks.h>
+
+#include <mc_tasks/api.h>
+#include <iostream>
+
 namespace mc_tasks
 {
 
@@ -19,7 +25,7 @@ namespace mc_tasks
                const mc_rbdyn::Robots & robots, unsigned int robotIndex,
                double weight = 500);
 
-    virtual void reset() override;
+    void reset();
 
     Eigen::Vector6d wrench();
 
@@ -31,8 +37,10 @@ namespace mc_tasks
 
   protected:
 
-    std::string bodyName;
-    unsigned int bIndex;
+    std::string bodyName_;
+    unsigned int bIndex_;
+
+    tasks::qp::WrenchTask wt_;
   };
 
 }
