@@ -183,6 +183,8 @@ void QPSolver::setContacts(const std::vector<mc_rbdyn::Contact> & contacts)
     }
   }
 
+  // std::cout << "Rafa, in QPSolver::setContacts, before calling solver.nrVars" << std::endl;
+
   solver.nrVars(robots_p->mbs(), uniContacts, biContacts);
   const tasks::qp::SolverData & data = solver.data();
   qpRes.contacts = contactsMsgFromContacts(*robots_p, contacts);
