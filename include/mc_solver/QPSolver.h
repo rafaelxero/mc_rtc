@@ -11,7 +11,7 @@
 #include <mc_rbdyn/Robots.h>
 
 #include <Tasks/QPSolver.h>
-#include <RBDyn/IntegralTerm.h>
+#include <RBDyn/TorqueFeedbackTerm.h>
 
 #include <memory>
 
@@ -48,7 +48,7 @@ public:
    * \param timeStep Timestep of the solver
    */
   QPSolver(double timeStep);
-
+  
   /** Add a constraint set
    * \param cs Constraint set added to the solver
    */
@@ -134,7 +134,7 @@ public:
   template<typename ... Fun>
   void addConstraint(tasks::qp::ConstraintFunction<Fun...> * constraint)
   {
-    constraint->addToSolver(robots().mbs(), solver);
+    constraint->addToSolver(robots().mbs(), *solver);
   }
 
   /** Remove a constraint function from the solver
@@ -143,7 +143,7 @@ public:
   template<typename ... Fun>
   void removeConstraint(tasks::qp::ConstraintFunction<Fun...> * constraint)
   {
-    constraint->removeFromSolver(solver);
+    constraint->removeFromSolver(*solver);
   }
 
   bool hasConstraint(const tasks::qp::Constraint* constraint);
@@ -173,7 +173,7 @@ public:
   virtual bool run();
 
   void updateCurrentState();
-  bool solve();
+  virtual bool solve();
 
   /** Provides the result of run() for robots.robot()
    * \param curTime Unused
@@ -200,8 +200,11 @@ public:
   /** Gives access to the robots controlled by this solver */
   mc_rbdyn::Robots & robots();
 
-  /** Values calculated by the QP Solver */
+  /** Values calculated by the QP Solver for all robots */
   const std::shared_ptr<std::vector<rbd::MultiBodyConfig>> mbcs_calc() const;
+  
+  /** Values calculated by the QP Solver for the main robot */
+  const rbd::MultiBodyConfig & mbc_calc() const;
   
   /** Update number of variables
    *
@@ -255,7 +258,7 @@ public:
  protected:
   
   /** The actual solver instance */
-  tasks::qp::QPSolver solver;
+  std::shared_ptr<tasks::qp::QPSolver> solver;
   /** Latest result */
   QPResultMsg qpRes;
 
@@ -271,7 +274,7 @@ public:
   /** Pointer to the Logger */
   std::shared_ptr<mc_rtc::Logger> logger_ = nullptr;
 
-public:
+ public:
   
   /** \deprecated{Default constructor, not made for general usage} */
   QPSolver() {}
@@ -284,25 +287,48 @@ struct MC_SOLVER_DLLAPI IntglTerm_QPSolver : public QPSolver
  public:
 
   IntglTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
-                     integral::IntegralTerm::IntegralTermType intTermType,
-                     integral::IntegralTerm::VelocityGainType velGainType,
+                     torque_control::IntegralTerm::IntegralTermType intTermType,
+                     torque_control::IntegralTerm::VelocityGainType velGainType,
                      double lambda);
 
   /** Constructor (the solver creates its own Robots instance)
    * \param timeStep Timestep of the solver
    */
   IntglTerm_QPSolver(double timeStep,
-                     integral::IntegralTerm::IntegralTermType intTermType,
-                     integral::IntegralTerm::VelocityGainType velGainType,
+                     torque_control::IntegralTerm::IntegralTermType intTermType,
+                     torque_control::IntegralTerm::VelocityGainType velGainType,
                      double lambda);
 
   bool run() override;
 
-  const std::shared_ptr<integral::IntegralTerm> intglTerm() const;
+  const std::shared_ptr<torque_control::IntegralTerm> fbTerm() const;
 
  private:
 
-  std::shared_ptr<integral::IntegralTerm> intglTerm_;
+  std::shared_ptr<torque_control::IntegralTerm> fbTerm_;
+};
+
+struct MC_SOLVER_DLLAPI PassivityPIDTerm_QPSolver : public QPSolver
+{
+ public:
+
+  PassivityPIDTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
+                            double beta, double lambda, double mu, double sigma, double cis);
+
+  /** Constructor (the solver creates its own Robots instance)
+   * \param timeStep Timestep of the solver
+   */
+  PassivityPIDTerm_QPSolver(double timeStep,
+                            double beta, double lambda, double mu, double sigma, double cis);
+
+  bool run() override;
+  bool solve() override;
+
+  const std::shared_ptr<torque_control::PassivityPIDTerm> fbTerm() const;
+  
+ protected:
+  
+  std::shared_ptr<torque_control::PassivityPIDTerm> fbTerm_;
 };
  
 }
