@@ -260,9 +260,6 @@ void QPSolver::updateCurrentState()
     first_run_ = false;
   }
   
-  // std::cout << "Rafa, in QPSolver::updateCurrentState, robots_p->mbcs()[0].q[0] = " << robots_p->mbcs()[0].q[0][4] << " " << robots_p->mbcs()[0].q[0][5] << " " << robots_p->mbcs()[0].q[0][6] << std::endl;
-  // std::cout << "Rafa, in QPSolver::updateCurrentState, (*mbcs_calc_)[0].q[0] = " << (*mbcs_calc_)[0].q[0][4] << " " << (*mbcs_calc_)[0].q[0][5] << " " << (*mbcs_calc_)[0].q[0][6] << std::endl;
-  
   robot().forwardDynamics();
 }
 
