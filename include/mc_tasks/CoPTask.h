@@ -18,7 +18,7 @@ namespace mc_tasks
  * [1] https://scaron.info/teaching/zero-tilting-moment-point.html
  *
  */
-struct MC_TASKS_DLLAPI CoPTask: AdmittanceTask
+struct MC_TASKS_DLLAPI CoPTask : AdmittanceTask
 {
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -32,8 +32,6 @@ public:
    *
    * \param robotIndex Which robot among the robots
    *
-   * \param timestep Timestep of the controller
-   *
    * \param stiffness Stiffness of the underlying SurfaceTransform task
    *
    * \param weight Weight of the underlying SurfaceTransform task
@@ -43,10 +41,10 @@ public:
    *
    */
   CoPTask(const std::string & robotSurface,
-      const mc_rbdyn::Robots & robots,
-      unsigned robotIndex,
-      double timestep,
-      double stiffness = 5.0, double weight = 1000.0);
+          const mc_rbdyn::Robots & robots,
+          unsigned robotIndex,
+          double stiffness = 5.0,
+          double weight = 1000.0);
 
   /*! \brief Reset the task
    *
@@ -55,38 +53,91 @@ public:
    * zero.
    *
    */
-  virtual void reset();
+  void reset() override;
 
-  /*! \brief Set the target CoP in the surface frame
+  /** Add support for the following entries
+   *
+   * - copError Threshold for (targetCoP - measureCoP).norm()
+   * - force Force threshold, similar to wrench for AdmittanceTask
+   *
+   */
+  std::function<bool(const mc_tasks::MetaTask &, std::string &)> buildCompletionCriteria(
+      double dt,
+      const mc_rtc::Configuration & config) const override;
+
+  /*! \brief Measured CoP in surface frame.
+   *
+   */
+  Eigen::Vector2d measuredCoP() const
+  {
+    return robots_.robot(rIndex_).cop(surface_.name());
+  }
+
+  /*! \brief Measured CoP in world frame.
+   *
+   */
+  Eigen::Vector3d measuredCoPW() const
+  {
+    return robots_.robot(rIndex_).copW(surface_.name());
+  }
+
+  /*! \brief Set targent wrench to zero.
+   *
+   */
+  void setZeroTargetWrench()
+  {
+    AdmittanceTask::targetWrench(sva::ForceVecd{Eigen::Vector6d::Zero()});
+    targetCoP(Eigen::Vector2d::Zero());
+  }
+
+  /*! \brief Get target CoP in the surface frame.
+   *
+   */
+  const Eigen::Vector2d & targetCoP() const
+  {
+    return targetCoP_;
+  }
+
+  /*! \brief Get target CoP in the world frame.
+   *
+   */
+  Eigen::Vector3d targetCoPW() const
+  {
+    Eigen::Vector3d cop_s;
+    cop_s << targetCoP_, 0.;
+    sva::PTransformd X_0_s = robots_.robot(rIndex_).surfacePose(surface_.name());
+    return X_0_s.translation() + X_0_s.rotation().transpose() * cop_s;
+  }
+
+  /*! \brief Set target CoP in the surface frame.
    *
    * \param targetCoP 2D vector of CoP coordinates in the surface frame
    *
    */
-  void targetCoP(const Eigen::Vector2d & targetCoP);
-
-  /*! \brief Get target CoP in the surface frame
-   *
-   */
-  const Eigen::Vector2d & targetCoP() const;
-
-  /*! \brief Compute CoP in surface frame from sensor measurements
-   *
-   */
-  Eigen::Vector2d measuredCoP() const;
-
-  /*! \brief Set the target force in the surface frame
-   *
-   * \param targetForce 3D vector of target force in the surface frame
-   *
-   */
-  void targetForce(const Eigen::Vector3d & targetForce);
+  void targetCoP(const Eigen::Vector2d & targetCoP)
+  {
+    targetCoP_ = targetCoP;
+  }
 
   /*! \brief Get target force in the surface frame
    *
    */
-  const Eigen::Vector3d & targetForce() const;
+  const Eigen::Vector3d & targetForce() const
+  {
+    return targetForce_;
+  }
 
-  /*! \brief Get the target wrench in the surface frame
+  /*! \brief Set target force in the surface frame
+   *
+   * \param targetForce 3D vector of target force in the surface frame
+   *
+   */
+  void targetForce(const Eigen::Vector3d & targetForce)
+  {
+    targetForce_ = targetForce;
+  }
+
+  /*! \brief Get target wrench in the surface frame
    *
    */
   const sva::ForceVecd & targetWrench() const
@@ -105,4 +156,4 @@ private:
   using AdmittanceTask::targetWrench;
 };
 
-}
+} // namespace mc_tasks

@@ -1,8 +1,8 @@
 #pragma once
 
+#include <Eigen/Core>
 #include <map>
 #include <vector>
-#include <Eigen/Core>
 
 namespace mc_solver
 {
@@ -16,4 +16,4 @@ struct RobotMsg
   std::map<std::string, std::vector<double>> torque;
 };
 
-}
+} // namespace mc_solver

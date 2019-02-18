@@ -1,14 +1,12 @@
 #ifndef _H_MCCONTROLQPSOLVER_H_
 #define _H_MCCONTROLQPSOLVER_H_
 
-#include <mc_solver/api.h>
-#include <mc_solver/ConstraintSet.h>
-#include <mc_solver/DynamicsConstraint.h>
-
-#include <mc_solver/msg/QPResult.h>
-
 #include <mc_rbdyn/Contact.h>
 #include <mc_rbdyn/Robots.h>
+#include <mc_solver/ConstraintSet.h>
+#include <mc_solver/DynamicsConstraint.h>
+#include <mc_solver/api.h>
+#include <mc_solver/msg/QPResult.h>
 
 #include <Tasks/QPSolver.h>
 #include <RBDyn/TorqueFeedbackTerm.h>
@@ -17,16 +15,37 @@
 
 namespace mc_tasks
 {
-  struct MetaTask;
+struct MetaTask;
 }
 
 namespace mc_rtc
 {
-  struct Logger;
+struct Logger;
+namespace gui
+{
+struct StateBuilder;
 }
+} // namespace mc_rtc
 
 namespace mc_solver
 {
+
+#pragma GCC diagnostic push
+// Work around GCC bug see: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=43407
+#pragma GCC diagnostic ignored "-Wattributes"
+
+/** Describe the type of feedback used to control the robot */
+enum class MC_SOLVER_DLLAPI FeedbackType
+{
+  /** No feedback, i.e. open-loop control */
+  None,
+  /** Use encoder values for actuated joints */
+  Joints,
+  /** Joints + encoder velocity obtained from numerical differentiation */
+  JointsWVelocity
+};
+
+#pragma GCC diagnostic pop
 
 /** \class QPSolver
  *
@@ -38,6 +57,7 @@ namespace mc_solver
 struct MC_SOLVER_DLLAPI QPSolver
 {
 public:
+  
   /** Constructor
    * \param robot Set of robots managed by this solver
    * \param timeStep Timestep of the solver
@@ -60,7 +80,8 @@ public:
   void removeConstraintSet(ConstraintSet & cs);
 
   /** Add a task to the solver
-   * \param task Pointer to the added task, QPSolver does not take ownership of this pointer and the caller should make sure the object remains valid until it is removed from the solver
+   * \param task Pointer to the added task, QPSolver does not take ownership of this pointer and the caller should make
+   * sure the object remains valid until it is removed from the solver
    */
   void addTask(tasks::qp::Task * task);
 
@@ -86,8 +107,7 @@ public:
   template<typename T>
   inline void addTask(std::shared_ptr<T> task)
   {
-    static_assert(std::is_base_of<mc_tasks::MetaTask, T>::value ||
-                  std::is_base_of<tasks::qp::Task, T>::value,
+    static_assert(std::is_base_of<mc_tasks::MetaTask, T>::value || std::is_base_of<tasks::qp::Task, T>::value,
                   "You are trying to add a task that is neither a tasks::qp::Task or an mc_tasks::MetaTask");
     if(task)
     {
@@ -122,16 +142,19 @@ public:
   template<typename T>
   inline void removeTask(std::shared_ptr<T> task)
   {
-    static_assert(std::is_base_of<mc_tasks::MetaTask, T>::value ||
-                  std::is_base_of<tasks::qp::Task, T>::value,
-                  "You are trying to remove a task that is neither a tasks::qp::Task or an mc_tasks::MetaTask");
-    if(task.get()) { removeTask(task.get()); }
+    static_assert(std::is_base_of<mc_tasks::MetaTask, T>::value || std::is_base_of<tasks::qp::Task, T>::value,
+                  "You are trying to add a task that is neither a tasks::qp::Task or an mc_tasks::MetaTask");
+    if(task)
+    {
+      removeTask(task.get());
+    }
   }
 
   /** Add a constraint function from the solver
-   * \param constraint Pointer to the ConstraintFunction. QPSolver does not take ownserhip of this pointer and the caller should make sure the object remains valid until it is removed from the solver
+   * \param constraint Pointer to the ConstraintFunction. QPSolver does not take ownserhip of this pointer and the
+   * caller should make sure the object remains valid until it is removed from the solver
    */
-  template<typename ... Fun>
+  template<typename... Fun>
   void addConstraint(tasks::qp::ConstraintFunction<Fun...> * constraint)
   {
     constraint->addToSolver(robots().mbs(), *solver);
@@ -140,7 +163,7 @@ public:
   /** Remove a constraint function from the solver
    * \param constraint Pointer to the constraint that will be removed. It is not destroyed afterwards
    */
-  template<typename ... Fun>
+  template<typename... Fun>
   void removeConstraint(tasks::qp::ConstraintFunction<Fun...> * constraint)
   {
     constraint->removeFromSolver(*solver);
@@ -150,9 +173,10 @@ public:
 
   /** Gives access to the tasks::qp::BilateralContact entity in the solver from a contact id
    * \param id The contact id of the contact
-   * \return The tasks:qp::BilateralContact entity from the solver if id is valid, otherwise, the first element of the pair is -1 and the reference is invalid
+   * \return The tasks:qp::BilateralContact entity from the solver if id is valid, otherwise, the first element of the
+   * pair is -1 and the reference is invalid
    */
-  std::pair<int, const tasks::qp::BilateralContact&> contactById(const tasks::qp::ContactId & id);
+  std::pair<int, const tasks::qp::BilateralContact &> contactById(const tasks::qp::ContactId & id) const;
 
   /** Gives access to a part to lambdaVec given a contact index
    * \param cIndex The index of the contact
@@ -164,6 +188,19 @@ public:
    * \item contact Set of mc_rbdyn::Contact
    */
   void setContacts(const std::vector<mc_rbdyn::Contact> & contacts = {});
+
+  /** Returns the current set of contacts */
+  const std::vector<mc_rbdyn::Contact> & contacts() const;
+
+  /** Returns the MetaTasks currently in the solver */
+  const std::vector<mc_tasks::MetaTask *> & tasks() const;
+
+  /** Desired resultant of contact force in robot surface frame
+   * \param contact Contact for which the force is desired.
+   * This contact must be one of the active contacts in the solver.
+   * \return Contact force in robot surface frame
+   */
+  const sva::ForceVecd desiredContactForce(const mc_rbdyn::Contact & id) const;
 
   /** Run one iteration of the QP.
    *
@@ -239,24 +276,32 @@ public:
 
   boost::timer::cpu_times solveAndBuildTime();
 
+  /** Return the solvers result vector.
+   * \return The solvers result vector.
+   */
+  const Eigen::VectorXd & result() const;
+
   /** Set the logger for this solver instance */
   void logger(std::shared_ptr<mc_rtc::Logger> logger);
-  
- protected:
+
+  /** Set the GUI helper for this solver instance */
+  void gui(std::shared_ptr<mc_rtc::gui::StateBuilder> gui);
+
+protected:
   
   std::shared_ptr<mc_rbdyn::Robots> robots_p;
   double timeStep;
 
+  /** Holds mc_rbdyn::Contact in the solver */
+  std::vector<mc_rbdyn::Contact> contacts_;
   /** Holds unilateral contacts in the solver */
   std::vector<tasks::qp::UnilateralContact> uniContacts;
   /** Holds bilateral contacts in the solver */
   std::vector<tasks::qp::BilateralContact> biContacts;
 
   /** Holds MetaTask currently in the solver */
-  std::vector<mc_tasks::MetaTask*> metaTasks;
+  std::vector<mc_tasks::MetaTask *> metaTasks_;
 
- protected:
-  
   /** The actual solver instance */
   std::shared_ptr<tasks::qp::QPSolver> solver;
   /** Latest result */
@@ -280,8 +325,25 @@ public:
   /** Pointer to the Logger */
   std::shared_ptr<mc_rtc::Logger> logger_ = nullptr;
 
- public:
-  
+  /** Pointer to the GUI helper */
+  std::shared_ptr<mc_rtc::gui::StateBuilder> gui_ = nullptr;
+
+  void addTaskToGUI(mc_tasks::MetaTask * task);
+
+  /** Run without feedback (open-loop) */
+  bool runOpenLoop();
+
+  /** Run with encoders' feedback */
+  bool runJointsFeedback(bool wVelocity);
+
+  /** Feedback data */
+  // std::vector<std::vector<double>> prev_encoders_{};
+  // std::vector<std::vector<double>> encoders_alpha_{};
+  // std::vector<std::vector<std::vector<double>>> control_q_{};
+  // std::vector<std::vector<std::vector<double>>> control_alpha_{};
+
+public:
+
   /** \deprecated{Default constructor, not made for general usage} */
   // QPSolver() {}
 
@@ -337,6 +399,6 @@ struct MC_SOLVER_DLLAPI PassivityPIDTerm_QPSolver : public QPSolver
   std::shared_ptr<torque_control::PassivityPIDTerm> fbTerm_;
 };
  
-}
+} // namespace mc_solver
 
 #endif

@@ -9,7 +9,7 @@ namespace mc_tasks
  *
  * The AdmittanceTask is by default a SurfaceTransformTask, i.e. pure position
  * control of a surface frame. Admittance coefficients that map force errors to
- * displacements (see [1] and [2]) are initially set to zero. 
+ * displacements (see [1] and [2]) are initially set to zero.
  *
  * When the admittance along one axis (Fx, Fy, Fz, Tx, Ty or Tz) is set to a
  * non-zero positive value, this axis switches from position to force control.
@@ -21,12 +21,12 @@ namespace mc_tasks
  * See the discussion in [4] for a comparison with the ComplianceTask.
  *
  * [1] https://en.wikipedia.org/wiki/Mechanical_impedance
- * [2] https://en.wikipedia.org/wiki/Impedance_analogy  
+ * [2] https://en.wikipedia.org/wiki/Impedance_analogy
  * [3] https://doi.org/10.1109/IROS.2010.5651082
  * [4] https://gite.lirmm.fr/multi-contact/mc_rtc/issues/34
  *
  */
-struct MC_TASKS_DLLAPI AdmittanceTask: SurfaceTransformTask
+struct MC_TASKS_DLLAPI AdmittanceTask : SurfaceTransformTask
 {
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -40,8 +40,6 @@ public:
    *
    * \param robotIndex Which robot among the robots
    *
-   * \param timestep Timestep of the controller
-   *
    * \param stiffness Stiffness of the underlying SurfaceTransform task
    *
    * \param weight Weight of the underlying SurfaceTransform task
@@ -51,10 +49,10 @@ public:
    *
    */
   AdmittanceTask(const std::string & robotSurface,
-      const mc_rbdyn::Robots & robots,
-      unsigned robotIndex,
-      double timestep,
-      double stiffness = 5.0, double weight = 1000.0);
+                 const mc_rbdyn::Robots & robots,
+                 unsigned robotIndex,
+                 double stiffness = 5.0,
+                 double weight = 1000.0);
 
   /*! \brief Reset the task
    *
@@ -63,17 +61,7 @@ public:
    * to zero.
    *
    */
-  virtual void reset();
-
-  /*! \brief Reset pose offset in all position-controlled axes
-   *
-   * Position offsets accumulate over force-controlled axes. Therefore, if at
-   * some point the admittance is set back to zero on a force-controlled axis,
-   * the end-effector will stay where it is. Call this function to change this
-   * behavior and make the effector revert to targetPose().
-   *
-   */
-  void resetPoseOffset();
+  void reset() override;
 
   /*! \brief Get the admittance coefficients of the task
    *
@@ -93,22 +81,50 @@ public:
     admittance_ = admittance;
   }
 
-  /*! \brief Get target translation and orientation for the position task
+  /*! \brief Set the task stiffness and damping
+   *
+   * Damping is set to the critical value of 2 * sqrt(stiffness).
+   *
+   * \param stiffness Task stiffness
    *
    */
-  const sva::PTransformd & targetPose() const
+  void setCriticalGains(double stiffness)
   {
-    return X_0_target_;
+    setGains(stiffness, 2 * std::sqrt(stiffness));
+  }
+
+  /*! \brief Get the current pose of the robot surface in the inertial frame
+   *
+   */
+  sva::PTransformd surfacePose() const
+  {
+    return robots_.robot(rIndex_).surface(surfaceName).X_0_s(robots_.robot(rIndex_));
+  }
+
+  /*! \brief Get the target pose for the position task
+   *
+   */
+  sva::PTransformd targetPose()
+  {
+    return this->target();
   }
 
   /*! \brief Set target position and orientation
    *
-   * \param X_0_target Plucker transform from the world frame to the target frame.
+   * \param X_0_target Plucker transform to the target frame.
    *
    */
   void targetPose(const sva::PTransformd & X_0_target)
   {
-    X_0_target_ = X_0_target;
+    this->target(X_0_target);
+  }
+
+  /*! \brief Transform from current surface pose to target.
+   *
+   */
+  sva::PTransformd poseError()
+  {
+    return targetPose() * surfacePose().inv();
   }
 
   /*! \brief Get the target wrench in the surface frame
@@ -124,7 +140,7 @@ public:
    * \param wrench Target wrench in the surface frame
    *
    */
-  void targetWrench(const sva::ForceVecd& wrench)
+  void targetWrench(const sva::ForceVecd & wrench)
   {
     targetWrench_ = wrench;
   }
@@ -134,79 +150,111 @@ public:
    */
   sva::ForceVecd measuredWrench() const
   {
-    sva::ForceVecd w_fsactual = sensor_.removeGravity(robot_);
-    return X_fsactual_surf_.dualMul(w_fsactual);
+    return robots_.robot(rIndex_).surfaceWrench(surface_.name());
+  }
+
+  /*! \brief Get the measured pressure in the surface frame
+   *
+   */
+  double measuredPressure() const
+  {
+    return measuredWrench().force()[2];
   }
 
   /*! \brief Set the maximum translation velocity of the task */
-  void maxTransVel(const Eigen::Vector3d & maxTransVel)
+  void maxLinearVel(const Eigen::Vector3d & maxLinearVel)
   {
-    if ((maxTransVel.array() <= 0.).any())
+    if((maxLinearVel.array() <= 0.).any())
     {
-      LOG_ERROR("discarding maxTransVel update as it is not positive");
+      LOG_ERROR("discarding maxLinearVel update as it is not positive");
       return;
     }
-    maxTransVel_ = maxTransVel;
-  }
-
-  /*! \brief Set the maximum translation of the task */
-  void maxTransPos(const Eigen::Vector3d & maxTransPos)
-  {
-    if ((maxTransPos.array() <= 0.).any())
-    {
-      LOG_ERROR("discarding maxTransPos update as it is not positive");
-      return;
-    }
-    maxTransPos_ = maxTransPos;
+    maxLinearVel_ = maxLinearVel;
   }
 
   /*! \brief Set the maximum angular velocity of the task */
-  void maxRpyVel(const Eigen::Vector3d & maxRpyVel)
+  void maxAngularVel(const Eigen::Vector3d & maxAngularVel)
   {
-    if ((maxRpyVel.array() <= 0.).any())
+    if((maxAngularVel.array() <= 0.).any())
     {
-      LOG_ERROR("discarding maxRpyVel update as it is not positive");
+      LOG_ERROR("discarding maxAngularVel update as it is not positive");
       return;
     }
-    maxRpyVel_ = maxRpyVel;
+    maxAngularVel_ = maxAngularVel;
   }
 
-  /*! \brief Set the maximum angular position of the task */
-  void maxRpyPos(const Eigen::Vector3d & maxRpyPos)
+  /*! \brief Add a feedforward reference body velocity on top of force control.
+   *
+   * \param velB Feedforward body velocity
+   *
+   * That is to say, velB is the velocity of the surface frame expressed in the
+   * surface frame. See e.g. (Murray et al., 1994, CRC Press).
+   *
+   */
+  void refVelB(const sva::MotionVecd & velB)
   {
-    if ((maxRpyPos.array() <= 0.).any())
-    {
-      LOG_ERROR("discarding maxRpyPos update as it is not positive");
-      return;
-    }
-    maxRpyPos_ = maxRpyPos;
+    feedforwardVelB_ = velB;
+  }
+
+  /*! \brief Set dimensional stiffness
+   *
+   * This function leaves damping unchanged.
+   *
+   * \param stiffness Dimensional stiffness as a motion vector
+   *
+   */
+  void stiffness(const sva::MotionVecd & stiffness)
+  {
+    return SurfaceTransformTask::stiffness(stiffness);
   }
 
 protected:
+  Eigen::Vector3d maxAngularVel_ = {0.1, 0.1, 0.1}; // [rad] / [s]
+  Eigen::Vector3d maxLinearVel_ = {0.1, 0.1, 0.1}; // [m] / [s]
+  const mc_rbdyn::Robots & robots_;
+  unsigned int rIndex_;
   const mc_rbdyn::Surface & surface_;
+  std::map<char, bool> isClampingAngularVel_ = {{'x', false}, {'y', false}, {'z', false}};
+  std::map<char, bool> isClampingLinearVel_ = {{'x', false}, {'y', false}, {'z', false}};
   sva::ForceVecd admittance_ = sva::ForceVecd(Eigen::Vector6d::Zero());
-  const mc_rbdyn::Robot & robot_;
+  sva::ForceVecd targetWrench_ = sva::ForceVecd(Eigen::Vector6d::Zero());
+  sva::ForceVecd wrenchError_ = sva::ForceVecd(Eigen::Vector6d::Zero());
+  sva::MotionVecd feedforwardVelB_ = sva::MotionVecd(Eigen::Vector6d::Zero());
 
   void update() override;
 
-private:
-  sva::ForceVecd wrenchError_ = sva::ForceVecd(Eigen::Vector6d::Zero());
-  sva::PTransformd X_0_target_;
-  sva::ForceVecd targetWrench_ = sva::ForceVecd(Eigen::Vector6d::Zero());
-  const mc_rbdyn::ForceSensor & sensor_;
-  double timestep_;
-  Eigen::Vector3d trans_target_delta_ = Eigen::Vector3d::Zero();
-  Eigen::Vector3d rpy_target_delta_ = Eigen::Vector3d::Zero();
-  Eigen::Vector3d maxTransPos_ = Eigen::Vector3d(0.1, 0.1, 0.1);  // [m]
-  Eigen::Vector3d maxTransVel_ = Eigen::Vector3d(0.1, 0.1, 0.1);  // [m] / [s]
-  Eigen::Vector3d maxRpyPos_ = Eigen::Vector3d(0.5, 0.5, 0.5);  // [rad]
-  Eigen::Vector3d maxRpyVel_ = Eigen::Vector3d(0.1, 0.1, 0.1);  // [rad] / [s]
-  const sva::PTransformd X_fsactual_surf_;
+  /** Add support for the following criterias:
+   *
+   * - wrench: completed when the measuredWrench reaches the given wrench, if
+   *   some values are NaN, this direction is ignored
+   *
+   */
+  std::function<bool(const mc_tasks::MetaTask & task, std::string &)> buildCompletionCriteria(
+      double dt,
+      const mc_rtc::Configuration & config) const override;
 
+  void addToGUI(mc_rtc::gui::StateBuilder & gui) override;
   void addToLogger(mc_rtc::Logger & logger) override;
   void removeFromLogger(mc_rtc::Logger & logger) override;
 
+  /** Surface transform's refVelB() becomes internal to the task. An additional
+   * velocity offset can be added using AdmittanceTask::refVelB().
+   *
+   */
+  using SurfaceTransformTask::refVelB;
+
+  /** Don't use surface transform's stiffness() setter as it applies critical
+   * damping, which is usually not good for admittance control. Use
+   * setCriticalGains() if you do desire this behavior.
+   *
+   */
+  using SurfaceTransformTask::stiffness;
+
+  /** Surface transform's target becomes internal to the task. Its setter is
+   * now targetPose().
+   *
+   */
   using SurfaceTransformTask::target;
 };
 
-}
+} // namespace mc_tasks

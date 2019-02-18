@@ -1,44 +1,48 @@
-#include <boost/test/unit_test.hpp>
-#include <boost/mpl/list.hpp>
-
-#include <mc_tasks/MetaTaskLoader.h>
-
+#include <mc_rbdyn/RobotLoader.h>
+#include <mc_rbdyn/configuration_io.h>
 #include <mc_tasks/AddRemoveContactTask.h>
 #include <mc_tasks/CoMTask.h>
 #include <mc_tasks/ComplianceTask.h>
 #include <mc_tasks/GazeTask.h>
+#include <mc_tasks/MetaTaskLoader.h>
 #include <mc_tasks/PositionBasedVisServoTask.h>
 #include <mc_tasks/RelativeEndEffectorTask.h>
 #include <mc_tasks/SurfaceTransformTask.h>
 #include <mc_tasks/VectorOrientationTask.h>
 
-#include <mc_rbdyn/RobotLoader.h>
-#include <mc_rbdyn/configuration_io.h>
+#include <boost/mpl/list.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include "utils.h"
 
 static bool configured = configureRobotLoader();
 /* Create Robots with one robot and an environment for the purpose of the test */
-static auto rm = mc_rbdyn::RobotLoader::get_robot_module("HRP2DRC");
-static auto em = mc_rbdyn::RobotLoader::get_robot_module("env",
-                                                  std::string(mc_rtc::MC_ENV_DESCRIPTION_PATH),
-                                                  std::string("ground"));
+static auto rm = mc_rbdyn::RobotLoader::get_robot_module("JVRC-1");
+static auto em =
+    mc_rbdyn::RobotLoader::get_robot_module("env", std::string(mc_rtc::MC_ENV_DESCRIPTION_PATH), std::string("ground"));
 static auto robots = mc_rbdyn::loadRobotAndEnv(*rm, *em);
 static mc_solver::QPSolver solver(robots, 0.005);
 
 template<typename T>
-struct fail : public std::false_type {};
+struct fail : public std::false_type
+{
+};
 
 template<typename T>
 struct TaskTester
 {
   static_assert(fail<T>::value, "This should be specialized");
-  mc_tasks::MetaTaskPtr make_ref() { return nullptr; }
+  mc_tasks::MetaTaskPtr make_ref()
+  {
+    return nullptr;
+  }
 
-  std::string json() { return ""; }
+  std::string json()
+  {
+    return "";
+  }
 
-  void check(const mc_tasks::MetaTaskPtr & /*ref*/,
-             const mc_tasks::MetaTaskPtr & /*loaded*/) {}
+  void check(const mc_tasks::MetaTaskPtr & /*ref*/, const mc_tasks::MetaTaskPtr & /*loaded*/) {}
 };
 
 template<>
@@ -64,8 +68,7 @@ struct TaskTester<mc_tasks::CoMTask>
     return ret;
   }
 
-  void check(const mc_tasks::MetaTaskPtr & ref_p,
-             const mc_tasks::MetaTaskPtr & loaded_p)
+  void check(const mc_tasks::MetaTaskPtr & ref_p, const mc_tasks::MetaTaskPtr & loaded_p)
   {
     auto ref = std::dynamic_pointer_cast<mc_tasks::CoMTask>(ref_p);
     auto loaded = std::dynamic_pointer_cast<mc_tasks::CoMTask>(loaded_p);
@@ -81,62 +84,63 @@ struct TaskTester<mc_tasks::CoMTask>
   double weight = fabs(rnd());
 };
 
-#define AddRemoveContactTaskTester(T, typeStr) \
-template<> \
-struct TaskTester<T> \
-{ \
-  mc_tasks::MetaTaskPtr make_ref() \
-  { \
-    auto ret  = std::make_shared<T>(solver, contact, speed, stiffness, weight); \
-    return ret; \
-  } \
- \
-  std::string json() \
-  { \
-    mc_rtc::Configuration config; \
-    config.add("type", typeStr); \
-    config.add("contact", contact); \
-    config.add("stiffness", stiffness); \
-    config.add("weight", weight); \
-    config.add("speed", speed); \
-    auto ret = getTmpFile(); \
-    config.save(ret); \
-    return ret; \
-  } \
- \
-  void check(const mc_tasks::MetaTaskPtr & ref_p, \
-             const mc_tasks::MetaTaskPtr & loaded_p) \
-  { \
-    auto ref = std::dynamic_pointer_cast<T>(ref_p); \
-    auto loaded = std::dynamic_pointer_cast<T>(loaded_p); \
-    BOOST_REQUIRE(ref); \
-    BOOST_REQUIRE(loaded); \
-    BOOST_CHECK_CLOSE(ref->stiffness(), loaded->stiffness(), 1e-6); \
-    BOOST_CHECK_CLOSE(ref->weight(), loaded->weight(), 1e-6); \
-    BOOST_CHECK_CLOSE(ref->speed(), loaded->speed(), 1e-6); \
-    auto ref_surf = ref->robotSurf; \
-    auto loaded_surf = loaded->robotSurf; \
-    BOOST_CHECK(ref_surf->type() == loaded_surf->type()); \
-    BOOST_CHECK(ref_surf->name() == loaded_surf->name()); \
-    BOOST_CHECK(ref->bodyId == loaded->bodyId); \
-    BOOST_CHECK(ref->robotBodyIndex == loaded->robotBodyIndex); \
-    BOOST_CHECK(ref->targetTf == loaded->targetTf); \
-  } \
- \
-  mc_rbdyn::Contact contact = mc_rbdyn::Contact(*robots, "LFullSole", "AllGround"); \
-  double speed = fabs(rnd()); \
-  double stiffness = fabs(rnd()); \
-  double weight = fabs(rnd()); \
-};
+#define AddRemoveContactTaskTester(T, typeStr)                                              \
+  template<>                                                                                \
+  struct TaskTester<T>                                                                      \
+  {                                                                                         \
+    mc_tasks::MetaTaskPtr make_ref()                                                        \
+    {                                                                                       \
+      auto ret = std::make_shared<T>(solver, contact, speed, stiffness, weight);            \
+      return ret;                                                                           \
+    }                                                                                       \
+                                                                                            \
+    std::string json()                                                                      \
+    {                                                                                       \
+      mc_rtc::Configuration config;                                                         \
+      config.add("type", typeStr);                                                          \
+      config.add("contact", contact);                                                       \
+      config.add("stiffness", stiffness);                                                   \
+      config.add("weight", weight);                                                         \
+      config.add("speed", speed);                                                           \
+      auto ret = getTmpFile();                                                              \
+      config.save(ret);                                                                     \
+      return ret;                                                                           \
+    }                                                                                       \
+                                                                                            \
+    void check(const mc_tasks::MetaTaskPtr & ref_p, const mc_tasks::MetaTaskPtr & loaded_p) \
+    {                                                                                       \
+      auto ref = std::dynamic_pointer_cast<T>(ref_p);                                       \
+      auto loaded = std::dynamic_pointer_cast<T>(loaded_p);                                 \
+      BOOST_REQUIRE(ref);                                                                   \
+      BOOST_REQUIRE(loaded);                                                                \
+      BOOST_CHECK_CLOSE(ref->stiffness(), loaded->stiffness(), 1e-6);                       \
+      BOOST_CHECK_CLOSE(ref->weight(), loaded->weight(), 1e-6);                             \
+      BOOST_CHECK_CLOSE(ref->speed(), loaded->speed(), 1e-6);                               \
+      auto ref_surf = ref->robotSurf;                                                       \
+      auto loaded_surf = loaded->robotSurf;                                                 \
+      BOOST_CHECK(ref_surf->type() == loaded_surf->type());                                 \
+      BOOST_CHECK(ref_surf->name() == loaded_surf->name());                                 \
+      BOOST_CHECK(ref->bodyId == loaded->bodyId);                                           \
+      BOOST_CHECK(ref->robotBodyIndex == loaded->robotBodyIndex);                           \
+      BOOST_CHECK(ref->targetTf == loaded->targetTf);                                       \
+    }                                                                                       \
+                                                                                            \
+    mc_rbdyn::Contact contact = mc_rbdyn::Contact(*robots, "LeftFoot", "AllGround");        \
+    double speed = fabs(rnd());                                                             \
+    double stiffness = fabs(rnd());                                                         \
+    double weight = fabs(rnd());                                                            \
+  };
 AddRemoveContactTaskTester(mc_tasks::AddContactTask, "addContact")
-AddRemoveContactTaskTester(mc_tasks::RemoveContactTask, "removeContact")
+    AddRemoveContactTaskTester(mc_tasks::RemoveContactTask, "removeContact")
 
-template<>
-struct TaskTester<mc_tasks::ComplianceTask>
+        template<>
+        struct TaskTester<mc_tasks::ComplianceTask>
 {
   mc_tasks::MetaTaskPtr make_ref()
   {
-    auto t = std::shared_ptr<mc_tasks::ComplianceTask>(new mc_tasks::ComplianceTask(*robots, 0, "RARM_LINK6", solver.dt(), dof, stiffness, weight, forceThresh, torqueThresh, forceGain, torqueGain));
+    auto t = std::shared_ptr<mc_tasks::ComplianceTask>(
+        new mc_tasks::ComplianceTask(*robots, 0, "R_WRIST_Y_S", solver.dt(), dof, stiffness, weight, forceThresh,
+                                     torqueThresh, forceGain, torqueGain));
     t->setTargetWrench(wrench);
     return t;
   }
@@ -146,7 +150,7 @@ struct TaskTester<mc_tasks::ComplianceTask>
     mc_rtc::Configuration config;
     config.add("type", "compliance");
     config.add("robotIndex", 0);
-    config.add("body", "RARM_LINK6");
+    config.add("body", "R_WRIST_Y_S");
     config.add("dof", dof);
     config.add("stiffness", stiffness);
     config.add("weight", weight);
@@ -160,8 +164,7 @@ struct TaskTester<mc_tasks::ComplianceTask>
     return ret;
   }
 
-  void check(const mc_tasks::MetaTaskPtr & ref_p,
-             const mc_tasks::MetaTaskPtr & loaded_p)
+  void check(const mc_tasks::MetaTaskPtr & ref_p, const mc_tasks::MetaTaskPtr & loaded_p)
   {
     auto ref = std::dynamic_pointer_cast<mc_tasks::ComplianceTask>(ref_p);
     auto loaded = std::dynamic_pointer_cast<mc_tasks::ComplianceTask>(loaded_p);
@@ -194,7 +197,7 @@ struct TaskTester<mc_tasks::OrientationTask>
 {
   mc_tasks::MetaTaskPtr make_ref()
   {
-    auto t = std::make_shared<mc_tasks::OrientationTask>("RARM_LINK6", *robots, 0, stiffness, weight);
+    auto t = std::make_shared<mc_tasks::OrientationTask>("R_WRIST_Y_S", *robots, 0, stiffness, weight);
     t->orientation(ori);
     return t;
   }
@@ -204,7 +207,7 @@ struct TaskTester<mc_tasks::OrientationTask>
     mc_rtc::Configuration config;
     config.add("type", "orientation");
     config.add("robotIndex", 0);
-    config.add("body", "RARM_LINK6");
+    config.add("body", "R_WRIST_Y_S");
     config.add("stiffness", stiffness);
     config.add("weight", weight);
     config.add("orientation", ori);
@@ -213,8 +216,7 @@ struct TaskTester<mc_tasks::OrientationTask>
     return ret;
   }
 
-  void check(const mc_tasks::MetaTaskPtr & ref_p,
-             const mc_tasks::MetaTaskPtr & loaded_p)
+  void check(const mc_tasks::MetaTaskPtr & ref_p, const mc_tasks::MetaTaskPtr & loaded_p)
   {
     auto ref = std::dynamic_pointer_cast<mc_tasks::OrientationTask>(ref_p);
     auto loaded = std::dynamic_pointer_cast<mc_tasks::OrientationTask>(loaded_p);
@@ -235,7 +237,7 @@ struct TaskTester<mc_tasks::PositionTask>
 {
   mc_tasks::MetaTaskPtr make_ref()
   {
-    auto t = std::make_shared<mc_tasks::PositionTask>("RARM_LINK6", *robots, 0, stiffness, weight);
+    auto t = std::make_shared<mc_tasks::PositionTask>("R_WRIST_Y_S", *robots, 0, stiffness, weight);
     t->position(pos);
     return t;
   }
@@ -245,7 +247,7 @@ struct TaskTester<mc_tasks::PositionTask>
     mc_rtc::Configuration config;
     config.add("type", "position");
     config.add("robotIndex", 0);
-    config.add("body", "RARM_LINK6");
+    config.add("body", "R_WRIST_Y_S");
     config.add("stiffness", stiffness);
     config.add("weight", weight);
     config.add("position", pos);
@@ -254,8 +256,7 @@ struct TaskTester<mc_tasks::PositionTask>
     return ret;
   }
 
-  void check(const mc_tasks::MetaTaskPtr & ref_p,
-             const mc_tasks::MetaTaskPtr & loaded_p)
+  void check(const mc_tasks::MetaTaskPtr & ref_p, const mc_tasks::MetaTaskPtr & loaded_p)
   {
     auto ref = std::dynamic_pointer_cast<mc_tasks::PositionTask>(ref_p);
     auto loaded = std::dynamic_pointer_cast<mc_tasks::PositionTask>(loaded_p);
@@ -276,7 +277,7 @@ struct TaskTester<mc_tasks::EndEffectorTask>
 {
   mc_tasks::MetaTaskPtr make_ref()
   {
-    auto t = std::make_shared<mc_tasks::EndEffectorTask>("RARM_LINK6", *robots, 0, stiffness, weight);
+    auto t = std::make_shared<mc_tasks::EndEffectorTask>("R_WRIST_Y_S", *robots, 0, stiffness, weight);
     t->set_ef_pose({ori, pos});
     return t;
   }
@@ -286,7 +287,7 @@ struct TaskTester<mc_tasks::EndEffectorTask>
     mc_rtc::Configuration config;
     config.add("type", "body6d");
     config.add("robotIndex", 0);
-    config.add("body", "RARM_LINK6");
+    config.add("body", "R_WRIST_Y_S");
     config.add("stiffness", stiffness);
     config.add("weight", weight);
     config.add("position", pos);
@@ -296,8 +297,7 @@ struct TaskTester<mc_tasks::EndEffectorTask>
     return ret;
   }
 
-  void check(const mc_tasks::MetaTaskPtr & ref_p,
-             const mc_tasks::MetaTaskPtr & loaded_p)
+  void check(const mc_tasks::MetaTaskPtr & ref_p, const mc_tasks::MetaTaskPtr & loaded_p)
   {
     auto ref = std::dynamic_pointer_cast<mc_tasks::EndEffectorTask>(ref_p);
     auto loaded = std::dynamic_pointer_cast<mc_tasks::EndEffectorTask>(loaded_p);
@@ -322,7 +322,8 @@ struct TaskTester<mc_tasks::RelativeEndEffectorTask>
 {
   mc_tasks::MetaTaskPtr make_ref()
   {
-    auto t = std::make_shared<mc_tasks::RelativeEndEffectorTask>("RARM_LINK6", *robots, 0, "LARM_LINK6", stiffness, weight);
+    auto t = std::make_shared<mc_tasks::RelativeEndEffectorTask>("R_WRIST_Y_S", *robots, 0, "L_WRIST_Y_S", stiffness,
+                                                                 weight);
     t->set_ef_pose({ori, pos});
     return t;
   }
@@ -332,8 +333,8 @@ struct TaskTester<mc_tasks::RelativeEndEffectorTask>
     mc_rtc::Configuration config;
     config.add("type", "relBody6d");
     config.add("robotIndex", 0);
-    config.add("body", "RARM_LINK6");
-    config.add("relBody", "LARM_LINK6");
+    config.add("body", "R_WRIST_Y_S");
+    config.add("relBody", "L_WRIST_Y_S");
     config.add("stiffness", stiffness);
     config.add("weight", weight);
     config.add("position", pos);
@@ -343,8 +344,7 @@ struct TaskTester<mc_tasks::RelativeEndEffectorTask>
     return ret;
   }
 
-  void check(const mc_tasks::MetaTaskPtr & ref_p,
-             const mc_tasks::MetaTaskPtr & loaded_p)
+  void check(const mc_tasks::MetaTaskPtr & ref_p, const mc_tasks::MetaTaskPtr & loaded_p)
   {
     auto ref = std::dynamic_pointer_cast<mc_tasks::RelativeEndEffectorTask>(ref_p);
     auto loaded = std::dynamic_pointer_cast<mc_tasks::RelativeEndEffectorTask>(loaded_p);
@@ -369,7 +369,8 @@ struct TaskTester<mc_tasks::GazeTask>
 {
   mc_tasks::MetaTaskPtr make_ref()
   {
-    auto ret = std::make_shared<mc_tasks::GazeTask>("HEAD_LINK1", Eigen::Vector3d::Zero(), X_b_gaze, *robots, 0, stiffness, weight);
+    auto ret = std::make_shared<mc_tasks::GazeTask>("NECK_P_S", Eigen::Vector3d::Zero(), X_b_gaze, *robots, 0,
+                                                    stiffness, weight);
     return ret;
   }
 
@@ -378,7 +379,7 @@ struct TaskTester<mc_tasks::GazeTask>
     mc_rtc::Configuration config;
     config.add("type", "gaze");
     config.add("robotIndex", 0);
-    config.add("body", "HEAD_LINK1");
+    config.add("body", "NECK_P_S");
     config.add("stiffness", stiffness);
     config.add("weight", weight);
     config.add("X_b_gaze", X_b_gaze);
@@ -387,8 +388,7 @@ struct TaskTester<mc_tasks::GazeTask>
     return ret;
   }
 
-  void check(const mc_tasks::MetaTaskPtr & ref_p,
-             const mc_tasks::MetaTaskPtr & loaded_p)
+  void check(const mc_tasks::MetaTaskPtr & ref_p, const mc_tasks::MetaTaskPtr & loaded_p)
   {
     auto ref = std::dynamic_pointer_cast<mc_tasks::GazeTask>(ref_p);
     auto loaded = std::dynamic_pointer_cast<mc_tasks::GazeTask>(loaded_p);
@@ -408,7 +408,8 @@ struct TaskTester<mc_tasks::PositionBasedVisServoTask>
 {
   mc_tasks::MetaTaskPtr make_ref()
   {
-    auto ret = std::make_shared<mc_tasks::PositionBasedVisServoTask>("HEAD_LINK1", sva::PTransformd::Identity(), X_b_s, *robots, 0, stiffness, weight);
+    auto ret = std::make_shared<mc_tasks::PositionBasedVisServoTask>("NECK_P_S", sva::PTransformd::Identity(), X_b_s,
+                                                                     *robots, 0, stiffness, weight);
     return ret;
   }
 
@@ -417,7 +418,7 @@ struct TaskTester<mc_tasks::PositionBasedVisServoTask>
     mc_rtc::Configuration config;
     config.add("type", "pbvs");
     config.add("robotIndex", 0);
-    config.add("surface", "LFullSole");
+    config.add("surface", "LeftFoot");
     config.add("stiffness", stiffness);
     config.add("weight", weight);
     auto ret = getTmpFile();
@@ -425,8 +426,7 @@ struct TaskTester<mc_tasks::PositionBasedVisServoTask>
     return ret;
   }
 
-  void check(const mc_tasks::MetaTaskPtr & ref_p,
-             const mc_tasks::MetaTaskPtr & loaded_p)
+  void check(const mc_tasks::MetaTaskPtr & ref_p, const mc_tasks::MetaTaskPtr & loaded_p)
   {
     auto ref = std::dynamic_pointer_cast<mc_tasks::PositionBasedVisServoTask>(ref_p);
     auto loaded = std::dynamic_pointer_cast<mc_tasks::PositionBasedVisServoTask>(loaded_p);
@@ -446,7 +446,7 @@ struct TaskTester<mc_tasks::SurfaceTransformTask>
 {
   mc_tasks::MetaTaskPtr make_ref()
   {
-    auto ret = std::make_shared<mc_tasks::SurfaceTransformTask>("LFullSole", *robots, 0, stiffness, weight);
+    auto ret = std::make_shared<mc_tasks::SurfaceTransformTask>("LeftFoot", *robots, 0, stiffness, weight);
     ret->target(target);
     return ret;
   }
@@ -459,14 +459,13 @@ struct TaskTester<mc_tasks::SurfaceTransformTask>
     config.add("stiffness", stiffness);
     config.add("weight", weight);
     config.add("target", target);
-    config.add("surface", "LFullSole");
+    config.add("surface", "LeftFoot");
     auto ret = getTmpFile();
     config.save(ret);
     return ret;
   }
 
-  void check(const mc_tasks::MetaTaskPtr & ref_p,
-             const mc_tasks::MetaTaskPtr & loaded_p)
+  void check(const mc_tasks::MetaTaskPtr & ref_p, const mc_tasks::MetaTaskPtr & loaded_p)
   {
     auto ref = std::dynamic_pointer_cast<mc_tasks::SurfaceTransformTask>(ref_p);
     auto loaded = std::dynamic_pointer_cast<mc_tasks::SurfaceTransformTask>(loaded_p);
@@ -489,7 +488,8 @@ struct TaskTester<mc_tasks::VectorOrientationTask>
 {
   mc_tasks::MetaTaskPtr make_ref()
   {
-    auto ret = std::make_shared<mc_tasks::VectorOrientationTask>("RARM_LINK6", bodyVector, targetVector, *robots, 0, stiffness, weight);
+    auto ret = std::make_shared<mc_tasks::VectorOrientationTask>("R_WRIST_Y_S", bodyVector, targetVector, *robots, 0,
+                                                                 stiffness, weight);
     return ret;
   }
 
@@ -497,7 +497,7 @@ struct TaskTester<mc_tasks::VectorOrientationTask>
   {
     mc_rtc::Configuration config;
     config.add("type", "vectorOrientation");
-    config.add("body", "RARM_LINK6");
+    config.add("body", "R_WRIST_Y_S");
     config.add("bodyVector", bodyVector);
     config.add("targetVector", targetVector);
     config.add("robotIndex", 0);
@@ -508,8 +508,7 @@ struct TaskTester<mc_tasks::VectorOrientationTask>
     return ret;
   }
 
-  void check(const mc_tasks::MetaTaskPtr & ref_p,
-             const mc_tasks::MetaTaskPtr & loaded_p)
+  void check(const mc_tasks::MetaTaskPtr & ref_p, const mc_tasks::MetaTaskPtr & loaded_p)
   {
     auto ref = std::dynamic_pointer_cast<mc_tasks::VectorOrientationTask>(ref_p);
     auto loaded = std::dynamic_pointer_cast<mc_tasks::VectorOrientationTask>(loaded_p);
@@ -538,7 +537,8 @@ typedef boost::mpl::list<mc_tasks::CoMTask,
                          mc_tasks::GazeTask,
                          mc_tasks::PositionBasedVisServoTask,
                          mc_tasks::SurfaceTransformTask,
-                         mc_tasks::VectorOrientationTask> test_types;
+                         mc_tasks::VectorOrientationTask>
+    test_types;
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(TestMetaTaskLoader, T, test_types)
 {

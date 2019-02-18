@@ -2,15 +2,15 @@
 
 #include <mc_rtc/logging.h>
 
-#include <fstream>
-
 #include <boost/filesystem.hpp>
+
+#include <fstream>
 namespace bfs = boost::filesystem;
 
 namespace mc_robots
 {
 
-EnvRobotModule::EnvRobotModule(const std::string & env_path, const std::string & env_name)
+EnvRobotModule::EnvRobotModule(const std::string & env_path, const std::string & env_name, bool fixed)
 : RobotModule(env_path, env_name)
 {
   std::ifstream ifs(urdf_path);
@@ -18,7 +18,7 @@ EnvRobotModule::EnvRobotModule(const std::string & env_path, const std::string &
   {
     std::stringstream urdf;
     urdf << ifs.rdbuf();
-    mc_rbdyn_urdf::URDFParserResult res = mc_rbdyn_urdf::rbdyn_from_urdf(urdf.str());
+    mc_rbdyn_urdf::URDFParserResult res = mc_rbdyn_urdf::rbdyn_from_urdf(urdf.str(), fixed);
     mb = res.mb;
     mbc = res.mbc;
     mbg = res.mbg;
@@ -42,12 +42,14 @@ EnvRobotModule::EnvRobotModule(const std::string & env_path, const std::string &
         }
       }
     }
+    expand_stance();
+    make_default_ref_joint_order();
   }
   else
   {
     LOG_ERROR("Could not load env model at " << urdf_path)
-    throw("Could not open env model");
+    LOG_ERROR_AND_THROW(std::runtime_error, "Could not open env model")
   }
 }
 
-}
+} // namespace mc_robots

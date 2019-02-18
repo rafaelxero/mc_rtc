@@ -1,5 +1,4 @@
 #include <mc_control/mc_global_controller.h>
-
 #include <mc_rbdyn/RobotLoader.h>
 
 /* Implementation file for mc_control::MCGlobalController::Configuration */
@@ -56,8 +55,7 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
     }
     catch(const mc_rtc::LoaderException & exc)
     {
-      LOG_ERROR("Failed to update robot module path(s)")
-      throw std::runtime_error("Failed to update robot module path(s)");
+      LOG_ERROR_AND_THROW(std::runtime_error, "Failed to update robot module path(s)")
     }
   }
   if(rm)
@@ -66,25 +64,68 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
   }
   else
   {
-    std::string robot_name = "HRP2DRC";
-    config("MainRobot", robot_name);
-    if(mc_rbdyn::RobotLoader::has_robot(robot_name))
+    if(!config.has("MainRobot") || config("MainRobot").size() == 0)
     {
-      try
+      std::string robot_name = config("MainRobot", std::string{"HRP2DRC"});
+      if(mc_rbdyn::RobotLoader::has_robot(robot_name))
       {
-        main_robot_module = mc_rbdyn::RobotLoader::get_robot_module(robot_name);
+        try
+        {
+          main_robot_module = mc_rbdyn::RobotLoader::get_robot_module(robot_name);
+        }
+        catch(const mc_rtc::LoaderException & exc)
+        {
+          LOG_ERROR("Failed to create " << robot_name << " to use as a main robot")
+          LOG_ERROR_AND_THROW(std::runtime_error, "Failed to create robot")
+        }
       }
-      catch(const mc_rtc::LoaderException & exc)
+      else
       {
-        LOG_ERROR("Failed to create " << robot_name << " to use as a main robot")
-        throw std::runtime_error("Failed to create robot");
+        LOG_ERROR("Trying to use " << robot_name << " as main robot but this robot cannot be loaded")
+        LOG_ERROR_AND_THROW(std::runtime_error, "Main robot not available")
       }
     }
     else
     {
-      LOG_ERROR("Trying to use " << robot_name << " as main robot but this robot cannot be loaded")
-      throw std::runtime_error("Main robot not available");
+      std::vector<std::string> params = config("MainRobot");
+      if(mc_rbdyn::RobotLoader::has_robot(params[0]))
+      {
+        try
+        {
+          if(params.size() == 1)
+          {
+            main_robot_module = mc_rbdyn::RobotLoader::get_robot_module(params[0]);
+          }
+          else if(params.size() == 2)
+          {
+            main_robot_module = mc_rbdyn::RobotLoader::get_robot_module(params[0], params[1]);
+          }
+          else if(params.size() == 3)
+          {
+            main_robot_module = mc_rbdyn::RobotLoader::get_robot_module(params[0], params[1], params[2]);
+          }
+          else
+          {
+            throw mc_rtc::LoaderException("Too many parameters given to MainRobot");
+          }
+        }
+        catch(const mc_rtc::LoaderException &)
+        {
+          LOG_ERROR("Failed to create main robot using parameters " << config("MainRobot").dump())
+          LOG_ERROR_AND_THROW(std::runtime_error, "Failed to create robot")
+        }
+      }
+      else
+      {
+        LOG_ERROR("Trying to use " << params[0] << " as main robot but this robot cannot be loaded")
+        LOG_ERROR_AND_THROW(std::runtime_error, "Main robot not available")
+      }
     }
+  }
+  main_robot_module->expand_stance();
+  if(main_robot_module->ref_joint_order().size() == 0)
+  {
+    main_robot_module->make_default_ref_joint_order();
   }
 
   controller_module_paths.resize(0);
@@ -116,7 +157,18 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
     initial_controller = enabled_controllers[0];
   }
   config("UpdateReal", update_real);
-  config("UpdateRealFromSensor", update_real_from_sensors);
+  config("UpdateRealFromSensors", update_real_from_sensors);
+  if(config.has("UpdateRealSensorName"))
+  {
+    config("UpdateRealSensorName", update_real_sensor_name);
+  }
+  else
+  {
+    if(main_robot_module->bodySensors().size())
+    {
+      update_real_sensor_name = main_robot_module->bodySensors()[0].name();
+    }
+  }
   config("Default", initial_controller);
   config("Timestep", timestep);
   config("PublishControlState", publish_control_state);
@@ -125,7 +177,8 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
   config("PublishTimestep", publish_timestep);
   if(publish_timestep < timestep)
   {
-    LOG_WARNING("Your ROS publication timestep is lower than your control timestep, your publication timestep will be effectively set to the control timestep")
+    LOG_WARNING("Your ROS publication timestep is lower than your control timestep, your publication timestep will be "
+                "effectively set to the control timestep")
   }
   config("Log", enable_log);
   {
@@ -155,6 +208,79 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
     }
   }
   config("LogTemplate", log_template);
+  /** GUI server options */
+  if(config.has("GUIServer"))
+  {
+    auto gui_config = config("GUIServer");
+    enable_gui_server = gui_config("Enable", false);
+    gui_timestep = gui_config("Timestep", 0.05);
+    if(gui_config.has("IPC"))
+    {
+      auto ipc_config = gui_config("IPC");
+      auto socket = ipc_config("Socket", std::string("/tmp/mc_rtc"));
+      gui_server_pub_uris.push_back("ipc://" + socket + "_pub.ipc");
+      gui_server_rep_uris.push_back("ipc://" + socket + "_rep.ipc");
+    }
+    auto handle_section =
+        [this, &gui_config](const std::string & section, const std::string & protocol, const std::string & default_host,
+                            const std::pair<unsigned int, unsigned int> & default_ports,
+                            const std::vector<unsigned int> & used_ports) -> std::vector<unsigned int> {
+      if(gui_config.has(section))
+      {
+        auto prot_config = gui_config(section);
+        auto host = prot_config("Host", default_host);
+        auto ports = prot_config("Ports", default_ports);
+        auto check_port = [&protocol, &used_ports](unsigned int port) {
+          if(std::find(used_ports.begin(), used_ports.end(), port) != used_ports.end())
+          {
+            LOG_ERROR("Port " << port << " configured for protocol " << protocol
+                              << " is alread used by another protocol. Expect things to go badly.")
+          }
+        };
+        check_port(ports.first);
+        check_port(ports.second);
+        {
+          std::stringstream ss;
+          ss << protocol << "://" << host << ":" << ports.first;
+          gui_server_pub_uris.push_back(ss.str());
+        }
+        {
+          std::stringstream ss;
+          ss << protocol << "://" << host << ":" << ports.second;
+          gui_server_rep_uris.push_back(ss.str());
+        }
+        auto ret = used_ports;
+        ret.push_back(ports.first);
+        ret.push_back(ports.second);
+        return ret;
+      }
+      return used_ports;
+    };
+    auto tcp_ports = handle_section("TCP", "tcp", "*", {4242, 4343}, {});
+    handle_section("WS", "ws", "*", {8080, 8081}, tcp_ports);
+  }
+  else
+  {
+    enable_gui_server = false;
+  }
+  if(enable_gui_server)
+  {
+    LOG_INFO("GUI server enabled")
+    LOG_INFO("Will serve data on:")
+    for(const auto & pub_uri : gui_server_pub_uris)
+    {
+      LOG_INFO("- " << pub_uri)
+    }
+    LOG_INFO("Will handle requests on:")
+    for(const auto & rep_uri : gui_server_rep_uris)
+    {
+      LOG_INFO("- " << rep_uri)
+    }
+  }
+  else
+  {
+    LOG_INFO("GUI server disabled")
+  }
   /* Allow the user not to worry about Default if only one controller is enabled */
   if(enabled_controllers.size() == 1)
   {
@@ -163,11 +289,13 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
   // Load controller-specific configuration
   for(const auto & c : enabled_controllers)
   {
+    mc_rtc::Configuration conf;
+    conf.load(config);
     bfs::path global = bfs::path(mc_rtc::MC_CONTROLLER_INSTALL_PREFIX) / "/etc" / (c + ".conf");
     if(bfs::exists(global))
     {
       LOG_INFO("Loading additional controller configuration" << global)
-      config.load(global.string());
+      conf.load(global.string());
     }
 #ifndef WIN32
     bfs::path local = bfs::path(std::getenv("HOME")) / ".config/mc_rtc/controllers" / (c + ".conf");
@@ -177,8 +305,9 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
     if(bfs::exists(local))
     {
       LOG_INFO("Loading additional controller configuration" << local)
-      config.load(local.string());
+      conf.load(local.string());
     }
+    controllers_configs[c] = conf;
   }
 }
 
@@ -187,4 +316,4 @@ bool MCGlobalController::GlobalConfiguration::enabled(const std::string & ctrl)
   return std::find(enabled_controllers.begin(), enabled_controllers.end(), ctrl) != enabled_controllers.end();
 }
 
-}
+} // namespace mc_control
