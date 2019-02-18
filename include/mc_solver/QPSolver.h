@@ -264,6 +264,12 @@ public:
 
   bool first_run_;
   bool feedback_;
+
+  std::vector<std::vector<double>> q_old_;
+  std::vector<std::vector<double>> alpha_old_;
+  double lambda_switch_;
+  double switch_T_;
+  
   std::vector<double> encoder_prev_;
   std::shared_ptr<std::vector<rbd::MultiBodyConfig>> mbcs_calc_;
   std::vector<std::shared_ptr<void>> shPtrTasksStorage;
@@ -277,7 +283,7 @@ public:
  public:
   
   /** \deprecated{Default constructor, not made for general usage} */
-  QPSolver() {}
+  // QPSolver() {}
 
   void enableFeedback(bool fb);
 };

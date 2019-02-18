@@ -67,10 +67,14 @@ namespace mc_solver
 
 QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
   : robots_p(robots), timeStep(timeStep), solver(),
-    first_run_(true), feedback_(false)
+    first_run_(true), feedback_(false),
+    lambda_switch_(0.0), switch_T_(0.1)
 {
   solver = std::make_shared<tasks::qp::QPSolver>();
   mbcs_calc_ = std::make_shared<std::vector<rbd::MultiBodyConfig>>();
+
+  q_old_ = robot().mbc().q;
+  alpha_old_ = robot().mbc().alpha;
   
   if(timeStep <= 0)
   {
@@ -227,24 +231,69 @@ void QPSolver::updateCurrentState()
   const Eigen::Vector3d & velIn = robot().bodySensor().linearVelocity();
   const Eigen::Vector3d & rateIn = robot().bodySensor().angularVelocity();
 
+  std::vector<double> encoderVel;
+
+  for (size_t i = 0; i <= encoder.size(); i++)
+  {
+    encoderVel.push_back((encoder[i] - encoder_prev_[i]) / timeStep);
+  }
+
+  encoder_prev_ = encoder;
+  
   if(feedback_)
   {
-    robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
-    robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
-
-    for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
+    if (lambda_switch_ < 1.0)
     {
-      const auto & jn = robot().refJointOrder()[i];
+      lambda_switch_ += timeStep / switch_T_;
+      lambda_switch_ = std::min(lambda_switch_, 1.0);
 
-      if(robot().hasJoint(jn))
+      // std::cout << "Rafa, in QPSolver::updateCurrentState, lambda_switch_ = " << lambda_switch_ << std::endl;
+      
+      Eigen::Quaterniond qt_old(q_old_[0][0], q_old_[0][1], q_old_[0][2], q_old_[0][3]);
+      Eigen::Quaterniond qt_res = qt_old.slerp(lambda_switch_, qtIn);
+      Eigen::Vector3d p_res = Eigen::Vector3d(q_old_[0][4], q_old_[0][5], q_old_[0][6]) * lambda_switch_ + pIn * (1.0 - lambda_switch_);
+      Eigen::Vector3d rate_res = Eigen::Vector3d(alpha_old_[0][0], alpha_old_[0][1], alpha_old_[0][2]) * lambda_switch_ + rateIn * (1.0 - lambda_switch_);
+      Eigen::Vector3d vel_res  = Eigen::Vector3d(alpha_old_[0][3], alpha_old_[0][4], alpha_old_[0][5]) * lambda_switch_ + velIn  * (1.0 - lambda_switch_);
+      
+      robot().mbc().q[0] = {qt_res.w(), qt_res.x(), qt_res.y(), qt_res.z(), p_res.x(), p_res.y(), p_res.z()};
+      robot().mbc().alpha[0] = {rate_res.x(), rate_res.y(), rate_res.z(), vel_res.x(), vel_res.y(), vel_res.z()};
+
+      for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
       {
-        size_t j = robot().jointIndexByName(jn);
+        const auto & jn = robot().refJointOrder()[i];
+
+        if(robot().hasJoint(jn))
+        {
+          size_t j = robot().jointIndexByName(jn);
+          
+          if(robot().mbc().q[j].size() == 0)
+            continue;
+
+          robot().mbc().q[j][0] = encoder[i] * lambda_switch_ + q_old_[j][0] * (1.0 - lambda_switch_);
+          robot().mbc().alpha[j][0] = encoderVel[i] * lambda_switch_ + alpha_old_[j][0] * (1.0 - lambda_switch_);
+        }
+      }
+    }
+
+    else
+    {
+      robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
+      robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
+
+      for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
+      {
+        const auto & jn = robot().refJointOrder()[i];
+
+        if(robot().hasJoint(jn))
+        {
+          size_t j = robot().jointIndexByName(jn);
+          
+          if(robot().mbc().q[j].size() == 0)
+            continue;
         
-        if(robot().mbc().q[j].size() == 0)
-          continue;
-        
-        robot().mbc().q[j][0] = encoder[i];
-        robot().mbc().alpha[j][0] = (encoder[i] - encoder_prev_[i]) / timeStep;
+          robot().mbc().q[j][0] = encoder[i];
+          robot().mbc().alpha[j][0] = encoderVel[i];
+        }
       }
     }
   }
@@ -418,6 +467,15 @@ void QPSolver::fillTorque(tasks::qp::MotionConstr* motionConstr)
 
 void QPSolver::enableFeedback(bool fb)
 {
+  if (!feedback_ && fb)
+  {
+    // std::cout << "Rafa, in QPSolver::enableFeedback, before resetting lambda_switch" << std::endl;
+    
+    lambda_switch_ = 0.0;
+    q_old_ = robot().mbc().q;
+    alpha_old_ = robot().mbc().alpha;
+  }
+
   feedback_ = fb;
 }
 
