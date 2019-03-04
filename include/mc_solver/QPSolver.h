@@ -9,7 +9,6 @@
 #include <mc_solver/msg/QPResult.h>
 
 #include <Tasks/QPSolver.h>
-#include <RBDyn/TorqueFeedbackTerm.h>
 
 #include <memory>
 
@@ -57,7 +56,6 @@ enum class MC_SOLVER_DLLAPI FeedbackType
 struct MC_SOLVER_DLLAPI QPSolver
 {
 public:
-  
   /** Constructor
    * \param robot Set of robots managed by this solver
    * \param timeStep Timestep of the solver
@@ -68,7 +66,7 @@ public:
    * \param timeStep Timestep of the solver
    */
   QPSolver(double timeStep);
-  
+
   /** Add a constraint set
    * \param cs Constraint set added to the solver
    */
@@ -157,7 +155,7 @@ public:
   template<typename... Fun>
   void addConstraint(tasks::qp::ConstraintFunction<Fun...> * constraint)
   {
-    constraint->addToSolver(robots().mbs(), *solver);
+    constraint->addToSolver(robots().mbs(), solver);
   }
 
   /** Remove a constraint function from the solver
@@ -166,10 +164,8 @@ public:
   template<typename... Fun>
   void removeConstraint(tasks::qp::ConstraintFunction<Fun...> * constraint)
   {
-    constraint->removeFromSolver(*solver);
+    constraint->removeFromSolver(solver);
   }
-
-  bool hasConstraint(const tasks::qp::Constraint* constraint);
 
   /** Gives access to the tasks::qp::BilateralContact entity in the solver from a contact id
    * \param id The contact id of the contact
@@ -204,13 +200,25 @@ public:
 
   /** Run one iteration of the QP.
    *
-   * If successful, will update the robots' configurations
+   * If succesful, will update the robots' configurations
+   *
+   * \param fType Type of feedback used to close the loop on sensory information
+   *
    * \return True if successful, false otherwise.
    */
-  virtual bool run();
+  bool run(FeedbackType fType = FeedbackType::None);
 
-  void updateCurrentState();
-  virtual bool solve();
+  /**
+   * WARNING EXPERIMENTAL
+   *
+   * Runs the QP on an estimated robot state
+   *
+   * @param robot_est
+   *  Estimated robot state. Both mbc().q and mbc().alpha should be defined
+   *
+   * @return True if successful, false otherwise
+   */
+  bool runClosedLoop(std::shared_ptr<mc_rbdyn::Robots> robot_est);
 
   /** Provides the result of run() for robots.robot()
    * \param curTime Unused
@@ -237,12 +245,6 @@ public:
   /** Gives access to the robots controlled by this solver */
   mc_rbdyn::Robots & robots();
 
-  /** Values calculated by the QP Solver for all robots */
-  const std::shared_ptr<std::vector<rbd::MultiBodyConfig>> mbcs_calc() const;
-  
-  /** Values calculated by the QP Solver for the main robot */
-  const rbd::MultiBodyConfig & mbc_calc() const;
-  
   /** Update number of variables
    *
    * This should be called when/if you add new robots into the scene after the
@@ -269,8 +271,7 @@ public:
   tasks::qp::SolverData & data();
 
   /** Use the dynamics constraint to fill torque in the main robot */
-  void fillTorque(const mc_solver::DynamicsConstraint& dynamicsConstraint);
-  void fillTorque(tasks::qp::MotionConstr* motionConstr);
+  void fillTorque(const mc_solver::DynamicsConstraint & dynamicsConstraint);
 
   boost::timer::cpu_times solveTime();
 
@@ -287,8 +288,7 @@ public:
   /** Set the GUI helper for this solver instance */
   void gui(std::shared_ptr<mc_rtc::gui::StateBuilder> gui);
 
-protected:
-  
+private:
   std::shared_ptr<mc_rbdyn::Robots> robots_p;
   double timeStep;
 
@@ -302,25 +302,16 @@ protected:
   /** Holds MetaTask currently in the solver */
   std::vector<mc_tasks::MetaTask *> metaTasks_;
 
+private:
   /** The actual solver instance */
-  std::shared_ptr<tasks::qp::QPSolver> solver;
+  tasks::qp::QPSolver solver;
   /** Latest result */
   QPResultMsg qpRes;
 
-  bool first_run_;
-  bool feedback_;
-
-  std::vector<std::vector<double>> q_old_;
-  std::vector<std::vector<double>> alpha_old_;
-  double lambda_switch_;
-  double switch_T_;
-  
-  std::vector<double> encoder_prev_;
-  std::shared_ptr<std::vector<rbd::MultiBodyConfig>> mbcs_calc_;
   std::vector<std::shared_ptr<void>> shPtrTasksStorage;
 
   /** Update qpRes from the latest run() */
-  void __fillResult(const rbd::MultiBodyConfig & mbc);
+  void __fillResult();
 
   /** Pointer to the Logger */
   std::shared_ptr<mc_rtc::Logger> logger_ = nullptr;
@@ -337,68 +328,16 @@ protected:
   bool runJointsFeedback(bool wVelocity);
 
   /** Feedback data */
-  // std::vector<std::vector<double>> prev_encoders_{};
-  // std::vector<std::vector<double>> encoders_alpha_{};
-  // std::vector<std::vector<std::vector<double>>> control_q_{};
-  // std::vector<std::vector<std::vector<double>>> control_alpha_{};
+  std::vector<std::vector<double>> prev_encoders_{};
+  std::vector<std::vector<double>> encoders_alpha_{};
+  std::vector<std::vector<std::vector<double>>> control_q_{};
+  std::vector<std::vector<std::vector<double>>> control_alpha_{};
 
 public:
-
   /** \deprecated{Default constructor, not made for general usage} */
-  // QPSolver() {}
-
-  void enableFeedback(bool fb);
+  QPSolver() {}
 };
 
-struct MC_SOLVER_DLLAPI IntglTerm_QPSolver : public QPSolver
-{
- public:
-
-  IntglTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
-                     torque_control::IntegralTerm::IntegralTermType intTermType,
-                     torque_control::IntegralTerm::VelocityGainType velGainType,
-                     double lambda);
-
-  /** Constructor (the solver creates its own Robots instance)
-   * \param timeStep Timestep of the solver
-   */
-  IntglTerm_QPSolver(double timeStep,
-                     torque_control::IntegralTerm::IntegralTermType intTermType,
-                     torque_control::IntegralTerm::VelocityGainType velGainType,
-                     double lambda);
-
-  bool run() override;
-
-  const std::shared_ptr<torque_control::IntegralTerm> fbTerm() const;
-
- private:
-
-  std::shared_ptr<torque_control::IntegralTerm> fbTerm_;
-};
-
-struct MC_SOLVER_DLLAPI PassivityPIDTerm_QPSolver : public QPSolver
-{
- public:
-
-  PassivityPIDTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
-                            double beta, double lambda, double mu, double sigma, double cis);
-
-  /** Constructor (the solver creates its own Robots instance)
-   * \param timeStep Timestep of the solver
-   */
-  PassivityPIDTerm_QPSolver(double timeStep,
-                            double beta, double lambda, double mu, double sigma, double cis);
-
-  bool run() override;
-  bool solve() override;
-
-  const std::shared_ptr<torque_control::PassivityPIDTerm> fbTerm() const;
-  
- protected:
-  
-  std::shared_ptr<torque_control::PassivityPIDTerm> fbTerm_;
-};
- 
 } // namespace mc_solver
 
 #endif
