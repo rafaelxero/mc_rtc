@@ -405,8 +405,6 @@ void QPSolver::updateCurrentState()
     {
       lambda_switch_ += timeStep / switch_T_;
       lambda_switch_ = std::min(lambda_switch_, 1.0);
-
-      // std::cout << "Rafa, in QPSolver::updateCurrentState, lambda_switch_ = " << lambda_switch_ << std::endl;
       
       Eigen::Quaterniond qt_old(q_old_[0][0], q_old_[0][1], q_old_[0][2], q_old_[0][3]);
       Eigen::Quaterniond qt_res = qt_old.slerp(lambda_switch_, qtIn);
@@ -554,8 +552,6 @@ void QPSolver::__fillResult(const rbd::MultiBodyConfig & mbc)
     }
   }
   qpRes.lambdaVec = solver->lambdaVec();
-
-  // std::cout << "Rafa, in QPSolver::__fillResult, rbd::dofToVector(robot().mb(), mbc.alphaD) = " << rbd::dofToVector(robot().mb(), mbc.alphaD).transpose() << std::endl;
 }
 
 const mc_rbdyn::Robot & QPSolver::robot() const
@@ -656,8 +652,6 @@ void QPSolver::enableFeedback(bool fb)
 {
   if (!feedback_ && fb)
   {
-    // std::cout << "Rafa, in QPSolver::enableFeedback, before resetting lambda_switch" << std::endl;
-    
     lambda_switch_ = 0.0;
     q_old_ = robot().mbc().q;
     alpha_old_ = robot().mbc().alpha;

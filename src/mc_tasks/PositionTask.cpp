@@ -36,8 +36,6 @@ void PositionTask::reset()
   sva::PTransformd point(errorT->bodyPoint());
   Eigen::Vector3d curPos = (point * robot.mbc().bodyPosW[bIndex]).translation();
   errorT->position(curPos);
-
-  // std::cout << "Rafa, in mc_tasks::PositionTask::reset, errorT->position() = " << errorT->position().transpose() << std::endl;
 }
 
 Eigen::Vector3d PositionTask::position()
