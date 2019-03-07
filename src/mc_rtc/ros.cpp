@@ -11,16 +11,16 @@
 #  include <mc_control/mc_global_controller.h>
 
 #  include <geometry_msgs/WrenchStamped.h>
-#  include <mc_rtc_msgs/EnableController.h>
-#  include <mc_rtc_msgs/close_grippers.h>
-#  include <mc_rtc_msgs/get_joint_pos.h>
-#  include <mc_rtc_msgs/move_com.h>
-#  include <mc_rtc_msgs/open_grippers.h>
-#  include <mc_rtc_msgs/play_next_stance.h>
-#  include <mc_rtc_msgs/send_msg.h>
-#  include <mc_rtc_msgs/send_recv_msg.h>
-#  include <mc_rtc_msgs/set_gripper.h>
-#  include <mc_rtc_msgs/set_joint_pos.h>
+//#  include <mc_rtc_msgs/EnableController.h>
+//#  include <mc_rtc_msgs/close_grippers.h>
+//#  include <mc_rtc_msgs/get_joint_pos.h>
+//#  include <mc_rtc_msgs/move_com.h>
+//#  include <mc_rtc_msgs/open_grippers.h>
+//#  include <mc_rtc_msgs/play_next_stance.h>
+//#  include <mc_rtc_msgs/send_msg.h>
+//#  include <mc_rtc_msgs/send_recv_msg.h>
+//#  include <mc_rtc_msgs/set_gripper.h>
+//#  include <mc_rtc_msgs/set_joint_pos.h>
 #  include <nav_msgs/Odometry.h>
 #  include <ros/ros.h>
 #  include <sensor_msgs/Imu.h>
