@@ -495,9 +495,9 @@ bool QPSolver::solve()
           rbd::eulerIntegration(mb, mbc_calc, timeStep);
         }
       }
-      success = true;
     }
     
+    success = true;
     __fillResult((*mbcs_calc_)[robots().robotIndex()]);
   }
   return success;
@@ -870,9 +870,9 @@ bool PassivityPIDTerm_QPSolver::solve()
             rbd::forwardVelocity(mb, mbc_calc);
           }
         }
-        success = true;
       }
-    
+
+      success = true;
       __fillResult((*mbcs_calc_)[robots().robotIndex()]);
     }
   }
