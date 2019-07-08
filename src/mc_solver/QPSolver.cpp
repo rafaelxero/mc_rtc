@@ -423,7 +423,7 @@ void QPSolver::updateCurrentState()
         {
           size_t j = robot().jointIndexByName(jn);
 
-	  std::cout << "Rafa, in QPSolver::updateCurrentState, robot has joint " << jn << "and robot().mbc().q[j].size() = " << robot().mbc().q[j].size() << std::endl;
+	  // std::cout << "Rafa, in QPSolver::updateCurrentState, robot has joint " << jn << "and robot().mbc().q[j].size() = " << robot().mbc().q[j].size() << std::endl;
 	  
           if(robot().mbc().q[j].size() == 0)
             continue;
