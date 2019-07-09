@@ -423,7 +423,8 @@ void QPSolver::updateCurrentState()
         {
           size_t j = robot().jointIndexByName(jn);
           
-          if(robot().mbc().q[j].size() == 0)
+          // if(robot().mbc().q[j].size() == 0)
+	  if(robot().mb().joint(j).dof() == 0)
             continue;
 
           robot().mbc().q[j][0] = encoder[i] * lambda_switch_ + q_old_[j][0] * (1.0 - lambda_switch_);
@@ -445,7 +446,8 @@ void QPSolver::updateCurrentState()
         {
           size_t j = robot().jointIndexByName(jn);
           
-          if(robot().mbc().q[j].size() == 0)
+          // if(robot().mbc().q[j].size() == 0)
+	  if(robot().mb().joint(j).dof() == 0)
             continue;
         
           robot().mbc().q[j][0] = encoder[i];
