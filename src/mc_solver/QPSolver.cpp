@@ -8,7 +8,7 @@
 #include <RBDyn/FA.h>
 
 #include <mc_rbdyn/RobotModule.h>
-#include <mc_rbdyn/stance.h>
+//#include <mc_rbdyn/stance.h>
 #include <mc_rbdyn/Surface.h>
 
 #include <mc_rtc/logging.h>
