@@ -423,6 +423,8 @@ void QPSolver::updateCurrentState()
         {
           size_t j = robot().jointIndexByName(jn);
 
+	  // std::cout << "Rafa, in QPSolver::updateCurrentState, robot has joint " << jn << "and robot().mbc().q[j].size() = " << robot().mbc().q[j].size() << std::endl;
+	  
           // if(robot().mbc().q[j].size() == 0)
           if(robot().mb().joint(j).dof() == 0)
             continue;
@@ -796,6 +798,39 @@ const std::shared_ptr<torque_control::IntegralTerm> IntglTerm_QPSolver::fbTerm()
   return fbTerm_;
 }
 
+
+/**
+ *  IntglTermAntiWindup_QPSolver
+ */
+
+
+IntglTermAntiWindup_QPSolver::IntglTermAntiWindup_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
+							   torque_control::IntegralTerm::IntegralTermType intTermType,
+							   torque_control::IntegralTerm::VelocityGainType velGainType,
+							   double lambda, Eigen::VectorXd torqueL, Eigen::VectorXd torqueU,
+							   double max_float, double perc)
+  : IntglTerm_QPSolver(robots, timeStep)
+{
+  fbTerm_ = std::make_shared<torque_control::IntegralTermAntiWindup>(robots->mbs(),
+								     robots->robotIndex(),
+								     robots->robot().fd(),
+								     intTermType, velGainType, lambda,
+								     torqueL, torqueU, max_float, perc);
+}
+
+IntglTermAntiWindup_QPSolver::IntglTermAntiWindup_QPSolver(double timeStep,
+							   torque_control::IntegralTerm::IntegralTermType intTermType,
+							   torque_control::IntegralTerm::VelocityGainType velGainType,
+							   double lambda, Eigen::VectorXd torqueL, Eigen::VectorXd torqueU,
+							   double max_float, double perc)
+  : IntglTerm_QPSolver(timeStep)
+{
+  fbTerm_ = std::make_shared<torque_control::IntegralTermAntiWindup>(robots().mbs(),
+								     robots().robotIndex(), robot().fd(),
+								     intTermType, velGainType, lambda,
+								     torqueL, torqueU, max_float, perc);
+}
+  
 
 /**
  *  PassivityPIDTerm_QPSolver

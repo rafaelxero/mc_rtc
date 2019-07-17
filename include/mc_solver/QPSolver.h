@@ -371,25 +371,45 @@ struct MC_SOLVER_DLLAPI IntglTerm_QPSolver : public QPSolver
  public:
 
   IntglTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
-                     torque_control::IntegralTerm::IntegralTermType intTermType,
-                     torque_control::IntegralTerm::VelocityGainType velGainType,
-                     double lambda);
+                     torque_control::IntegralTerm::IntegralTermType intTermType = torque_control::IntegralTerm::None,
+                     torque_control::IntegralTerm::VelocityGainType velGainType = torque_control::IntegralTerm::Diagonal,
+                     double lambda = 1);
 
   /** Constructor (the solver creates its own Robots instance)
    * \param timeStep Timestep of the solver
    */
   IntglTerm_QPSolver(double timeStep,
-                     torque_control::IntegralTerm::IntegralTermType intTermType,
-                     torque_control::IntegralTerm::VelocityGainType velGainType,
-                     double lambda);
-
+                     torque_control::IntegralTerm::IntegralTermType intTermType = torque_control::IntegralTerm::None,
+                     torque_control::IntegralTerm::VelocityGainType velGainType = torque_control::IntegralTerm::Diagonal,
+                     double lambda = 1);
+  
   bool run(bool dummy) override;
 
   const std::shared_ptr<torque_control::IntegralTerm> fbTerm() const;
 
- private:
+ protected:
 
   std::shared_ptr<torque_control::IntegralTerm> fbTerm_;
+};
+
+struct MC_SOLVER_DLLAPI IntglTermAntiWindup_QPSolver : public IntglTerm_QPSolver
+{
+ public:
+
+  IntglTermAntiWindup_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
+			       torque_control::IntegralTerm::IntegralTermType intTermType,
+			       torque_control::IntegralTerm::VelocityGainType velGainType,
+			       double lambda, Eigen::VectorXd torqueL, Eigen::VectorXd torqueU,
+			       double max_float = 1E3, double perc = 0.1);
+
+  /** Constructor (the solver creates its own Robots instance)
+   * \param timeStep Timestep of the solver
+   */
+  IntglTermAntiWindup_QPSolver(double timeStep,
+			       torque_control::IntegralTerm::IntegralTermType intTermType,
+			       torque_control::IntegralTerm::VelocityGainType velGainType,
+			       double lambda, Eigen::VectorXd torqueL, Eigen::VectorXd torqueU,
+			       double max_float = 1E3, double perc = 0.1);
 };
 
 struct MC_SOLVER_DLLAPI PassivityPIDTerm_QPSolver : public QPSolver
