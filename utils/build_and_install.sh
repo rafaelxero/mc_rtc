@@ -1,4 +1,8 @@
-#!/bin/bash -ex
+#!/bin/bash
+
+#
+# Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+#
 
 shopt -s expand_aliases
 
@@ -10,13 +14,17 @@ readonly mc_rtc_dir=`cd $(dirname $0)/..; pwd`
 
 readonly SOURCE_DIR=`cd $mc_rtc_dir/../; pwd`
 
+readonly PYTHON_VERSION=`python -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor))'`
+
 #default settings
 INSTALL_PREFIX="/usr/local"
 WITH_ROS_SUPPORT="true"
+WITH_VREP_SUPPORT="true"
 WITH_PYTHON_SUPPORT="true"
 PYTHON_USER_INSTALL="false"
-WITH_HRP2="true"
-WITH_HRP4="true"
+WITH_HRP2="false"
+WITH_HRP4="false"
+WITH_VREP="true"
 VREP_PATH=
 BUILD_TYPE="RelWithDebInfo"
 INSTALL_APT_DEPENDENCIES="true"
@@ -30,8 +38,11 @@ fi
 if [ `lsb_release -sc` = "trusty" ]
 then
   ROS_DISTRO=indigo
-else
+elif [ `lsb_release -sc` = "xenial" ]
+then
   ROS_DISTRO=kinetic
+else
+  ROS_DISTRO=melodic
 fi
 
 readonly HELP_STRING="$(basename $0) [OPTIONS] ...
@@ -43,7 +54,8 @@ readonly HELP_STRING="$(basename $0) [OPTIONS] ...
     --with-hrp4                                   : enable HRP4 (requires mc-hrp4 group access)      (default $WITH_HRP4)
     --with-python-support           {true, false} : whether to build with Python support             (default $WITH_PYTHON_SUPPORT)
     --python-user-install           {true, false} : whether to install Python bindings with user     (default $PYTHON_USER_INSTALL)
-    --with-ros-support              {true, false} : whether to build with ros support                (default $WITH_ROS_SUPPORT)
+    --with-ros-support              {true, false} : whether to build with ROS support                (default $WITH_ROS_SUPPORT)
+    --with-vrep-support             {true, false} : whether to build with VREP support               (default $WITH_VREP_SUPPORT)
     --ros-distro                    NAME          : the ros distro to use                            (default $ROS_DISTRO)
     --install-apt-dependencies      {true, false} : whether to install packages                      (default $INSTALL_APT_DEPENDENCIES)
     --vrep-path                     PATH          : where to find vrep (will be downloaded if empty) (default $VREP_PATH)
@@ -80,6 +92,12 @@ do
         check_true_false --with-ros-support "$WITH_ROS_SUPPORT"
         ;;
 
+        --with-vrep-support)
+        i=$(($i+1))
+        WITH_VREP_SUPPORT="${!i}"
+        check_true_false --with-vrep-support "$WITH_VREP_SUPPORT"
+        ;;
+
         --with-python-support)
         i=$(($i+1))
         WITH_PYTHON_SUPPORT="${!i}"
@@ -92,13 +110,13 @@ do
         check_true_false --python-user-install "$PYTHON_USER_INSTALL"
         ;;
 
-      --with-hrp2)
-        i=$(($i+1))
-        WITH_HRP2="${!i}"
-        check_true_false --with-hrp2 "$WITH_HRP2"
-        ;;
+        --with-hrp2)
+          i=$(($i+1))
+          WITH_HRP2="${!i}"
+          check_true_false --with-hrp2 "$WITH_HRP2"
+          ;;
 
-      --with-hrp4)
+        --with-hrp4)
         i=$(($i+1))
         WITH_HRP4="${!i}"
         check_true_false --with-hrp4 "$WITH_HRP4"
@@ -153,6 +171,8 @@ fi
 #make settings readonly
 readonly INSTALL_PREFIX
 readonly WITH_ROS_SUPPORT
+readonly WITH_VREP_SUPPORT
+readonly WITH_PYTHON_SUPPORT
 readonly WITH_PYTHON_SUPPORT
 readonly PYTHON_USER_INSTALL
 readonly BUILD_TYPE
@@ -160,20 +180,16 @@ readonly INSTALL_APT_DEPENDENCIES
 readonly BUILD_CORE
 
 readonly ROS_APT_DEPENDENCIES="ros-${ROS_DISTRO}-common-msgs ros-${ROS_DISTRO}-tf2-ros ros-${ROS_DISTRO}-xacro ros-${ROS_DISTRO}-rviz"
-ROS_GIT_DEPENDENCIES="git@gite.lirmm.fr:multi-contact/mc_rtc_ros_data#master"
-if $WITH_HRP2
-then
-  ROS_GIT_DEPENDENCIES="$ROS_GIT_DEPENDENCIES git@gite.lirmm.fr:mc-hrp2/hrp2_drc#master"
-fi
-if $WITH_HRP4
-then
-  ROS_GIT_DEPENDENCIES="$ROS_GIT_DEPENDENCIES git@gite.lirmm.fr:mc-hrp4/hrp4#master"
-fi
+
 alias git_clone="git clone --quiet --recursive"
 alias git_update="git pull && git submodule update"
 
 SUDO_CMD='sudo -E'
 PIP_USER=
+if [ ! -d $INSTALL_PREFIX ]
+then
+  mkdir -p $INSTALL_PREFIX
+fi
 if [ -w $INSTALL_PREFIX ]
 then
   SUDO_CMD=
@@ -186,7 +202,7 @@ export PATH=$INSTALL_PREFIX/bin:$PATH
 export LD_LIBRARY_PATH=$INSTALL_PREFIX/lib:$LD_LIBRARY_PATH
 export DYLD_LIBRARY_PATH=$INSTALL_PREFIX/lib:$DYLD_LIBRARY_PATH
 export PKG_CONFIG_PATH=$INSTALL_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH
-export PYTHONPATH=$INSTALL_PREFIX/lib/python2.7/site-packages:$PYTHONPATH
+export PYTHONPATH=$INSTALL_PREFIX/lib/python$PYTHON_VERSION/site-packages:$PYTHONPATH
 
 yaml_to_env()
 {
@@ -223,7 +239,7 @@ else
   then
     yaml_to_env "APT_DEPENDENCIES" $gitlab_ci_yml
     APT_DEPENDENCIES=`echo $APT_DEPENDENCIES|sed -e's/libspacevecalg-dev//'|sed -e's/librbdyn-dev//'|sed -e's/libeigen-qld-dev//'|sed -e's/libsch-core-dev//'|sed -e's/libtasks-qld-dev//'|sed -e's/libmc-rbdyn-urdf-dev//'|sed -e's/python-tasks//'|sed -e's/python-mc-rbdyn-urdf//'`
-    APT_DEPENDENCIES="cmake build-essential gfortran doxygen libeigen3-dev python-pip $APT_DEPENDENCIES"
+    APT_DEPENDENCIES="cmake build-essential gfortran doxygen libeigen3-dev python-pip python3-pip wget $APT_DEPENDENCIES"
     if $INSTALL_APT_DEPENDENCIES
     then
         sudo apt-get update
@@ -295,6 +311,21 @@ then
 else
   GIT_DEPENDENCIES="jrl-umi3218/SpaceVecAlg jrl-umi3218/RBDyn jrl-umi3218/eigen-qld jrl-umi3218/sch-core jrl-umi3218/mc_rbdyn_urdf ${GIT_DEPENDENCIES}"
 fi
+if $WITH_ROS
+then
+  ROS_GIT_DEPENDENCIES="git@gite.lirmm.fr:multi-contact/mc_rtc_ros_data#master"
+  if $WITH_HRP2
+  then
+    ROS_GIT_DEPENDENCIES="$ROS_GIT_DEPENDENCIES git@gite.lirmm.fr:mc-hrp2/hrp2_drc#master"
+  fi
+  if $WITH_HRP4
+  then
+    ROS_GIT_DEPENDENCIES="$ROS_GIT_DEPENDENCIES git@gite.lirmm.fr:mc-hrp4/hrp4#master"
+  fi
+else
+  ROS_GIT_DEPENDENCIES=""
+  GIT_DEPENDENCIES="${GIT_DEPENDENCIES} git@gite.lirmm.fr:multi-contact/mc_rtc_ros_data#master"
+fi
 for package in ${GIT_DEPENDENCIES}; do
   build_git_dependency "$package"
 done
@@ -336,19 +367,6 @@ then
   cd $SOURCE_DIR/catkin_ws
   catkin_make
   . $SOURCE_DIR/catkin_ws/devel/setup.bash
-else
-  ROS_GIT_DEPENDENCIES=`echo $ROS_GIT_DEPENDENCIES|sed -e's/hrp4#master/hrp4#noxacro/'`
-  for package in ${ROS_GIT_DEPENDENCIES}; do
-    git_dependency_parsing $package
-    cd $SOURCE_DIR
-    if [ ! -d "$git_dep/.git" ]
-    then
-      git_clone -b $git_dep_branch "$git_dep_uri" "$git_dep"
-    else
-      cd "$git_dep"
-      git_update
-    fi
-  done
 fi
 
 ##########################
@@ -366,21 +384,10 @@ then
             -DPYTHON_BINDING_USER_INSTALL:BOOL=${PYTHON_USER_INSTALL} \
             ${CMAKE_ADDITIONAL_OPTIONS}
 else
-  CMAKE_ROBOT_OPTIONS=""
-  if $WITH_HRP2
-  then
-    CMAKE_ROBOT_OPTIONS="-DHRP2_DRC_DESCRIPTION_PATH:STRING='${SOURCE_DIR}/hrp2_drc/hrp2_drc_description'"
-  fi
-  if $WITH_HRP4
-  then
-    CMAKE_ROBOT_OPTIONS="$CMAKE_ROBOT_OPTIONS -DHRP4_DESCRIPTION_PATH:STRING='${SOURCE_DIR}/hrp4/hrp4_description'"
-  fi
   cmake ../ -DCMAKE_BUILD_TYPE:STRING="'$BUILD_TYPE'" \
             -DCMAKE_INSTALL_PREFIX:STRING="'$INSTALL_PREFIX'" \
             -DPYTHON_BINDING:BOOL=${WITH_PYTHON_SUPPORT} \
             -DPYTHON_BINDING_USER_INSTALL:BOOL=${PYTHON_USER_INSTALL} \
-            -DMC_ENV_DESCRIPTION_PATH:STRING="'$SOURCE_DIR/mc_rtc_ros_data/mc_env_description'" \
-            ${CMAKE_ROBOT_OPTIONS} \
             ${CMAKE_ADDITIONAL_OPTIONS} \
             -DDISABLE_ROS=ON
 fi
@@ -415,93 +422,88 @@ then
   . $CATKIN_DIR/devel/setup.bash
 fi
 
+################################
+#  --  Build extra modules  -- #
+################################
+if $WITH_HRP2
+then
+  if ! $WITH_ROS_SUPPORT
+  then
+    build_git_dependency git@gite.lirmm.fr:mc-hrp2/hrp2_drc.git
+  fi
+  build_git_dependency git@gite.lirmm.fr:mc-hrp2/mc-hrp2.git
+fi
+
+if $WITH_HRP4
+then
+  if ! $WITH_ROS_SUPPORT
+  then
+    build_git_dependency git@gite.lirmm.fr:mc-hrp4/hrp4.git
+  fi
+  build_git_dependency git@gite.lirmm.fr:mc-hrp4/mc-hrp4.git
+fi
+
 ####################################################
 #  -- Setup VREP, vrep-api-wrapper and mc_vrep --  #
 ####################################################
-if [ -z "${VREP_PATH}" ]
+if $WITH_VREP_SUPPORT
 then
-  VREP_MAJOR="V-REP_PRO_EDU_V3_4_0"
+  if [ -z "${VREP_PATH}" ]
+  then
+    VREP_MAJOR="V-REP_PRO_EDU_V3_4_0"
+    cd $SOURCE_DIR
+    if [ $OS = Darwin ]
+    then
+      VREP_MACOS="${VREP_MAJOR}_Mac"
+      if [ ! -d $VREP_MACOS ]
+      then
+        wget http://coppeliarobotics.com/files/${VREP_MACOS}.zip
+        unzip ${VREP_MACOS}.zip
+      fi
+      VREP_PATH=$SOURCE_DIR/$VREP_MACOS
+    else
+      if [ "`uname -i`" != "x86_64" ]
+      then
+        VREP_MAJOR="V-REP_PRO_EDU_V3_3_2"
+        echo "[WARNING] VREP support for 32 bits stopped after 3.3.2, it might not work properly with the models or softwares we provide"
+      fi
+      VREP_LINUX="${VREP_MAJOR}_Linux"
+      if [ ! -d ${VREP_LINUX} ]
+      then
+        wget http://coppeliarobotics.com/files/${VREP_LINUX}.tar.gz
+        tar xzf ${VREP_LINUX}.tar.gz
+      fi
+      VREP_PATH=$SOURCE_DIR/$VREP_LINUX
+    fi
+  fi
+  [ ! -e "$SOURCE_DIR/vrep" ] && ln -s "$VREP_PATH" "$SOURCE_DIR/vrep"
+
+  export CMAKE_ADDITIONAL_OPTIONS="${CMAKE_ADDITIONAL_OPTIONS} -DVREP_PATH:STRING=\"${VREP_PATH}\""
+  build_git_dependency git@gite.lirmm.fr:vrep-utils/vrep-api-wrapper
+  build_git_dependency git@gite.lirmm.fr:multi-contact/mc_vrep
+
   cd $SOURCE_DIR
-  if [ $OS = Darwin ]
+  if $WITH_HRP4
   then
-    VREP_MACOS="${VREP_MAJOR}_Mac"
-    if [ ! -d $VREP_MACOS ]
+    if [ ! -d vrep-hrp4/.git ]
     then
-      wget http://coppeliarobotics.com/files/${VREP_MACOS}.zip
-      unzip ${VREP_MACOS}.zip
+      git_clone git@gite.lirmm.fr:mc-hrp4/vrep_hrp.git vrep-hrp4
+    else
+      cd vrep-hrp4
+      git_update
     fi
-    VREP_PATH=$SOURCE_DIR/$VREP_MACOS
-  else
-    if [ "`uname -i`" != "x86_64" ]
-    then
-      VREP_MAJOR="V-REP_PRO_EDU_V3_3_2"
-      echo "[WARNING] VREP support for 32 bits stopped after 3.3.2, it might not work properly with the models or softwares we provide"
-    fi
-    VREP_LINUX="${VREP_MAJOR}_Linux"
-    if [ ! -d ${VREP_LINUX} ]
-    then
-      wget http://coppeliarobotics.com/files/${VREP_LINUX}.tar.gz
-      tar xzf ${VREP_LINUX}.tar.gz
-    fi
-    VREP_PATH=$SOURCE_DIR/$VREP_LINUX
   fi
-fi
-[ ! -e "$SOURCE_DIR/vrep" ] && ln -s "$VREP_PATH" "$SOURCE_DIR/vrep"
 
-cd $SOURCE_DIR
-if [ ! -d vrep-api-wrapper/.git ]
-then
-  git_clone git@gite.lirmm.fr:vrep-utils/vrep-api-wrapper
-  cd vrep-api-wrapper
-else
-  cd vrep-api-wrapper
-  git_update
-fi
-mkdir -p build && cd build
-cmake ../ -DCMAKE_BUILD_TYPE:STRING="$BUILD_TYPE" \
-          -DCMAKE_INSTALL_PREFIX:STRING="$INSTALL_PREFIX" \
-          -DVREP_PATH:STRING="$VREP_PATH" \
-          ${CMAKE_ADDITIONAL_OPTIONS}
-make
-${SUDO_CMD} make install
-
-cd $SOURCE_DIR
-if [ ! -d mc_vrep/.git ]
-then
-  git_clone git@gite.lirmm.fr:multi-contact/mc_vrep
-  cd mc_vrep
-else
-  cd mc_vrep
-  git_update
-fi
-mkdir -p build && cd build
-cmake ../ -DCMAKE_BUILD_TYPE:STRING="$BUILD_TYPE" \
-          -DCMAKE_INSTALL_PREFIX:STRING="$INSTALL_PREFIX" \
-          ${CMAKE_ADDITIONAL_OPTIONS}
-make
-${SUDO_CMD} make install
-
-cd $SOURCE_DIR
-if $WITH_HRP4
-then
-  if [ ! -d vrep-hrp4/.git ]
+  cd $SOURCE_DIR
+  if $WITH_HRP2
   then
-    git_clone git@gite.lirmm.fr:mc-hrp4/vrep_hrp.git vrep-hrp4
-  else
-    cd vrep-hrp4
-    git_update
-  fi
-fi
-
-cd $SOURCE_DIR
-if $WITH_HRP2
-then
-  if [ ! -d vrep-hrp2/.git ]
-  then
-    git_clone git@gite.lirmm.fr:mc-hrp2/vrep-hrp2.git
-  else
-    cd vrep-hrp2
-    git_update
+    if [ ! -d vrep-hrp2/.git ]
+    then
+      git_clone git@gite.lirmm.fr:mc-hrp2/vrep-hrp2.git
+    else
+      cd vrep-hrp2
+      git_update
+    fi
   fi
 fi
 
@@ -512,17 +514,18 @@ then
   export PATH=$INSTALL_PREFIX/bin:\$PATH
   export DYLD_LIBRARY_PATH=$INSTALL_PREFIX/lib:\$DYLD_LIBRARY_PATH
   export PKG_CONFIG_PATH=$INSTALL_PREFIX/lib/pkgconfig:\$PKG_CONFIG_PATH
-  export PYTHONPATH=$INSTALL_PREFIX/lib/python2.7/site-packages:\$PYTHONPATH
+  export PYTHONPATH=$INSTALL_PREFIX/lib/python$PYTHON_VERSION/site-packages:\$PYTHONPATH
   """
 else
   echo """
   export PATH=$INSTALL_PREFIX/bin:\$PATH
   export LD_LIBRARY_PATH=$INSTALL_PREFIX/lib:\$LD_LIBRARY_PATH
   export PKG_CONFIG_PATH=$INSTALL_PREFIX/lib/pkgconfig:\$PKG_CONFIG_PATH
-  export PYTHONPATH=$INSTALL_PREFIX/lib/python2.7/site-packages:\$PYTHONPATH
+  export PYTHONPATH=$INSTALL_PREFIX/lib/python$PYTHON_VERSION/site-packages:\$PYTHONPATH
   """
   if $WITH_ROS_SUPPORT
   then
+    echo "source /opt/ros/${ROS_DISTRO}/setup.bash"
     echo "source $SOURCE_DIR/catkin_ws/devel/setup.bash"
   fi
 fi

@@ -1,3 +1,7 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
 #pragma once
 
 #include <mc_rbdyn/Robots.h>
@@ -68,6 +72,11 @@ struct TrajectoryTaskGeneric : public TrajectoryTaskGenericCommon
    */
   void refVel(const Eigen::VectorXd & vel);
 
+  /*! \brief Get the trajectory reference velocity
+   *
+   */
+  const Eigen::VectorXd & refVel() const;  // Rafa, before merging it was not ending in const
+
   /*! \brief Set the trajectory reference acceleration
    *
    * \param accel New reference acceleration
@@ -75,9 +84,10 @@ struct TrajectoryTaskGeneric : public TrajectoryTaskGenericCommon
    */
   void refAccel(const Eigen::VectorXd & accel);
 
-  const Eigen::VectorXd& refVel();
-
-  const Eigen::VectorXd& refAccel();
+  /*! \brief Get the trajectory reference acceleration
+   *
+   */
+  const Eigen::VectorXd & refAccel() const;   // Rafa, before merging it was not ending in const
 
   /*! \brief Set the task stiffness/damping
    *
@@ -211,16 +221,18 @@ protected:
   std::shared_ptr<T> errorT = nullptr;
   Eigen::VectorXd refVel_;
   Eigen::VectorXd refAccel_;
-  
+
+  bool inSolver_ = false;
+  std::shared_ptr<tasks::qp::TrajectoryTask> trajectoryT_ = nullptr;
+
+protected:
+  virtual void addToSolver(mc_solver::QPSolver & solver) override;
+
 private:
   Eigen::VectorXd stiffness_;
   Eigen::VectorXd damping_;
   double weight_;
-  bool inSolver_ = false;
   std::shared_ptr<tasks::qp::JointsSelector> selectorT_ = nullptr;
-  std::shared_ptr<tasks::qp::TrajectoryTask> trajectoryT_ = nullptr;
-
-  virtual void addToSolver(mc_solver::QPSolver & solver) override;
 
   virtual void removeFromSolver(mc_solver::QPSolver & solver) override;
 

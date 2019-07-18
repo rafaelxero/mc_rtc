@@ -1,3 +1,7 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
 #include "mc_com_controller.h"
 
 #include <mc_rbdyn/Surface.h>
@@ -29,17 +33,15 @@ void MCCoMController::reset(const ControllerResetData & reset_data)
   MCController::reset(reset_data);
   comTask->reset();
   solver().addTask(comTask);
-  if(robot().name() == "hrp2_drc")
+  if(robot().hasSurface("LFullSole") && robot().hasSurface("RFullSole"))
   {
-    qpsolver->setContacts(
+    solver().setContacts(
         {mc_rbdyn::Contact(robots(), "LFullSole", "AllGround"), mc_rbdyn::Contact(robots(), "RFullSole", "AllGround")});
   }
-  else if(robot().name() == "hrp4" || robot().name() == "jvrc-1")
+  else if(robot().hasSurface("LeftFoot") && robot().hasSurface("RightFoot"))
   {
-    qpsolver->setContacts({
-        mc_rbdyn::Contact(robots(), "LeftFoot", "AllGround"),
-        mc_rbdyn::Contact(robots(), "RightFoot", "AllGround"),
-    });
+    solver().setContacts(
+        {mc_rbdyn::Contact(robots(), "LeftFoot", "AllGround"), mc_rbdyn::Contact(robots(), "RightFoot", "AllGround")});
   }
   else
   {

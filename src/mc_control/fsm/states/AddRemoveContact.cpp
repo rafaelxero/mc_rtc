@@ -1,3 +1,7 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
 #include <mc_control/SimulationContactPair.h>
 #include <mc_control/fsm/Controller.h>
 #include <mc_control/fsm/states/AddRemoveContact.h>
@@ -45,9 +49,9 @@ void AddRemoveContactStateImplHelper<mc_tasks::AddContactTask>::make_run_impl(Ad
                                                                               mc_rbdyn::Contact & contact);
 
 template<>
-void AddRemoveContactStateImplHelper<mc_tasks::ComplianceTask>::make_run_impl(AddRemoveContactStateImpl & impl,
-                                                                              Controller & ctl,
-                                                                              mc_rbdyn::Contact & contact);
+void AddRemoveContactStateImplHelper<mc_tasks::force::ComplianceTask>::make_run_impl(AddRemoveContactStateImpl & impl,
+                                                                                     Controller & ctl,
+                                                                                     mc_rbdyn::Contact & contact);
 
 struct AddRemoveContactStateImpl
 {
@@ -76,6 +80,11 @@ struct AddRemoveContactStateImpl
       if(com_c.has("com"))
       {
         com_task_->com(com_c("com"));
+      }
+      if(com_c.has("offset"))
+      {
+        Eigen::Vector3d offset = com_c("offset");
+        com_task_->com(com_task_->com() + offset);
       }
     }
     std::string type = config_("type");
@@ -124,7 +133,7 @@ struct AddRemoveContactStateImpl
       {
         if(isCompliant)
         {
-          AddRemoveContactStateImplHelper<mc_tasks::ComplianceTask>::make_run(*this, ctl, contact);
+          AddRemoveContactStateImplHelper<mc_tasks::force::ComplianceTask>::make_run(*this, ctl, contact);
         }
         else
         {
@@ -204,10 +213,14 @@ void AddRemoveContactStateImplHelper<mc_tasks::AddContactTask>::make_run_impl(Ad
   auto robotIndex_ = contact.r1Index();
   auto envIndex_ = contact.r2Index();
   auto forceThreshold_ = impl.config_("forceThreshold", std::numeric_limits<double>::infinity());
+  bool forceOnly_ = impl.config_("forceOnly", false);
+  size_t forceThresholdIter_ = impl.config_("forceThresholdIter", 3);
   bool hasForceSensor_ = ctl.robot().bodyHasForceSensor(contact.r1Surface()->bodyName());
   auto forceSensorName_ = hasForceSensor_ ? ctl.robot().bodyForceSensor(contact.r1Surface()->bodyName()).name() : "";
-  impl.run_ = [fsm_contact_, sensor_, robotIndex_, envIndex_, hasForceSensor_, forceThreshold_,
-               forceSensorName_](AddRemoveContactStateImpl & impl, Controller & ctl) mutable {
+  size_t forceIter_ = 0;
+  impl.run_ = [fsm_contact_, sensor_, robotIndex_, envIndex_, hasForceSensor_, forceThreshold_, forceSensorName_,
+               forceOnly_, forceThresholdIter_,
+               forceIter_](AddRemoveContactStateImpl & impl, Controller & ctl) mutable {
     if(!fsm_contact_)
     {
       return true;
@@ -215,7 +228,15 @@ void AddRemoveContactStateImplHelper<mc_tasks::AddContactTask>::make_run_impl(Ad
     auto & robot = ctl.robots().robot(robotIndex_);
     auto & env = ctl.robots().robot(envIndex_);
     auto d = sensor_.update(robot, env);
-    if(d <= 0 || (hasForceSensor_ && ctl.robot().forceSensor(forceSensorName_).force().z() > forceThreshold_))
+    if(hasForceSensor_ && ctl.robot().forceSensor(forceSensorName_).force().z() > forceThreshold_)
+    {
+      forceIter_++;
+    }
+    else
+    {
+      forceIter_ = 0;
+    }
+    if((!forceOnly_ && d <= 0) || forceIter_ > forceThresholdIter_)
     {
       if(fsm_contact_)
       {
@@ -240,14 +261,14 @@ void AddRemoveContactStateImplHelper<mc_tasks::AddContactTask>::make_run_impl(Ad
 }
 
 template<>
-void AddRemoveContactStateImplHelper<mc_tasks::ComplianceTask>::make_run_impl(AddRemoveContactStateImpl & impl,
-                                                                              Controller & ctl,
-                                                                              mc_rbdyn::Contact & contact)
+void AddRemoveContactStateImplHelper<mc_tasks::force::ComplianceTask>::make_run_impl(AddRemoveContactStateImpl & impl,
+                                                                                     Controller & ctl,
+                                                                                     mc_rbdyn::Contact & contact)
 {
   auto fsm_contact_ = new Contact(Contact::from_mc_rbdyn(ctl, contact));
   double vel_thresh_ = impl.config_("velocity", 1e-4);
   impl.run_ = [fsm_contact_, vel_thresh_](AddRemoveContactStateImpl & impl, Controller & ctl) mutable {
-    auto t = std::static_pointer_cast<mc_tasks::ComplianceTask>(impl.task_);
+    auto t = std::static_pointer_cast<mc_tasks::force::ComplianceTask>(impl.task_);
     if(t->speed().norm() < vel_thresh_ && t->eval().norm() < t->getTargetWrench().vector().norm() / 2 && fsm_contact_)
     {
       ctl.addContact(*fsm_contact_);

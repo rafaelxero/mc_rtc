@@ -1,8 +1,15 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
 #pragma once
 
-#include <mc_tasks/AdmittanceTask.h>
+#include <mc_tasks/DampingTask.h>
 
 namespace mc_tasks
+{
+
+namespace force
 {
 
 /*! \brief Track center-of-pressure (CoP) references at contact
@@ -18,7 +25,7 @@ namespace mc_tasks
  * [1] https://scaron.info/teaching/zero-tilting-moment-point.html
  *
  */
-struct MC_TASKS_DLLAPI CoPTask : AdmittanceTask
+struct MC_TASKS_DLLAPI CoPTask : DampingTask
 {
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -155,5 +162,7 @@ private:
 
   using AdmittanceTask::targetWrench;
 };
+
+} // namespace force
 
 } // namespace mc_tasks

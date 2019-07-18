@@ -1,3 +1,7 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
 #pragma once
 
 #include <mc_tasks/TrajectoryTaskGeneric.h>
@@ -132,7 +136,13 @@ public:
    */
   void refVelB(const sva::MotionVecd & velB)
   {
-    return TrajectoryTaskGeneric<tasks::qp::SurfaceTransformTask>::refVel(velB.vector());
+    TrajectoryTaskGeneric<tasks::qp::SurfaceTransformTask>::refVel(velB.vector());
+  }
+
+  /*! \brief Get reference velocity in body coordinates as a motion vector */
+  sva::MotionVecd refVelB() const
+  {
+    return sva::MotionVecd(TrajectoryTaskGeneric<tasks::qp::SurfaceTransformTask>::refVel());
   }
 
   /*! \brief Set trajectory task's reference acceleration from motion vector.

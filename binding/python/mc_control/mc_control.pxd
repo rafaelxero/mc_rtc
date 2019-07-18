@@ -1,3 +1,7 @@
+#
+# Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+#
+
 cimport c_mc_control
 
 from libcpp cimport bool as cppbool
@@ -23,3 +27,6 @@ cdef class PythonRWCallback(object):
 
 cdef public api class MCPythonController(MCController)[object MCPythonControllerObject, type MCPythonControllerType]:
   cdef c_mc_control.MCPythonController * impl
+
+cdef class MCGlobalController(object):
+  cdef c_mc_control.MCGlobalController * impl

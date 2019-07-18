@@ -1,5 +1,9 @@
 # distutils: language = c++
 
+#
+# Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+#
+
 cimport c_gui
 
 cimport mc_rtc.mc_rtc as mc_rtc
@@ -25,6 +29,7 @@ cdef void void_cb(set_fn) with gil:
   set_fn()
 
 cdef vector[string] py2cpp(values):
+  values = [ v.encode(u'ascii') for v in values ]
   return values
 
 cdef class Element(object):
@@ -36,6 +41,8 @@ cdef class Label(Element):
   cdef c_gui.LabelImpl[c_gui.get_fn] impl
   cdef _get_fn
   def __cinit__(self, name, get_fn):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self._get_fn = get_fn
     self.impl = c_gui.Label[c_gui.get_fn](name, c_gui.make_getter(python_to_conf, get_fn))
     self.base = &self.impl
@@ -44,6 +51,8 @@ cdef class ArrayLabel(Element):
   cdef c_gui.ArrayLabelImpl[c_gui.get_fn] impl
   cdef _get_fn
   def __cinit__(self, name, get_fn, labels = []):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self._get_fn = get_fn
     self.impl = c_gui.ArrayLabel[c_gui.get_fn](name, py2cpp(labels), c_gui.make_getter(python_to_conf, get_fn))
     self.base = &self.impl
@@ -52,6 +61,8 @@ cdef class Button(Element):
   cdef c_gui.ButtonImpl[c_gui.void_cb] impl
   cdef _cb
   def __cinit__(self, name, cb):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self._cb = cb
     self.impl = c_gui.Button[c_gui.void_cb](name, c_gui.make_void_cb(void_cb, cb))
     self.base = &self.impl
@@ -61,6 +72,8 @@ cdef class Checkbox(Element):
   cdef _get_fn
   cdef _cb
   def __cinit__(self, name, get_fn, cb):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self._get_fn = get_fn
     self._cb = cb
     self.impl = c_gui.Checkbox[c_gui.get_fn,c_gui.void_cb](name, c_gui.make_getter(python_to_conf, get_fn), c_gui.make_void_cb(void_cb, cb))
@@ -71,6 +84,8 @@ cdef class StringInput(Element):
   cdef _get_fn
   cdef _set_fn
   def __cinit__(self, name, get_fn, set_fn):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self._get_fn = get_fn
     self._set_fn = set_fn
     self.impl = c_gui.StringInput[c_gui.get_fn, c_gui.set_fn](name, c_gui.make_getter(python_to_conf, get_fn), c_gui.make_setter(conf_to_python, set_fn, str))
@@ -81,6 +96,8 @@ cdef class IntegerInput(Element):
   cdef _get_fn
   cdef _set_fn
   def __cinit__(self, name, get_fn, set_fn):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self._get_fn = get_fn
     self._set_fn = set_fn
     self.impl = c_gui.IntegerInput[c_gui.get_fn, c_gui.set_fn](name, c_gui.make_getter(python_to_conf, get_fn), c_gui.make_setter(conf_to_python, set_fn, int))
@@ -91,6 +108,8 @@ cdef class NumberInput(Element):
   cdef _get_fn
   cdef _set_fn
   def __cinit__(self, name, get_fn, set_fn):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self._get_fn = get_fn
     self._set_fn = set_fn
     self.impl = c_gui.NumberInput[c_gui.get_fn, c_gui.set_fn](name, c_gui.make_getter(python_to_conf, get_fn), c_gui.make_setter(conf_to_python, set_fn, float))
@@ -101,6 +120,8 @@ cdef class NumberSlider(Element):
   cdef _get_fn
   cdef _set_fn
   def __cinit__(self, name, get_fn, set_fn, min_, max_):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self._get_fn = get_fn
     self._set_fn = set_fn
     self.impl = c_gui.NumberSlider[c_gui.get_fn, c_gui.set_fn](name, c_gui.make_getter(python_to_conf, get_fn), c_gui.make_setter(conf_to_python, set_fn, float), min_, max_)
@@ -112,6 +133,8 @@ cdef class ArrayInput(Element):
   cdef _set_fn
   cdef _cb_ret_type
   def __cinit__(self, name, get_fn, set_fn, labels = []):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self._get_fn = get_fn
     self._set_fn = set_fn
     self._cb_ret_type = [float]
@@ -123,6 +146,8 @@ cdef class ComboInput(Element):
   cdef _get_fn
   cdef _set_fn
   def __cinit__(self, name, values, get_fn, set_fn):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self._get_fn = get_fn
     self._set_fn = set_fn
     self.impl = c_gui.ComboInput[c_gui.get_fn, c_gui.set_fn](name, py2cpp(values), c_gui.make_getter(python_to_conf, get_fn), c_gui.make_setter(conf_to_python, set_fn, str))
@@ -133,6 +158,8 @@ cdef class DataComboInput(Element):
   cdef _get_fn
   cdef _set_fn
   def __cinit__(self, name, ref, get_fn, set_fn):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self._get_fn = get_fn
     self._set_fn = set_fn
     self.impl = c_gui.DataComboInput[c_gui.get_fn, c_gui.set_fn](name, py2cpp(ref), c_gui.make_getter(python_to_conf, get_fn), c_gui.make_setter(conf_to_python, set_fn, str))
@@ -146,6 +173,8 @@ cdef class Point3D(Element):
   cdef _set_fn
   cdef _cb_ret_type
   def __cinit__(self, name, get_fn, set_fn = None):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self.is_ro = set_fn is None
     self._get_fn = get_fn
     self._set_fn = set_fn
@@ -165,6 +194,8 @@ cdef class Rotation(Element):
   cdef _set_fn
   cdef _cb_ret_type
   def __cinit__(self, name, get_fn, set_fn = None):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self.is_ro = set_fn is None
     self._get_fn = get_fn
     self._set_fn = set_fn
@@ -184,6 +215,8 @@ cdef class Transform(Element):
   cdef _set_fn
   cdef _cb_ret_type
   def __cinit__(self, name, get_fn, set_fn = None):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self.is_ro = set_fn is None
     self._get_fn = get_fn
     self._set_fn = set_fn
@@ -198,6 +231,8 @@ cdef class Transform(Element):
 cdef class FormCheckbox(object):
   cdef c_gui.FormCheckbox impl
   def __cinit__(self, name, required, default = None):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     if default is None:
       self.impl = c_gui.FormCheckbox(name, required)
     else:
@@ -206,6 +241,8 @@ cdef class FormCheckbox(object):
 cdef class FormIntegerInput(object):
   cdef c_gui.FormIntegerInput impl
   def __cinit__(self, name, required, default = None):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     if default is None:
       self.impl = c_gui.FormIntegerInput(name, required)
     else:
@@ -214,6 +251,8 @@ cdef class FormIntegerInput(object):
 cdef class FormNumberInput(object):
   cdef c_gui.FormNumberInput impl
   def __cinit__(self, name, required, default = None):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     if default is None:
       self.impl = c_gui.FormNumberInput(name, required)
     else:
@@ -222,6 +261,10 @@ cdef class FormNumberInput(object):
 cdef class FormStringInput(object):
   cdef c_gui.FormStringInput impl
   def __cinit__(self, name, required, default = None):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
+    if isinstance(default, unicode):
+      default = default.encode(u'ascii')
     if default is None:
       self.impl = c_gui.FormStringInput(name, required)
     else:
@@ -230,6 +273,8 @@ cdef class FormStringInput(object):
 cdef class FormNumberArrayInput(object):
   cdef c_gui.FormArrayInput[vector[double]] impl
   def __cinit__(self, name, required, default = None, fixed_size = None):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     if default is None:
       if fixed_size is None:
         fixed_size = False
@@ -242,6 +287,8 @@ cdef class FormNumberArrayInput(object):
 cdef class FormStringArrayInput(object):
   cdef c_gui.FormArrayInput[vector[string]] impl
   def __cinit__(self, name, required, default = None, fixed_size = None):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     if default is None:
       if fixed_size is None:
         fixed_size = False
@@ -254,11 +301,15 @@ cdef class FormStringArrayInput(object):
 cdef class FormComboInput(object):
   cdef c_gui.FormComboInput impl
   def __cinit__(self, name, required, values, send_index = False):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self.impl = c_gui.FormComboInput(name, required, py2cpp(values), send_index)
 
 cdef class FormDataComboInput(object):
   cdef c_gui.FormDataComboInput impl
   def __cinit__(self, name, required, values, send_index = False):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self.impl = c_gui.FormDataComboInput(name, required, py2cpp(values), send_index)
 
 cdef class Form(Element):
@@ -266,6 +317,8 @@ cdef class Form(Element):
   cdef _cb
   cdef _elements
   def __cinit__(self, name, cb, *args):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self.impl = c_gui.Form[c_gui.set_fn](name, c_gui.make_setter(conf_to_python, cb, mc_rtc.Configuration))
     self.base = &self.impl
     self._cb = cb
@@ -353,6 +406,8 @@ cdef class StateBuilder(object):
     self.impl.get().removeCategory(py2cpp(category))
     StateBuilder.ELEMENTS.pop("/".join(category), None)
   def removeElement(self, category, name):
+    if isinstance(name, unicode):
+      name = name.encode(u'ascii')
     self.impl.get().removeElement(py2cpp(category), name)
     for i, el in enumerate(StateBuilder.ELEMENTS.get("/".join(category), [])):
       if el.name() == name:

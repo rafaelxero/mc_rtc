@@ -1,10 +1,16 @@
-#ifndef _H_COMPLIANCETASK_H_
-#define _H_COMPLIANCETASK_H_
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
+#pragma once
 
 #include <mc_tasks/EndEffectorTask.h>
 #include <mc_tasks/MetaTask.h>
 
 namespace mc_tasks
+{
+
+namespace force
 {
 
 namespace
@@ -253,6 +259,6 @@ private:
   void update() override;
 };
 
-} // namespace mc_tasks
+} // namespace force
 
-#endif
+} // namespace mc_tasks

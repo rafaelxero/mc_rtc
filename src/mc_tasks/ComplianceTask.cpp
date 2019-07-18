@@ -1,9 +1,16 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
 #include <mc_rbdyn/configuration_io.h>
 #include <mc_rbdyn/rpy_utils.h>
 #include <mc_tasks/ComplianceTask.h>
 #include <mc_tasks/MetaTaskLoader.h>
 
 namespace mc_tasks
+{
+
+namespace force
 {
 
 namespace
@@ -148,6 +155,8 @@ void ComplianceTask::resetJointsSelector(mc_solver::QPSolver & solver)
   efTask_->resetJointsSelector(solver);
 }
 
+} // namespace force
+
 } // namespace mc_tasks
 
 namespace
@@ -158,8 +167,8 @@ static bool registered = mc_tasks::MetaTaskLoader::register_load_function(
     [](mc_solver::QPSolver & solver, const mc_rtc::Configuration & config) {
       Eigen::Matrix6d dof = Eigen::Matrix6d::Identity();
       config("dof", dof);
-      auto t = std::shared_ptr<mc_tasks::ComplianceTask>(
-          new mc_tasks::ComplianceTask(solver.robots(), config("robotIndex"), config("body"), solver.dt(), dof));
+      auto t = std::shared_ptr<mc_tasks::force::ComplianceTask>(
+          new mc_tasks::force::ComplianceTask(solver.robots(), config("robotIndex"), config("body"), solver.dt(), dof));
       if(config.has("stiffness"))
       {
         t->stiffness(config("stiffness"));

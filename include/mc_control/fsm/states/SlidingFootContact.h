@@ -1,3 +1,7 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
 #pragma once
 
 #include <mc_control/fsm/State.h>
@@ -49,9 +53,9 @@ protected:
   std::string next_ = "";
   /** Implementation */
   std::shared_ptr<mc_tasks::CoMTask> comTask_;
-  std::shared_ptr<mc_tasks::CoPTask> copHandTask_;
-  std::shared_ptr<mc_tasks::CoPTask> copSlidingFootTask_;
-  std::shared_ptr<mc_tasks::CoPTask> copSupportFootTask_; /** Only used for CoP computation */
+  std::shared_ptr<mc_tasks::force::CoPTask> copHandTask_;
+  std::shared_ptr<mc_tasks::force::CoPTask> copSlidingFootTask_;
+  std::shared_ptr<mc_tasks::force::CoPTask> copSupportFootTask_; /** Only used for CoP computation */
   std::shared_ptr<mc_tasks::OrientationTask> chestOriTask_;
   std::shared_ptr<mc_tasks::RelativeEndEffectorTask> lhRelEf_;
   std::shared_ptr<mc_tasks::RelativeEndEffectorTask> rhRelEf_;

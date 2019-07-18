@@ -1,3 +1,7 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
 #pragma once
 
 #include <mc_rbdyn/configuration_io.h>
@@ -649,9 +653,6 @@ struct XYThetaImpl : public CommonInputImpl<GetT, SetT>
 
   /** Invalid element */
   XYThetaImpl() {}
-
-  /** Add distinguishing elements to GUI information */
-  void addGUI(mc_rtc::Configuration & gui);
 };
 
 template<typename GetT>
@@ -915,7 +916,11 @@ private:
   /** Get a category, creates it if does not exist */
   Category & getCategory(const std::vector<std::string> & category);
 
+  /** Update the GUI data state for a given category */
   void update(Category & category, mc_rtc::Configuration out);
+
+  /** Update the GUI elements information for a given element */
+  void updateGUI(const std::vector<std::string> & category, ElementStore & el);
 
   std::string cat2str(const std::vector<std::string> & category);
 };

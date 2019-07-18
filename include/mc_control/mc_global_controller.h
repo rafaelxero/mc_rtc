@@ -1,3 +1,6 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
 
 #pragma once
 
@@ -18,6 +21,9 @@ namespace bfs = boost::filesystem;
 
 namespace mc_control
 {
+
+/** pimpl to provide ROS services if ROS is available */
+struct ROSServicesImpl;
 
 struct MC_CONTROL_DLLAPI MCGlobalController
 {
@@ -537,6 +543,9 @@ private:
   double solver_build_and_solve_t = 0;
   double solver_solve_t = 0;
   double framework_cost = 0;
+
+  /** ROS services */
+  std::unique_ptr<ROSServicesImpl> ros_services_;
 };
 
 } // namespace mc_control

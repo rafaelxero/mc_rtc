@@ -1,3 +1,7 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
 #include <mc_control/fsm/Controller.h>
 #include <mc_rbdyn/RobotLoader.h>
 #include <mc_rbdyn/configuration_io.h>
@@ -243,6 +247,7 @@ void Controller::reset(const ControllerResetData & data)
     auto all_states = factory_.states();
     std::sort(all_states.begin(), all_states.end());
     gui_->data().add("states", all_states);
+    gui_->removeElement({"FSM"}, "Contacts");
     gui_->addElement({"FSM"}, mc_rtc::gui::Label("Contacts", [this]() {
                        std::string ret;
                        for(const auto & c : contacts_)

@@ -1,3 +1,7 @@
+#
+# Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+#
+
 from libcpp.string cimport string
 from libcpp.vector cimport vector
 from libcpp.map cimport map as cppmap  # Careful map is a python built-in
@@ -14,8 +18,6 @@ cimport mc_control.c_mc_control as c_mc_control
 
 cdef extern from "<mc_rtc/config.h>" namespace "mc_rtc":
   const char * MC_ENV_DESCRIPTION_PATH
-  const char * HRP2_DRC_DESCRIPTION_PATH
-  const char * HRP4_DESCRIPTION_PATH
   const char * INSTALL_PREFIX
   const char * MC_ROBOTS_INSTALL_PREFIX
   const char * MC_CONTROLLER_INSTALL_PREFIX
@@ -40,6 +42,7 @@ cdef extern from "<mc_rtc/log/Logger.h>" namespace "mc_rtc":
   cdef cppclass Logger:
     # Simplified from C++
     void addLogEntry[T](const string&, T get_fn)
+    void removeLogEntry(const string&)
 
 cdef extern from "<mc_rtc/Configuration.h>" namespace "mc_rtc":
   cdef cppclass Configuration:

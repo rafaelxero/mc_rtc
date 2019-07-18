@@ -1,3 +1,7 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
 #pragma once
 
 #include <mc_control/client_api.h>
@@ -106,9 +110,10 @@ protected:
 
   void handle_category(const std::vector<std::string> & parent,
                        const std::string & category,
-                       const mc_rtc::Configuration & data);
+                       const mc_rtc::Configuration & data,
+                       const mc_rtc::Configuration & gui);
 
-  void handle_widget(const ElementId & id, const mc_rtc::Configuration & data);
+  void handle_widget(const ElementId & id, const mc_rtc::Configuration & data, const mc_rtc::Configuration & gui);
 
   /** Called when a message starts being processed, can be used to lock the GUI */
   virtual void started() {}

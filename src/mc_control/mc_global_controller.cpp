@@ -1,3 +1,7 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
 #include <mc_control/mc_global_controller.h>
 #include <mc_rbdyn/RobotLoader.h>
 #include <mc_rtc/config.h>
@@ -10,6 +14,7 @@
 
 #include <boost/chrono.hpp>
 
+#include "mc_global_controller_ros_services.h"
 #include <algorithm>
 #include <cstdlib>
 #include <fstream>
@@ -79,7 +84,7 @@ MCGlobalController::MCGlobalController(const std::string & conf, std::shared_ptr
                                                      config.gui_server_rep_uris));
     }
   }
-  mc_rtc::ROSBridge::activate_services(*this);
+  ros_services_.reset(new ROSServicesImpl(mc_rtc::ROSBridge::get_node_handle(), *this));
 }
 
 MCGlobalController::~MCGlobalController() {}
@@ -139,14 +144,30 @@ void MCGlobalController::init(const std::vector<double> & initq, const std::arra
       q[robot().jointIndexByName(jn)][0] = initq[i];
     }
   }
-  if(config.main_robot_module->name == "hrp2_drc")
+  auto refJointIndex = [&rjo](const std::string & name) {
+    for(size_t i = 0; i < rjo.size(); ++i)
+    {
+      if(name == rjo[i])
+      {
+        return static_cast<int>(i);
+      }
+    }
+    return -1;
+  };
+  std::map<std::string, std::vector<double>> gripperInit;
+  for(const auto & g_p : controller().grippers)
   {
-    setGripperCurrentQ({{"l_gripper", {initq[31]}}, {"r_gripper", {initq[23]}}});
+    const auto & gName = g_p.first;
+    const auto & g = *g_p.second;
+    gripperInit[gName] = {};
+    auto & gQ = gripperInit[gName];
+    for(const auto & j : g.active_joints)
+    {
+      auto jIndex = refJointIndex(j);
+      gQ.push_back(jIndex != -1 ? initq[jIndex] : 0);
+    }
   }
-  else if(config.main_robot_module->name == "hrp4")
-  {
-    setGripperCurrentQ({{"l_gripper", {initq[32], initq[33]}}, {"r_gripper", {initq[23], initq[24]}}});
-  }
+  setGripperCurrentQ(gripperInit);
   controller_->reset({q});
   init_publishers();
   initGUI();
@@ -513,7 +534,7 @@ void MCGlobalController::setGripperTargetQ(const std::string & name, const std::
 {
   if(controller_->grippers.count(name))
   {
-    if(controller_->grippers[name]->active_idx.size() == q.size())
+    if(controller_->grippers[name]->active_joints.size() == q.size())
     {
       controller_->grippers[name]->setTargetQ(q);
     }

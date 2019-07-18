@@ -1,3 +1,7 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
 #include <mc_control/fsm/StateFactory.h>
 #include <mc_rtc/Configuration.h>
 
@@ -19,7 +23,8 @@ StateFactory::StateFactory(const std::vector<std::string> & paths, const std::ve
 
 void StateFactory::load_libraries(const std::vector<std::string> & paths)
 {
-  mc_rtc::ObjectLoader<State>::load_libraries(paths, [this](const std::string & cn, lt_dlhandle) { update(cn); });
+  mc_rtc::ObjectLoader<State>::load_libraries(paths,
+                                              [this](const std::string & cn, mc_rtc::LTDLHandle &) { update(cn); });
 }
 
 namespace

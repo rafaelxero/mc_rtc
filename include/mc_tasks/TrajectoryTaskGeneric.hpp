@@ -1,3 +1,7 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
 #pragma once
 
 #include <mc_tasks/TrajectoryTaskGeneric.h>
@@ -82,6 +86,12 @@ void TrajectoryTaskGeneric<T>::refVel(const Eigen::VectorXd & vel)
 }
 
 template<typename T>
+const Eigen::VectorXd & TrajectoryTaskGeneric<T>::refVel() const  // Rafa, before merging it was not ending in const
+{
+  return trajectoryT_->refVel();
+}
+
+template<typename T>
 void TrajectoryTaskGeneric<T>::refAccel(const Eigen::VectorXd & accel)
 {
   trajectoryT_->refAccel(accel);
@@ -89,16 +99,10 @@ void TrajectoryTaskGeneric<T>::refAccel(const Eigen::VectorXd & accel)
 }
 
 template<typename T>
-const Eigen::VectorXd& TrajectoryTaskGeneric<T>::refVel()
-{
-  return trajectoryT_->refVel();
-}
-
-template<typename T>
-const Eigen::VectorXd& TrajectoryTaskGeneric<T>::refAccel()
+const Eigen::VectorXd & TrajectoryTaskGeneric<T>::refAccel() const  // Rafa, before merging it was not ending in const
 {
   return trajectoryT_->refAccel();
-} 
+}
 
 template<typename T>
 void TrajectoryTaskGeneric<T>::stiffness(double s)
@@ -291,9 +295,9 @@ Eigen::VectorXd TrajectoryTaskGeneric<T>::eval() const
 {
   if(selectorT_)
   {
-    return selectorT_->eval();
+    return selectorT_->eval().cwiseProduct(trajectoryT_->dimWeight());
   }
-  return errorT->eval();
+  return errorT->eval().cwiseProduct(trajectoryT_->dimWeight());
 }
 
 template<typename T>
@@ -301,9 +305,9 @@ Eigen::VectorXd TrajectoryTaskGeneric<T>::speed() const
 {
   if(selectorT_)
   {
-    return selectorT_->speed();
+    return selectorT_->speed().cwiseProduct(trajectoryT_->dimWeight());
   }
-  return errorT->speed();
+  return errorT->speed().cwiseProduct(trajectoryT_->dimWeight());
 }
 
 template<typename T>

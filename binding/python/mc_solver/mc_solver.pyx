@@ -1,5 +1,9 @@
 # distutils: language = c++
 
+#
+# Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+#
+
 cimport mc_solver.c_mc_solver as c_mc_solver
 
 cimport tasks.qp.c_qp as c_qp
@@ -134,8 +138,16 @@ cdef class CollisionsConstraint(ConstraintSet):
     if not skip_alloc:
       self.impl = self.cs_base = new c_mc_solver.CollisionsConstraint(deref(robots.impl), r1Index, r2Index, timeStep)
   def removeCollision(self, QPSolver solver, b1Name, b2Name):
+    if isinstance(b1Name, unicode):
+        b1Name = b1Name.encode(u'ascii')
+    if isinstance(b2Name, unicode):
+        b2Name = b2Name.encode(u'ascii')
     return self.impl.removeCollision(deref(solver.impl), b1Name, b2Name)
   def removeCollisionByBody(self, QPSolver solver, b1Name, b2Name):
+    if isinstance(b1Name, unicode):
+        b1Name = b1Name.encode(u'ascii')
+    if isinstance(b2Name, unicode):
+        b2Name = b2Name.encode(u'ascii')
     return self.impl.removeCollisionByBody(deref(solver.impl), b1Name, b2Name)
   def addCollision(self, QPSolver solver, mc_rbdyn.Collision col):
     self.impl.addCollision(deref(solver.impl), col.impl)
@@ -178,10 +190,22 @@ cdef class RobotEnvCollisionsConstraint(ConstraintSet):
     if not skip_alloc:
       self.impl = self.cs_base = new c_mc_solver.RobotEnvCollisionsConstraint(deref(robots.impl), timeStep)
   def removeEnvCollision(self, QPSolver solver, b1, b2):
+    if isinstance(b1, unicode):
+        b1 = b1.encode(u'ascii')
+    if isinstance(b2, unicode):
+        b2 = b2.encode(u'ascii')
     return self.impl.removeEnvCollision(deref(solver.impl), b1, b2)
   def removeEnvCollisionByBody(self, QPSolver solver, b1, b2):
+    if isinstance(b1, unicode):
+        b1 = b1.encode(u'ascii')
+    if isinstance(b2, unicode):
+        b2 = b2.encode(u'ascii')
     return self.impl.removeEnvCollisionByBody(deref(solver.impl), b1, b2)
   def removeSelfCollision(self, QPSolver solver, b1, b2):
+    if isinstance(b1, unicode):
+        b1 = b1.encode(u'ascii')
+    if isinstance(b2, unicode):
+        b2 = b2.encode(u'ascii')
     return self.impl.removeSelfCollision(deref(solver.impl), b1, b2)
   def addEnvCollision(self, QPSolver solver, mc_rbdyn.Collision col):
     self.impl.addEnvCollision(deref(solver.impl), col.impl)

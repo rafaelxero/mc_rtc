@@ -1,3 +1,11 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
+#include <mc_rbdyn/RobotModule.h>
+#include <mc_rbdyn/Surface.h>
+#include <mc_rtc/logging.h>
+#include <mc_solver/KinematicsConstraint.h>
 #include <mc_solver/QPSolver.h>
 
 #include <Tasks/Bounds.h>

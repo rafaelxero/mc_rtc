@@ -1,3 +1,7 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
 #include <mc_tasks/LookAtTask.h>
 #include <mc_tasks/MetaTaskLoader.h>
 
@@ -108,6 +112,14 @@ static bool registered_lookat = mc_tasks::MetaTaskLoader::register_load_function
       if(config.has("targetVector"))
       {
         t->targetVector(config("targetVector"));
+      }
+      if(config.has("relativeVector"))
+      {
+        auto bodyPos = solver.robot(config("robotIndex")).posW();
+        bodyPos.translation() = Eigen::Vector3d::Zero();
+        Eigen::Vector3d v = config("relativeVector");
+        sva::PTransformd target{v};
+        t->targetVector((target * bodyPos).translation());
       }
       return t;
     });

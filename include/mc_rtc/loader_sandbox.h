@@ -1,3 +1,7 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
 #pragma once
 
 #include <mc_rtc/logging.h>
@@ -100,11 +104,13 @@ int sandbox(void * args)
  *
  * \tparam T Return type of the function
  *
+ * \tparam FunT Type of the create function
+ *
  * \tparam Args Arguments passed to the creation function
  *
  */
-template<typename T, typename... Args>
-T * no_sandbox_function_call(std::function<T *(const Args &...)> create_fn, const Args &... args);
+template<typename T, typename FunT, typename... Args>
+T * no_sandbox_function_call(FunT create_fn, const Args &... args);
 
 /*! \brief Calls a function in a sandbox
  *
@@ -115,11 +121,13 @@ T * no_sandbox_function_call(std::function<T *(const Args &...)> create_fn, cons
  *
  * \tparam T Return type of the function
  *
+ * \tparam FunT Type of the create function
+ *
  * \tparam Args Arguments passed to the creation function
  *
  */
-template<typename T, typename... Args>
-T * sandbox_function_call(std::function<T *(const Args &...)> create_fn, const Args &... args)
+template<typename T, typename FunT, typename... Args>
+T * sandbox_function_call(FunT create_fn, const Args &... args)
 {
 #ifdef __linux__
   LoaderSandboxData<T> data;
@@ -142,8 +150,8 @@ T * sandbox_function_call(std::function<T *(const Args &...)> create_fn, const A
 #endif
 }
 
-template<typename T, typename... Args>
-T * no_sandbox_function_call(std::function<T *(const Args &...)> create_fn, const Args &... args)
+template<typename T, typename FunT, typename... Args>
+T * no_sandbox_function_call(FunT create_fn, const Args &... args)
 {
   return create_fn(args...);
 }

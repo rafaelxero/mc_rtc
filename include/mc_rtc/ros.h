@@ -1,3 +1,7 @@
+/*
+ * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ */
+
 #pragma once
 
 #include <mc_rtc/config.h>
@@ -82,8 +86,6 @@ struct MC_RTC_ROS_DLLAPI ROSBridge
                                      double dt,
                                      const mc_rbdyn::Robot & robot,
                                      const std::map<std::string, std::shared_ptr<mc_control::Gripper>> & grippers = {});
-
-  static void activate_services(mc_control::MCGlobalController & ctl);
 
   /*! \brief Stop ROS */
   static void shutdown();
