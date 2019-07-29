@@ -25,6 +25,8 @@
 
 #include <mc_tasks/MetaTask.h>
 
+#include <time.h>
+
 namespace
 {
 
@@ -387,6 +389,8 @@ bool QPSolver::run(bool dummy) // Rafa's version
 
 void QPSolver::updateCurrentState()
 {
+  clock_t time;
+  
   if(first_run_)
   {
     encoder_prev_ = robot().encoderValues();
@@ -406,7 +410,8 @@ void QPSolver::updateCurrentState()
   }
 
   encoder_prev_ = encoder;
-  
+
+  time = clock();
   if(feedback_)
   {
     if (lambda_switch_ < 1.0)
@@ -433,7 +438,6 @@ void QPSolver::updateCurrentState()
 
 	  // std::cout << "Rafa, in QPSolver::updateCurrentState, robot has joint " << jn << "and robot().mbc().q[j].size() = " << robot().mbc().q[j].size() << std::endl;
 	  
-          // if(robot().mbc().q[j].size() == 0)
           if(robot().mb().joint(j).dof() == 0)
             continue;
 
@@ -456,7 +460,6 @@ void QPSolver::updateCurrentState()
         {
           size_t j = robot().jointIndexByName(jn);
           
-          // if(robot().mbc().q[j].size() == 0)
           if(robot().mb().joint(j).dof() == 0)
             continue;
         
@@ -466,19 +469,27 @@ void QPSolver::updateCurrentState()
       }
     }
   }
+  time = clock() - time;
+  std::cout << "Rafa, in QPSolver::updateCurrentState, the time spent for filling the robot structure with feedback is " << time << std::endl;
 
   encoder_prev_ = encoder;
 
+  time = clock();
   rbd::forwardKinematics(robot().mb(), robot().mbc());
   rbd::forwardVelocity(robot().mb(), robot().mbc());
-
+  time = clock() - time;
+  std::cout << "Rafa, in QPSolver::updateCurrentState, the time spent for forwardKinematics and forwardVelocity is " << time << std::endl;
+  
   if(first_run_)
   {
     (*mbcs_calc_) = robots().mbcs();
     first_run_ = false;
   }
-  
+
+  time = clock();
   robot().forwardDynamics();
+  time = clock() - time;
+  std::cout << "Rafa, in QPSolver::updateCurrentState, the time spent for forwardDynamics is " << time << std::endl;
 }
 
 bool QPSolver::solve()
@@ -789,16 +800,30 @@ IntglTerm_QPSolver::IntglTerm_QPSolver(double timeStep,
 
 bool IntglTerm_QPSolver::run(bool dummy)
 {
+  clock_t time;
+  
   for(auto & t : metaTasks_)
   {
     t->update();
   }
 
+  time = clock();
   updateCurrentState();
-  
+  time = clock() - time;
+  std::cout << "Rafa, in IntglTerm_QPSolver, the time spent for updateCurrentState() is " << time << std::endl;
+    
+  time = clock();
   fbTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
+  time = clock() - time;
+  std::cout << "Rafa, in IntglTerm_QPSolver, the time spent for fbTerm_->computeTerm(...) is " << time << std::endl;
   
-  return solve();
+  time = clock();
+  bool success = solve();
+  time = clock() - time;
+  std::cout << "Rafa, in IntglTerm_QPSolver, the time spent for solve() is " << time << std::endl;
+  
+  // return solve();  // Rafa changed this
+  return success;
 }
 
 const std::shared_ptr<torque_control::IntegralTerm> IntglTerm_QPSolver::fbTerm() const
