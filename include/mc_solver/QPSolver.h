@@ -49,6 +49,8 @@ enum class MC_SOLVER_DLLAPI FeedbackType
   JointsWVelocity
 };
 
+typedef std::map<std::string, int> ElapsedTimeMap;
+ 
 #pragma GCC diagnostic pop
  
 /** \class QPSolver
@@ -225,7 +227,7 @@ public:
    * \return True if successful, false otherwise.
    */
   virtual bool run(bool dummy); // Rafa's version
-
+  
   void updateCurrentState();
   virtual bool solve();
 
@@ -334,6 +336,10 @@ public:
   // Rafa's version
   std::vector<double> encoder_prev_;
   std::shared_ptr<std::vector<rbd::MultiBodyConfig>> mbcs_calc_;
+
+  // Rafa's version
+  ElapsedTimeMap elapsed_;
+  
   std::vector<std::shared_ptr<void>> shPtrTasksStorage;
 
   /** Update qpRes from the latest run() */
@@ -368,6 +374,8 @@ public:
   // QPSolver() {}
 
   void enableFeedback(bool fb);
+
+  ElapsedTimeMap & getElapsedTimes();
 };
 
 struct MC_SOLVER_DLLAPI IntglTerm_QPSolver : public QPSolver

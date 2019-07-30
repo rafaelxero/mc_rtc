@@ -90,6 +90,9 @@ QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
   {
     LOG_ERROR_AND_THROW(std::invalid_argument, "timeStep has to be > 0! timeStep = " << timeStep)
   }
+
+  elapsed_ = {{"updateCurrentState", 0},
+              {"solve", 0}};
 }
 
 QPSolver::QPSolver(double timeStep)
@@ -377,14 +380,22 @@ bool QPSolver::runClosedLoop(std::shared_ptr<mc_rbdyn::Robots> real_robots)
   
 bool QPSolver::run(bool dummy) // Rafa's version
 {
+  clock_t time;
+  
   for(auto & t : metaTasks_)
   {
     t->update();
   }
 
+  time = clock();
   updateCurrentState();
+  elapsed_.at("updateCurrentState") = (int) (clock() - time);
 
-  return solve();  
+  time = clock();
+  bool success = solve();
+  elapsed_.at("solve") = (int) (clock() - time);
+
+  return success;
 }
 
 void QPSolver::updateCurrentState()
@@ -470,7 +481,7 @@ void QPSolver::updateCurrentState()
     }
   }
   time = clock() - time;
-  std::cout << "Rafa, in QPSolver::updateCurrentState, the time spent for filling the robot structure with feedback is " << time << std::endl;
+  // std::cout << "Rafa, in QPSolver::updateCurrentState, the time spent for filling the robot structure with feedback is " << time << std::endl;
 
   encoder_prev_ = encoder;
 
@@ -478,7 +489,7 @@ void QPSolver::updateCurrentState()
   rbd::forwardKinematics(robot().mb(), robot().mbc());
   rbd::forwardVelocity(robot().mb(), robot().mbc());
   time = clock() - time;
-  std::cout << "Rafa, in QPSolver::updateCurrentState, the time spent for forwardKinematics and forwardVelocity is " << time << std::endl;
+  // std::cout << "Rafa, in QPSolver::updateCurrentState, the time spent for forwardKinematics and forwardVelocity is " << time << std::endl;
   
   if(first_run_)
   {
@@ -489,7 +500,7 @@ void QPSolver::updateCurrentState()
   time = clock();
   robot().forwardDynamics();
   time = clock() - time;
-  std::cout << "Rafa, in QPSolver::updateCurrentState, the time spent for forwardDynamics is " << time << std::endl;
+  // std::cout << "Rafa, in QPSolver::updateCurrentState, the time spent for forwardDynamics is " << time << std::endl;
 }
 
 bool QPSolver::solve()
@@ -683,6 +694,11 @@ void QPSolver::enableFeedback(bool fb)
   feedback_ = fb;
 }
 
+ElapsedTimeMap & QPSolver::getElapsedTimes()
+{
+  return elapsed_;
+}
+
 boost::timer::cpu_times QPSolver::solveTime()
 {
   return solver->solveTime();
@@ -785,6 +801,8 @@ IntglTerm_QPSolver::IntglTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots,
                                                            robots->robotIndex(),
                                                            robots->robot().fd(),
                                                            intTermType, velGainType, lambda);
+  elapsed_.insert({"computeFbTerm", 0});
+  elapsed_.insert(fbTerm_->getElapsedTimes().begin(), fbTerm_->getElapsedTimes().end());
 }
 
 IntglTerm_QPSolver::IntglTerm_QPSolver(double timeStep,
@@ -796,6 +814,8 @@ IntglTerm_QPSolver::IntglTerm_QPSolver(double timeStep,
   fbTerm_ = std::make_shared<torque_control::IntegralTerm>(robots().mbs(),
                                                            robots().robotIndex(), robot().fd(),
                                                            intTermType, velGainType, lambda);
+  elapsed_.insert({"computeFbTerm", 0});
+  elapsed_.insert(fbTerm_->getElapsedTimes().begin(), fbTerm_->getElapsedTimes().end());
 }
 
 bool IntglTerm_QPSolver::run(bool dummy)
@@ -809,20 +829,19 @@ bool IntglTerm_QPSolver::run(bool dummy)
 
   time = clock();
   updateCurrentState();
-  time = clock() - time;
-  std::cout << "Rafa, in IntglTerm_QPSolver, the time spent for updateCurrentState() is " << time << std::endl;
+  elapsed_.at("updateCurrentState") = (int) (clock() - time);
     
   time = clock();
   fbTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
-  time = clock() - time;
-  std::cout << "Rafa, in IntglTerm_QPSolver, the time spent for fbTerm_->computeTerm(...) is " << time << std::endl;
+  elapsed_.at("computeFbTerm") = (int) (clock() - time);
+
+  for (ElapsedTimeMap::iterator it = fbTerm_->getElapsedTimes().begin(); it != fbTerm_->getElapsedTimes().end(); it++)
+    elapsed_.at(it->first) = it->second;
   
   time = clock();
   bool success = solve();
-  time = clock() - time;
-  std::cout << "Rafa, in IntglTerm_QPSolver, the time spent for solve() is " << time << std::endl;
+  elapsed_.at("solve") = (int) (clock() - time);
   
-  // return solve();  // Rafa changed this
   return success;
 }
 
