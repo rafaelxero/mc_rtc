@@ -860,27 +860,27 @@ IntglTermAntiWindup_QPSolver::IntglTermAntiWindup_QPSolver(std::shared_ptr<mc_rb
 							   torque_control::IntegralTerm::IntegralTermType intTermType,
 							   torque_control::IntegralTerm::VelocityGainType velGainType,
 							   double lambda, Eigen::VectorXd torqueL, Eigen::VectorXd torqueU,
-							   double max_float, double perc)
+							   double perc, double max_linacc, double max_angacc)
   : IntglTerm_QPSolver(robots, timeStep)
 {
   fbTerm_ = std::make_shared<torque_control::IntegralTermAntiWindup>(robots->mbs(),
 								     robots->robotIndex(),
 								     robots->robot().fd(),
 								     intTermType, velGainType, lambda,
-								     torqueL, torqueU, max_float, perc);
+								     torqueL, torqueU, perc, max_linacc, max_angacc);
 }
 
 IntglTermAntiWindup_QPSolver::IntglTermAntiWindup_QPSolver(double timeStep,
 							   torque_control::IntegralTerm::IntegralTermType intTermType,
 							   torque_control::IntegralTerm::VelocityGainType velGainType,
 							   double lambda, Eigen::VectorXd torqueL, Eigen::VectorXd torqueU,
-							   double max_float, double perc)
+							   double perc, double max_linacc, double max_angacc)
   : IntglTerm_QPSolver(timeStep)
 {
   fbTerm_ = std::make_shared<torque_control::IntegralTermAntiWindup>(robots().mbs(),
 								     robots().robotIndex(), robot().fd(),
 								     intTermType, velGainType, lambda,
-								     torqueL, torqueU, max_float, perc);
+								     torqueL, torqueU, perc, max_linacc, max_angacc);
 }
   
 
