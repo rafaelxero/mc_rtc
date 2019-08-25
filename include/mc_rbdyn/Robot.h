@@ -12,6 +12,7 @@
 #include <RBDyn/MultiBodyConfig.h>
 #include <RBDyn/MultiBodyGraph.h>
 #include <RBDyn/FD.h>
+#include <RBDyn/Friction.h>
 
 #include <memory>
 #include <sch/S_Object/S_Object.h>
@@ -540,6 +541,9 @@ public:
 
   void forwardDynamics();
   const std::shared_ptr<rbd::ForwardDynamics> fd() const;
+
+  void feedforwardFriction();
+  const std::shared_ptr<rbd::Friction> friction() const;
   
   /** Apply Euler integration to the robot using \p step timestep */
   void eulerIntegration(double step);
@@ -607,6 +611,7 @@ private:
   /** Correspondance between bodies' names and attached force sensors */
   std::map<std::string, size_t> bodyForceSensors_;
   std::shared_ptr<rbd::ForwardDynamics> fd_;
+  std::shared_ptr<rbd::Friction> friction_;
 
 protected:
   /** Invoked by Robots parent instance after mb/mbc/mbg/RobotModule are stored

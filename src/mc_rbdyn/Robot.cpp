@@ -250,6 +250,8 @@ Robot::Robot(Robots & robots,
   flexibility_ = module_.flexibility();
 
   fd_ = std::make_shared<rbd::ForwardDynamics>(mb());
+  friction_ = std::make_shared<rbd::ImplEulerIntModelFriction>(mb());
+  
   zmp_ = Eigen::Vector3d::Zero();
 }
 
@@ -868,6 +870,16 @@ const std::shared_ptr<rbd::ForwardDynamics> Robot::fd() const
   return fd_;
 }
 
+void Robot::feedforwardFriction()
+{
+  friction_->computeFriction(mb(), mbc());
+}
+
+const std::shared_ptr<rbd::Friction> Robot::friction() const
+{
+  return friction_;
+}
+  
 void mc_rbdyn::Robot::eulerIntegration(double step)
 {
   rbd::eulerIntegration(mb(), mbc(), step);

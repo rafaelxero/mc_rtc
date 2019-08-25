@@ -400,8 +400,6 @@ bool QPSolver::run(bool dummy) // Rafa's version
 
 void QPSolver::updateCurrentState()
 {
-  clock_t time;
-  
   if(first_run_)
   {
     encoder_prev_ = robot().encoderValues();
@@ -422,7 +420,6 @@ void QPSolver::updateCurrentState()
 
   encoder_prev_ = encoder;
 
-  time = clock();
   if(feedback_)
   {
     if (lambda_switch_ < 1.0)
@@ -480,16 +477,11 @@ void QPSolver::updateCurrentState()
       }
     }
   }
-  time = clock() - time;
-  // std::cout << "Rafa, in QPSolver::updateCurrentState, the time spent for filling the robot structure with feedback is " << time << std::endl;
 
   encoder_prev_ = encoder;
 
-  time = clock();
   rbd::forwardKinematics(robot().mb(), robot().mbc());
   rbd::forwardVelocity(robot().mb(), robot().mbc());
-  time = clock() - time;
-  // std::cout << "Rafa, in QPSolver::updateCurrentState, the time spent for forwardKinematics and forwardVelocity is " << time << std::endl;
   
   if(first_run_)
   {
@@ -497,10 +489,8 @@ void QPSolver::updateCurrentState()
     first_run_ = false;
   }
 
-  time = clock();
   robot().forwardDynamics();
-  time = clock() - time;
-  // std::cout << "Rafa, in QPSolver::updateCurrentState, the time spent for forwardDynamics is " << time << std::endl;
+  robot().feedforwardFriction();
 }
 
 bool QPSolver::solve()
