@@ -774,12 +774,10 @@ void QPSolver::addTaskToGUI(mc_tasks::MetaTask * t)
   gui_->addElement({"Tasks", t->name()},
                    mc_rtc::gui::Button("Remove from solver", [this, t]() { this->removeTask(t); }));
 }
-
   
 /**
  *  IntglTerm_QPSolver
  */
-  
 
 IntglTerm_QPSolver::IntglTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
                                        torque_control::IntegralTerm::IntegralTermType intTermType,
@@ -840,44 +838,51 @@ const std::shared_ptr<torque_control::IntegralTerm> IntglTerm_QPSolver::fbTerm()
   return fbTerm_;
 }
 
-
 /**
  *  IntglTermAntiWindup_QPSolver
  */
 
-
 IntglTermAntiWindup_QPSolver::IntglTermAntiWindup_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
 							   torque_control::IntegralTerm::IntegralTermType intTermType,
 							   torque_control::IntegralTerm::VelocityGainType velGainType,
-							   double lambda, Eigen::VectorXd torqueL, Eigen::VectorXd torqueU,
-							   double perc, double max_linacc, double max_angacc)
+							   double lambda, double perc,
+							   const Eigen::Vector3d & maxLinAcc,
+							   const Eigen::Vector3d & maxAngAcc,
+							   const Eigen::VectorXd & torqueL,
+							   const Eigen::VectorXd & torqueU)
   : IntglTerm_QPSolver(robots, timeStep)
 {
   fbTerm_ = std::make_shared<torque_control::IntegralTermAntiWindup>(robots->mbs(),
 								     robots->robotIndex(),
 								     robots->robot().fd(),
-								     intTermType, velGainType, lambda,
-								     torqueL, torqueU, perc, max_linacc, max_angacc);
+								     intTermType, velGainType,
+								     lambda, perc,
+								     maxLinAcc, maxAngAcc,
+								     torqueL, torqueU);
 }
 
 IntglTermAntiWindup_QPSolver::IntglTermAntiWindup_QPSolver(double timeStep,
 							   torque_control::IntegralTerm::IntegralTermType intTermType,
 							   torque_control::IntegralTerm::VelocityGainType velGainType,
-							   double lambda, Eigen::VectorXd torqueL, Eigen::VectorXd torqueU,
-							   double perc, double max_linacc, double max_angacc)
+							   double lambda, double perc,
+							   const Eigen::Vector3d & maxLinAcc,
+							   const Eigen::Vector3d & maxAngAcc,
+							   const Eigen::VectorXd & torqueL,
+							   const Eigen::VectorXd & torqueU)
   : IntglTerm_QPSolver(timeStep)
 {
   fbTerm_ = std::make_shared<torque_control::IntegralTermAntiWindup>(robots().mbs(),
-								     robots().robotIndex(), robot().fd(),
-								     intTermType, velGainType, lambda,
-								     torqueL, torqueU, perc, max_linacc, max_angacc);
+								     robots().robotIndex(),
+								     robot().fd(),
+								     intTermType, velGainType,
+								     lambda, perc,
+								     maxLinAcc, maxAngAcc,
+								     torqueL, torqueU);
 }
-  
-
+ 
 /**
  *  PassivityPIDTerm_QPSolver
  */
-
   
 PassivityPIDTerm_QPSolver::PassivityPIDTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
                                              double beta, double lambda, double mu, double sigma, double cis)
