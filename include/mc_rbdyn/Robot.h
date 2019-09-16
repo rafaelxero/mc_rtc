@@ -543,6 +543,7 @@ public:
   const std::shared_ptr<rbd::ForwardDynamics> fd() const;
 
   void feedforwardFriction();
+  void feedforwardFriction(const rbd::MultiBodyConfig & mbc);
   const std::shared_ptr<rbd::Friction> friction() const;
   
   /** Apply Euler integration to the robot using \p step timestep */

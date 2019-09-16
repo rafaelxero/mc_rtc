@@ -250,7 +250,7 @@ Robot::Robot(Robots & robots,
   flexibility_ = module_.flexibility();
 
   fd_ = std::make_shared<rbd::ForwardDynamics>(mb());
-  friction_ = std::make_shared<rbd::ImplEulerIntModelStictionFriction>(mb(), 1000, 200);
+  friction_ = std::make_shared<rbd::ImplEulerIntModelRatStictionFriction>(mb(), 5000);
   
   zmp_ = Eigen::Vector3d::Zero();
 }
@@ -875,6 +875,11 @@ void Robot::feedforwardFriction()
   friction_->computeFriction(mb(), mbc());
 }
 
+void Robot::feedforwardFriction(const rbd::MultiBodyConfig & mbc)
+{
+  friction_->computeFriction(mb(), mbc);
+}
+  
 const std::shared_ptr<rbd::Friction> Robot::friction() const
 {
   return friction_;
