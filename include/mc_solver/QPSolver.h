@@ -261,6 +261,12 @@ public:
   
   /** Values calculated by the QP Solver for the main robot */
   const rbd::MultiBodyConfig & mbc_calc() const;
+
+  const std::vector<tasks::qp::Task *> getTasks() const { return solver->getTasks(); }
+  const std::vector<tasks::qp::Equality *> & getEqConstr() const { return solver->getEqConstr(); }
+  const std::vector<tasks::qp::Inequality *> & getInEqConstr() const { return solver->getInEqConstr(); }
+  const std::vector<tasks::qp::GenInequality *> & getGenInEqConstr() const { return solver->getGenInEqConstr(); }
+  const std::vector<tasks::qp::Bound *> & getBoundConstr() const { return solver->getBoundConstr(); }
   
   /** Update number of variables
    *
