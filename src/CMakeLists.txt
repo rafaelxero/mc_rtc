@@ -6,8 +6,13 @@ set(MC_RTC_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../include")
 
 set(VERSION_SCRIPT_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/version-script.lds")
 macro(install_mc_rtc_lib MC_LIB)
-  set_target_properties(${MC_LIB} PROPERTIES FOLDER ${MC_LIB})
+  set_target_properties(${MC_LIB} PROPERTIES FOLDER mc_libraries/${MC_LIB})
   target_include_directories(${MC_LIB} INTERFACE $<INSTALL_INTERFACE:include> $<BUILD_INTERFACE:${MC_RTC_INCLUDE_DIR}>)
+  if(WIN32)
+    target_compile_definitions(${MC_LIB} PUBLIC "-DNOMINMAX"  "-D_ENABLE_EXTENDED_ALIGNED_STORAGE")
+  else()
+    target_compile_options(${MC_LIB} PUBLIC "-mfpmath=sse" "-msse2")
+  endif()
   if(GENERATE_COVERAGE)
     target_compile_options(${MC_LIB} PRIVATE "--coverage")
     set_target_properties(${MC_LIB} PROPERTIES LINK_FLAGS "--coverage")
@@ -22,29 +27,36 @@ macro(install_mc_rtc_lib MC_LIB)
   )
 endmacro()
 
-add_library(mc_rtc_loader SHARED mc_rtc/loader.cpp ../include/mc_rtc/loader.h ../include/mc_rtc/loader_api.h)
+configure_file(mc_rtc/loader.in.cpp "${CMAKE_CURRENT_BINARY_DIR}/mc_rtc/loader.cpp")
+add_library(mc_rtc_loader SHARED "${CMAKE_CURRENT_BINARY_DIR}/mc_rtc/loader.cpp" ../include/mc_rtc/loader.h ../include/mc_rtc/loader_api.h)
 set_target_properties(mc_rtc_loader PROPERTIES COMPILE_FLAGS "-DMC_RTC_LOADER_EXPORTS")
-target_link_libraries(mc_rtc_loader PUBLIC Boost::filesystem Boost::disable_autolinking mc_rtc_3rd_party::ltdl)
+target_link_libraries(mc_rtc_loader PUBLIC Boost::filesystem Boost::disable_autolinking ${LTDL})
 install_mc_rtc_lib(mc_rtc_loader)
 
 set(mc_rtc_utils_SRC
   mc_rtc/Configuration.cpp
-  mc_rtc/Logger.cpp
   mc_rtc/FlatLog.cpp
+  mc_rtc/iterate_binary_log.cpp
+  mc_rtc/Logger.cpp
+  mc_rtc/MessagePackBuilder.cpp
 )
 
 set(mc_rtc_utils_HDR
   ../include/mc_rtc/Configuration.h
+  ../include/mc_rtc/MessagePackBuilder.h
   ../include/mc_rtc/log/FlatLog.h
+  ../include/mc_rtc/log/iterate_binary_log.h
   ../include/mc_rtc/log/Logger.h
-  ../include/mc_rtc/log/serialization/MCLog_generated.h
   ../include/mc_rtc/utils.h
   ../include/mc_rtc/utils_api.h
 )
 
 add_library(mc_rtc_utils SHARED ${mc_rtc_utils_SRC} ${mc_rtc_utils_HDR})
 set_target_properties(mc_rtc_utils PROPERTIES COMPILE_FLAGS "-DMC_RTC_UTILS_EXPORTS")
-target_link_libraries(mc_rtc_utils PUBLIC SpaceVecAlg::SpaceVecAlg Boost::filesystem Boost::disable_autolinking PRIVATE mc_rtc_3rd_party::RapidJSON)
+target_link_libraries(mc_rtc_utils PUBLIC SpaceVecAlg::SpaceVecAlg Boost::filesystem Boost::disable_autolinking PRIVATE mc_rtc_3rd_party::RapidJSON mpack)
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+  target_link_libraries(mc_rtc_utils PUBLIC atomic)
+endif()
 install_mc_rtc_lib(mc_rtc_utils)
 
 set(mc_rbdyn_SRC
@@ -110,6 +122,7 @@ set(mc_rtc_gui_SRC
 )
 
 set(mc_rtc_gui_HDR
+  ../include/mc_rtc/GUIDetails.h
   ../include/mc_rtc/GUIState.h
   ../include/mc_rtc/GUIState.hpp
   ../include/mc_rtc/GUITypes.h
@@ -301,13 +314,5 @@ add_library(mc_control_client SHARED ${mc_control_client_SRC} ${mc_control_clien
 set_target_properties(mc_control_client PROPERTIES COMPILE_FLAGS "-DMC_CONTROL_CLIENT_EXPORTS")
 target_link_libraries(mc_control_client PUBLIC mc_control)
 install_mc_rtc_lib(mc_control_client)
-
-if(FLATC)
-  set_source_files_properties(../include/mc_rtc/log/serialization/MCLog_generated.h PROPERTIES GENERATED 1)
-  add_dependencies(mc_rtc_utils generate_mc_log_code)
-  add_dependencies(mc_solver generate_mc_log_code)
-  add_dependencies(mc_tasks generate_mc_log_code)
-  add_dependencies(mc_control generate_mc_log_code)
-endif()
 
 add_subdirectory(mc_control)

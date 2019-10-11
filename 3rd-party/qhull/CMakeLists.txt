@@ -61,11 +61,12 @@
 # $DateTime: 2016/01/18 19:29:17 $$Author: bbarber $
 
 cmake_minimum_required(VERSION 2.6)
-if(POLICY CMP0063)
-  cmake_policy(SET CMP0063 OLD)
-endif()
+set(CMAKE_CXX_VISIBILITY_PRESET default)
 if(POLICY CMP0048)
   cmake_policy(SET CMP0048 NEW)
+endif()
+if(POLICY CMP0063)
+  cmake_policy(SET CMP0063 NEW)
 endif()
 project(qhull)
 remove_definitions(-std=c++0x)
@@ -352,10 +353,12 @@ set(qhull_STATICR qhullstatic_r)
 # ---------------------------------------
 
 add_library(${qhull_STATIC} STATIC ${libqhull_SOURCES})
+set_target_properties(${qhull_STATIC} PROPERTIES FOLDER 3rd-party)
 set_target_properties(${qhull_STATIC} PROPERTIES
     VERSION ${qhull_VERSION})
 
 add_library(${qhull_STATICR} STATIC ${libqhullr_SOURCES})
+set_target_properties(${qhull_STATICR} PROPERTIES FOLDER 3rd-party)
 set_target_properties(${qhull_STATICR} PROPERTIES
     VERSION ${qhull_VERSION})
 
@@ -370,6 +373,7 @@ endif(UNIX)
 # ---------------------------------------
 
 add_library(${qhull_CPP} STATIC ${libqhullcpp_SOURCES})
+set_target_properties(${qhull_CPP} PROPERTIES FOLDER 3rd-party)
 set_target_properties(${qhull_CPP} PROPERTIES
     VERSION ${qhull_VERSION})
 

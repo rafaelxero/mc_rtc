@@ -75,13 +75,23 @@ def read_flat(f, tmp = False):
 
 def read_csv(fpath, tmp = False):
   data = {}
+  string_entries = {}
   with open(fpath) as fd:
     reader = csv.DictReader(fd, delimiter=';')
     for k in reader.fieldnames:
       data[k] = []
     for row in reader:
       for k in reader.fieldnames:
-        data[k].append(safe_float(row[k]))
+        if k not in string_entries:
+          try:
+            data[k].append(safe_float(row[k]))
+          except ValueError:
+            string_entries[k] = {None: None, row[k]: 0}
+            data[k].append(0)
+        else:
+          if row[k] not in string_entries[k]:
+            string_entries[k][row[k]] = max(string_entries[k].values()) + 1
+          data[k].append(string_entries[k][row[k]])
   for k in data:
     data[k] = np.array(data[k])
   if tmp:
@@ -882,6 +892,7 @@ class MCLogUI(QtGui.QMainWindow):
     if 'perf_SolverBuildAndSolve' in self.data and 'perf_SolverSolve' in self.data:
       self.data['perf_SolverBuild'] = self.data['perf_SolverBuildAndSolve'] - self.data['perf_SolverSolve']
     self.update_data()
+    self.setWindowTitle("MC Log Plotter - {}".format(os.path.basename(fpath)))
 
   def update_data(self):
     self.update_menu()

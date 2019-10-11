@@ -10,24 +10,27 @@ if(POLICY CMP0054)
   cmake_policy(SET CMP0054 NEW)
 endif()
 
-include(cmake/base.cmake)
-include(cmake/cython/cython.cmake)
-include(cmake/msvc-specific.cmake)
-include(cmake/version-script.cmake)
-
 set(PROJECT_NAME mc_rtc)
 set(PROJECT_DESCRIPTION mc_rtc)
 set(PROJECT_URL https://gite.lirmm.fr/multi-contact/mc_rtc)
 set(PROJECT_DEBUG_POSTFIX "_d")
 set(PROJECT_USE_KEYWORD_LINK_LIBRARIES TRUE)
-
-set(CXX_DISABLE_WERROR 1)
-set(CMAKE_CXX_VISIBILITY_PRESET hidden)
-set(CMAKE_CXX_STANDARD 11)
-set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+set(PROJECT_USE_CMAKE_EXPORT TRUE)
 
 set(DOXYGEN_USE_MATHJAX "YES")
-setup_project()
+set(CXX_DISABLE_WERROR 1)
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_CXX_STANDARD 11)
+
+include(cmake/base.cmake)
+include(cmake/cython/cython.cmake)
+include(cmake/msvc-specific.cmake)
+include(cmake/version-script.cmake)
+
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+project(${PROJECT_NAME} C CXX)
 
 option(GENERATE_COVERAGE "Generate coverage data" FALSE)
 if("${CMAKE_CXX_FLAGS}" MATCHES "--coverage")
@@ -37,15 +40,7 @@ if("${CMAKE_CXX_FLAGS}" MATCHES "--coverage")
   string(REPLACE "--coverage" "" CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS}")
 endif()
 
-if(WIN32)
-  add_definitions("-DNOMINMAX" "-D_ENABLE_EXTENDED_ALIGNED_STORAGE")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4068")
-else()
-  add_definitions(-mfpmath=sse -msse2)
-endif()
-
 option(BUILD_CONTROLLER_SAMPLES "Build sample controllers in the project" ON)
-option(DISABLE_TESTS "Disable unit tests" OFF)
 option(DISABLE_CONTROLLER_TESTS "Disable controller unit tests" OFF)
 option(DISABLE_ROBOT_TESTS "Disable RobotModule unit tests" OFF)
 
@@ -72,6 +67,9 @@ find_package(mc_rtc_3rd_party_nanomsg REQUIRED)
 # qhull (build re-entrant static version)
 add_subdirectory(3rd-party/qhull)
 
+# mpack (build static version)
+add_subdirectory(3rd-party/mpack)
+
 # RapidJSON
 # The code was copied from the 1.1.0 release tarball for RapidJSON
 # https://github.com/miloyip/rapidjson
@@ -87,26 +85,20 @@ else()
   set(ROSCPP_FOUND False)
 endif()
 
-macro(find_description_package desc_pkg)
-  string(TOUPPER "${desc_pkg}" "DESC_PKG")
-  if(NOT DEFINED ${DESC_PKG}_PATH)
-    execute_process(
-      COMMAND "${PKG_CONFIG_EXECUTABLE}"
-      "--variable=datadir" "${desc_pkg}"
-      RESULT_VARIABLE "${DESC_PKG}_RESULT"
-      OUTPUT_VARIABLE "${DESC_PKG}_PATH"
-      ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if(${${DESC_PKG}_RESULT})
-      set(${DESC_PKG}_FOUND False)
-      message(WARNING "${DESC_PKG}_PATH is not defined and pkg-config failed to find ${desc_pkg}, the related robots' modules will not work properly. Check your system configuration or define ${DESC_PKG} to fix this issue.")
+macro(find_description_package PACKAGE)
+  set(PACKAGE_PATH_VAR "${PACKAGE}_PATH")
+  string(TOUPPER "${PACKAGE_PATH_VAR}" PACKAGE_PATH_VAR)
+  find_package(${PACKAGE} REQUIRED)
+  if("${${PACKAGE}_INSTALL_PREFIX}" STREQUAL "")
+    if("${${PACKAGE}_SOURCE_PREFIX}" STREQUAL "")
+      message(FATAL_ERROR "Your ${PACKAGE} does not define where to find the data, please update.")
     else()
-      message(STATUS "${desc_pkg}: ${${DESC_PKG}_PATH}")
-      set(${DESC_PKG}_FOUND True)
+      set(${PACKAGE_PATH_VAR} "${${PACKAGE}_SOURCE_PREFIX}")
     endif()
   else()
-    set(${DESC_PKG}_FOUND True)
-    message(STATUS "${desc_pkg}: ${${DESC_PKG}_PATH}")
+    set(${PACKAGE_PATH_VAR} "${${PACKAGE}_INSTALL_PREFIX}")
   endif()
+  message("-- Found ${PACKAGE}: ${${PACKAGE_PATH_VAR}}")
 endmacro()
 
 find_description_package(mc_env_description)
@@ -119,14 +111,13 @@ configure_file(${PROJECT_SOURCE_DIR}/include/mc_rtc/config.h.cmake.in ${CMAKE_CU
 # For MSVC, set local environment variable to enable finding the built dll
 # of the main library when launching ctest with RUN_TESTS
 if(MSVC)
-  set(CMAKE_MSVCIDE_RUN_PATH "\$(SolutionDir)/src/\$(Configuration)")
+  set(CMAKE_MSVCIDE_RUN_PATH "\$(SolutionDir)/3rd-party/ltdl/\$(Configuration);\$(SolutionDir)/src/\$(Configuration);\$(SolutionDir)/src/mc_control/fsm/\$(Configuration)")
 endif(MSVC)
 
 add_subdirectory(CMakeModules)
 add_subdirectory(doc)
-add_subdirectory(idl)
 add_subdirectory(src)
-if(NOT ${DISABLE_TESTS})
+if(${BUILD_TESTING})
   add_subdirectory(tests)
 endif()
 if(${BUILD_BENCHMARKS})
@@ -154,11 +145,9 @@ install(
   DESTINATION etc
 )
 
-setup_project_finalize()
-setup_project_package_finalize()
-
 # Extra macros for mc_rtc
 install(FILES "src/mc_rtcMacros.cmake"
         DESTINATION "${CONFIG_INSTALL_DIR}")
-file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/generated/mc_rtcConfig.cmake" "include(\"\${CMAKE_CURRENT_LIST_DIR}/mc_rtcMacros.cmake\")\n")
-file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/generated/mc_rtcConfig.cmake" "include(\"\${CMAKE_CURRENT_LIST_DIR}/mc_rtc_fsm_states.cmake\")\n")
+set(PACKAGE_EXTRA_MACROS "${PACKAGE_EXTRA_MACROS}
+include(\"\${CMAKE_CURRENT_LIST_DIR}/mc_rtcMacros.cmake\")
+include(\"\${CMAKE_CURRENT_LIST_DIR}/mc_rtc_fsm_states.cmake\")")

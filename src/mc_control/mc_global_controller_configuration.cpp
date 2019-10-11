@@ -221,7 +221,7 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
     if(gui_config.has("IPC"))
     {
       auto ipc_config = gui_config("IPC");
-      auto socket = ipc_config("Socket", std::string("/tmp/mc_rtc"));
+      auto socket = ipc_config("Socket", (bfs::temp_directory_path() / "mc_rtc").string());
       gui_server_pub_uris.push_back("ipc://" + socket + "_pub.ipc");
       gui_server_rep_uris.push_back("ipc://" + socket + "_rep.ipc");
     }
@@ -290,6 +290,10 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
   {
     initial_controller = enabled_controllers[0];
   }
+}
+
+void MCGlobalController::GlobalConfiguration::load_controllers_configs()
+{
   // Load controller-specific configuration
   for(const auto & c : enabled_controllers)
   {

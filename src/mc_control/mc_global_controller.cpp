@@ -20,15 +20,78 @@
 #include <fstream>
 #include <iomanip>
 
+namespace
+{
+
+using gripper_it_t = std::map<std::string, std::shared_ptr<mc_control::Gripper>>::const_iterator;
+
+/** Helper to build the qOut logging */
+void addQOutLogEntry(std::function<void(std::vector<double> &)> callback,
+                     mc_rtc::Logger & logger,
+                     gripper_it_t it,
+                     gripper_it_t end,
+                     const std::vector<std::string> & refJointOrder)
+{
+  if(it == end)
+  {
+    std::vector<double> qOut(refJointOrder.size(), 0);
+    auto cb = [callback, qOut]() mutable -> const std::vector<double> & {
+      callback(qOut);
+      return qOut;
+    };
+    logger.addLogEntry("qOut", cb);
+  }
+  else
+  {
+    auto rjoIndex = [&refJointOrder](const std::string & name) {
+      for(size_t j = 0; j < refJointOrder.size(); ++j)
+      {
+        if(name == refJointOrder[j])
+        {
+          return static_cast<int>(j);
+        }
+      }
+      return -1;
+    };
+    const auto & gripper = it->second;
+    std::vector<int> gripperToRef;
+    for(size_t i = 0; i < gripper->names.size(); ++i)
+    {
+      gripperToRef.push_back(rjoIndex(gripper->names[i]));
+    }
+    auto cb = [callback, gripperToRef, gripper](std::vector<double> & qOut) {
+      callback(qOut);
+      const auto & q = gripper->_q;
+      for(size_t i = 0; i < gripperToRef.size(); ++i)
+      {
+        if(gripperToRef[i] != -1)
+        {
+          qOut[gripperToRef[i]] = q[i];
+        }
+      }
+    };
+    it++;
+    addQOutLogEntry(cb, logger, it, end, refJointOrder);
+  }
+}
+
+} // namespace
+
 /* Note all service calls except for controller switches are implemented in mc_global_controller_services.cpp */
 
 namespace mc_control
 {
 
 MCGlobalController::MCGlobalController(const std::string & conf, std::shared_ptr<mc_rbdyn::RobotModule> rm)
-: config(conf, rm), current_ctrl(""), next_ctrl(""), controller_(nullptr), next_controller_(nullptr),
+: MCGlobalController(GlobalConfiguration(conf, rm))
+{
+}
+
+MCGlobalController::MCGlobalController(const GlobalConfiguration & conf)
+: config(conf), current_ctrl(""), next_ctrl(""), controller_(nullptr), next_controller_(nullptr),
   real_robots(std::make_shared<mc_rbdyn::Robots>())
 {
+  config.load_controllers_configs();
   try
   {
     controller_loader.reset(new mc_rtc::ObjectLoader<mc_control::MCController>(
@@ -465,7 +528,7 @@ bool MCGlobalController::run()
   }
   global_run_dt = clock::now() - start_run_t;
   // Percentage of time spent not updating/solving the QP
-  framework_cost = 100 * (1 - solver_build_and_solve_t / global_run_dt.count());
+  framework_cost = 100 * (1 - controller_run_dt.count() / global_run_dt.count());
   return running;
 }
 
@@ -751,20 +814,33 @@ void MCGlobalController::setup_log()
       "qIn", [controller]() -> const std::vector<double> & { return controller->robot().encoderValues(); });
   controller->logger().addLogEntry(
       "ff", [controller]() -> const sva::PTransformd & { return controller->robot().mbc().bodyPosW[0]; });
-  controller->logger().addLogEntry("qOut", [controller]() {
-    const auto & qOut = controller->send(0).robots_state[0].q;
-    const auto & rjo = controller->robot().refJointOrder();
-    std::vector<double> ret(rjo.size(), 0);
-    for(size_t i = 0; i < rjo.size(); ++i)
+  // Convert reference order to mbc.q, -1 if the joint does not exist
+  std::vector<int> refToQ;
+  for(const auto & j : controller->robot().refJointOrder())
+  {
+    if(controller->robot().hasJoint(j))
     {
-      const auto & jn = rjo[i];
-      if(qOut.count(jn))
+      auto jIndex = controller->robot().jointIndexByName(j);
+      if(controller->robot().mb().joint(jIndex).dof() == 1)
       {
-        ret[i] = qOut.at(jn)[0];
+        refToQ.push_back(controller->robot().jointIndexByName(j));
+        continue;
       }
     }
-    return ret;
-  });
+    refToQ.push_back(-1);
+  }
+  auto qOutCb = [controller, refToQ](std::vector<double> & qOut) {
+    for(size_t i = 0; i < qOut.size(); ++i)
+    {
+      if(refToQ[i] != -1)
+      {
+        qOut[i] = controller->robot().mbc().q[refToQ[i]][0];
+      }
+    }
+    return qOut;
+  };
+  addQOutLogEntry(qOutCb, controller->logger(), controller->grippers.cbegin(), controller->grippers.cend(),
+                  controller->robot().refJointOrder());
   controller->logger().addLogEntry(
       "tauIn", [controller]() -> const std::vector<double> & { return controller->robot().jointTorques(); });
   for(const auto & fs : controller->robot().forceSensors())
