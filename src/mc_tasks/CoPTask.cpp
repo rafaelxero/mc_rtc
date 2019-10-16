@@ -13,11 +13,6 @@ namespace mc_tasks
 namespace force
 {
 
-namespace
-{
-constexpr double MIN_PRESSURE = 0.5; // [N]
-}
-
 CoPTask::CoPTask(const std::string & surfaceName,
                  const mc_rbdyn::Robots & robots,
                  unsigned int robotIndex,
@@ -57,6 +52,17 @@ void CoPTask::removeFromLogger(mc_rtc::Logger & logger)
   logger.removeLogEntry(name_ + "_measured_copW");
   logger.removeLogEntry(name_ + "_target_cop");
   logger.removeLogEntry(name_ + "_target_copW");
+}
+
+void CoPTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
+{
+  gui.addElement({"Tasks", name_},
+                 mc_rtc::gui::ArrayLabel("cop_measured", [this]() -> Eigen::Vector2d { return this->measuredCoP(); }),
+                 mc_rtc::gui::ArrayInput("cop_target",
+                                         [this]() -> const Eigen::Vector2d & { return this->targetCoP(); },
+                                         [this](const Eigen::Vector2d & cop) { this->targetCoP(cop); }));
+  // Don't add SurfaceTransformTask as target configuration is different
+  DampingTask::addToGUI(gui);
 }
 
 std::function<bool(const mc_tasks::MetaTask &, std::string &)> CoPTask::buildCompletionCriteria(

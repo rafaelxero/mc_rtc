@@ -43,7 +43,7 @@ bounds_t bounds(const rbd::MultiBody & mb, const rm_bounds_t & bounds)
   auto fill_bound = [&mb](const std::string & name, const rm_bound_t & bound_in, jt_method def_size, double def_value,
                           double ff_def_value) {
     bound_t res;
-    res.reserve(mb.nrJoints());
+    res.reserve(static_cast<size_t>(mb.nrJoints()));
     for(const auto & j : mb.joints())
     {
       res.emplace_back(((j).*(def_size))(), j.type() == rbd::Joint::Free ? ff_def_value : def_value);
@@ -245,6 +245,20 @@ Robot::Robot(Robots & robots,
   }
 
   refJointOrder_ = module_.ref_joint_order();
+  refJointIndexToMBCIndex_.resize(refJointOrder_.size());
+  for(size_t i = 0; i < refJointOrder_.size(); ++i)
+  {
+    const auto & jN = refJointOrder_[i];
+    if(hasJoint(jN))
+    {
+      auto jIndex = mb().jointIndexByName(jN);
+      refJointIndexToMBCIndex_[i] = mb().joint(jIndex).dof() != 0 ? jIndex : -1;
+    }
+    else
+    {
+      refJointIndexToMBCIndex_[i] = -1;
+    }
+  }
 
   springs_ = module_.springs();
   flexibility_ = module_.flexibility();
@@ -333,6 +347,11 @@ bool Robot::hasBody(const std::string & name) const
 unsigned int Robot::jointIndexByName(const std::string & name) const
 {
   return mb().jointIndexByName().at(name);
+}
+
+int Robot::jointIndexInMBC(size_t jointIndex) const
+{
+  return refJointIndexToMBCIndex_.at(jointIndex);
 }
 
 unsigned int Robot::bodyIndexByName(const std::string & name) const
@@ -468,6 +487,14 @@ Eigen::Vector3d Robot::comVelocity() const
 Eigen::Vector3d Robot::comAcceleration() const
 {
   return rbd::computeCoMAcceleration(mb(), mbc());
+}
+
+sva::ForceVecd Robot::bodyWrench(const std::string & bodyName) const
+{
+  const auto & fs = bodyForceSensor(bodyName);
+  sva::ForceVecd w_fsactual = fs.wrenchWithoutGravity(*this);
+  sva::PTransformd X_fsactual_surf = fs.X_fsactual_parent();
+  return X_fsactual_surf.dualMul(w_fsactual);
 }
 
 sva::ForceVecd Robot::surfaceWrench(const std::string & surfaceName) const
@@ -904,7 +931,8 @@ void Robot::posW(const sva::PTransformd & pt)
 {
   if(mb().joint(0).type() == rbd::Joint::Type::Free)
   {
-    const sva::Quaterniond rotation{pt.rotation().transpose()};
+    sva::Quaterniond rotation{pt.rotation().transpose()};
+    rotation.normalize();
     q()[0] = {rotation.w(),         rotation.x(),         rotation.y(),        rotation.z(),
               pt.translation().x(), pt.translation().y(), pt.translation().z()};
     forwardKinematics();
@@ -922,15 +950,20 @@ void Robot::posW(const sva::PTransformd & pt)
   }
 }
 
-void Robot::setBaseLinkVelocity(const Eigen::Vector6d & alpha_)
+void Robot::velW(const sva::MotionVecd & vel)
 {
-  alpha()[0][0] = alpha_(0);
-  alpha()[0][1] = alpha_(1);
-  alpha()[0][2] = alpha_(2);
-  alpha()[0][3] = alpha_(3);
-  alpha()[0][4] = alpha_(4);
-  alpha()[0][5] = alpha_(5);
+  alpha()[0][0] = vel.angular().x();
+  alpha()[0][1] = vel.angular().y();
+  alpha()[0][2] = vel.angular().z();
+  alpha()[0][3] = vel.linear().x();
+  alpha()[0][4] = vel.linear().x();
+  alpha()[0][5] = vel.linear().x();
   forwardVelocity();
+}
+
+const sva::MotionVecd & Robot::velW() const
+{
+  return bodyVelW().at(0);
 }
 
 void Robot::copy(Robots & robots, unsigned int robots_idx, const Base & base) const

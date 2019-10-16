@@ -26,11 +26,7 @@ struct MC_RBDYN_DLLAPI Robot
 {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   friend struct Robots;
-#if defined __GLIBC__
-  friend struct __gnu_cxx::new_allocator<Robot>;
-#else
-  friend class std::allocator<Robot>;
-#endif
+
 public:
   using S_ObjectPtr = std::shared_ptr<sch::S_Object>;
   using convex_pair_t = std::pair<std::string, S_ObjectPtr>;
@@ -128,6 +124,20 @@ public:
    * \throws If the joint does not exist within the robot.
    */
   unsigned int jointIndexByName(const std::string & name) const;
+
+  /** Returns the joint index in the mbc of the joint with index jointIndex in
+   * refJointOrder
+   *
+   * @note Joint indices can be -1 for joints present in refJointOrder but not
+   * in the robot's mbc (such as filtered joints in some robot modules)
+   *
+   * @param jointIndex Joint index in refJointOrder
+   *
+   * @returns joint index in the mbc
+   *
+   * @throws If jointIndex >= refJointOrder.size()
+   */
+  int jointIndexInMBC(size_t jointIndex) const;
 
   /** Returns the body index of joint named \name
    *
@@ -231,6 +241,16 @@ public:
    * @throws If no sensor is attached to this surface
    */
   sva::ForceVecd surfaceWrench(const std::string & surfaceName) const;
+
+  /** Compute the gravity-free wrench in body frame
+   *
+   * @param bodyName A body attached to a force sensor
+   *
+   * @return Measured wrench in body frame
+   *
+   * @throws If no sensor is attached to this surface
+   */
+  sva::ForceVecd bodyWrench(const std::string & bodyName) const;
 
   /** Compute the cop in surface frame computed from gravity-free force
    * measurements
@@ -561,14 +581,21 @@ public:
    * @param pt The new global pose
    *
    * @throws If joint(0) is neither free flyer nor fixed
+   *
+   * @note This function takes care of calling rbd::forwardKinematics
    */
   void posW(const sva::PTransformd & pt);
 
   /** Update the robot's base link velocity.
    *
    * \param alpha New base link velocity.
+   *
+   * @note This function takes care of calling rbd::forwardVelocity
    */
-  void setBaseLinkVelocity(const Eigen::Vector6d & alpha);
+  void velW(const sva::MotionVecd & alpha);
+
+  /** Return the robot's global velocity */
+  const sva::MotionVecd & velW() const;
 
 private:
   Robots * robots_;
@@ -589,6 +616,9 @@ private:
   std::map<std::string, std::vector<double>> stance_;
   /** Reference joint order see mc_rbdyn::RobotModule */
   std::vector<std::string> refJointOrder_;
+  /** Correspondance between refJointOrder (actuated joints) index and
+   * mbc index. **/
+  std::vector<int> refJointIndexToMBCIndex_;
   /** Encoder values provided by the low-level controller */
   std::vector<double> encoderValues_;
   /** Encoder velocities provided by the low-level controller or estimated from
