@@ -38,6 +38,22 @@ macro(add_robot_simple robot_name)
   add_robot(${robot_name} ${robot_name}.cpp ${robot_name}.h)
 endmacro()
 
+# -- Observers --
+set(MC_OBSERVERS_INSTALL_PREFIX "${MC_RTC_LIBDIR}/mc_observers")
+
+macro(add_observer observer_name observer_SRC observer_HDR)
+  add_library(${observer_name} SHARED ${observer_SRC} ${observer_HDR})
+  set_target_properties(${observer_name} PROPERTIES COMPILE_FLAGS "-DMC_OBSERVERS_EXPORTS" PREFIX "")
+  target_link_libraries(${observer_name} PUBLIC mc_rbdyn mc_rtc_gui)
+  set_target_properties(${observer_name} PROPERTIES INSTALL_RPATH ${MC_OBSERVERS_INSTALL_PREFIX})
+  install(TARGETS ${observer_name} DESTINATION "${MC_OBSERVERS_INSTALL_PREFIX}")
+endmacro()
+
+macro(add_observer_simple observer_base)
+  add_observer(${observer_base} ${observer_base}.cpp ${observer_base}.h)
+endmacro()
+
+
 # -- States --
 
 set(MC_STATES_DEFAULT_INSTALL_PREFIX "${MC_CONTROLLER_INSTALL_PREFIX}/fsm/states")
@@ -48,6 +64,7 @@ macro(add_fsm_state state_name state_SRC state_HDR)
 
   set_target_properties(${state_name} PROPERTIES PREFIX "")
   set_target_properties(${state_name} PROPERTIES COMPILE_FLAGS "-DMC_CONTROL_FSM_STATE_EXPORTS")
+  set_target_properties(${state_name} PROPERTIES INSTALL_RPATH "${MC_STATES_DEFAULT_INSTALL_PREFIX};${MC_STATES_INSTALL_PREFIX}")
   if(DEFINED CATKIN_DEVEL_PREFIX)
     set_target_properties(${state_name} PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CATKIN_DEVEL_PREFIX}/lib/${PROJECT_NAME}/states")
   endif()
@@ -65,5 +82,23 @@ macro(add_fsm_state_simple state_name)
 endmacro()
 
 macro(add_fsm_data_directory directory)
-  install(DIRECTORY ${directory} DESTINATION "${MC_STATES_INSTALL_PREFIX}" FILES_MATCHING PATTERN "*.json")
+  install(DIRECTORY ${directory} DESTINATION "${MC_STATES_INSTALL_PREFIX}" FILES_MATCHING REGEX ".*(.json$|.yml$|.yaml$)")
+endmacro()
+
+# -- Helper to find a description package --
+
+macro(find_description_package PACKAGE)
+  set(PACKAGE_PATH_VAR "${PACKAGE}_PATH")
+  string(TOUPPER "${PACKAGE_PATH_VAR}" PACKAGE_PATH_VAR)
+  find_package(${PACKAGE} REQUIRED)
+  if("${${PACKAGE}_INSTALL_PREFIX}" STREQUAL "")
+    if("${${PACKAGE}_SOURCE_PREFIX}" STREQUAL "")
+      message(FATAL_ERROR "Your ${PACKAGE} does not define where to find the data, please update.")
+    else()
+      set(${PACKAGE_PATH_VAR} "${${PACKAGE}_SOURCE_PREFIX}")
+    endif()
+  else()
+    set(${PACKAGE_PATH_VAR} "${${PACKAGE}_INSTALL_PREFIX}")
+  endif()
+  message("-- Found ${PACKAGE}: ${${PACKAGE_PATH_VAR}}")
 endmacro()

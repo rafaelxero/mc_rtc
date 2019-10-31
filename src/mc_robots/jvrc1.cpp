@@ -9,7 +9,7 @@
 #define JVRC_VAL(x) #x
 #define JVRC_VAL_VAL(x) JVRC_VAL(x)
 
-#include "jvrc-1.h"
+#include "jvrc1.h"
 
 #include <mc_rtc/logging.h>
 
@@ -21,7 +21,7 @@ namespace bfs = boost::filesystem;
 namespace mc_robots
 {
 
-JVRC1RobotModule::JVRC1RobotModule() : RobotModule(std::string(JVRC_VAL_VAL(JVRC_DESCRIPTION_PATH)), "jvrc-1")
+JVRC1RobotModule::JVRC1RobotModule() : RobotModule(std::string(JVRC_VAL_VAL(JVRC_DESCRIPTION_PATH)), "jvrc1")
 {
   std::ifstream ifs(urdf_path);
   if(ifs.is_open())
@@ -68,6 +68,9 @@ JVRC1RobotModule::JVRC1RobotModule() : RobotModule(std::string(JVRC_VAL_VAL(JVRC
     _forceSensors.push_back(mc_rbdyn::ForceSensor("LeftFootForceSensor", "L_ANKLE_P_S", sva::PTransformd::Identity()));
     _forceSensors.push_back(mc_rbdyn::ForceSensor("RightHandForceSensor", "R_WRIST_Y_S", sva::PTransformd::Identity()));
     _forceSensors.push_back(mc_rbdyn::ForceSensor("LeftHandForceSensor", "L_WRIST_Y_S", sva::PTransformd::Identity()));
+
+    _bodySensors.emplace_back("Accelerometer", "PELVIS_S", sva::PTransformd(Eigen::Vector3d(-0.0325, 0, 0.1095)));
+    _bodySensors.emplace_back("FloatingBase", "PELVIS_S", sva::PTransformd::Identity());
 
     _minimalSelfCollisions = {
         {"WAIST_R_S", "L_SHOULDER_Y_S", 0.02, 0.001, 0.}, {"WAIST_R_S", "R_SHOULDER_Y_S", 0.02, 0.001, 0.},

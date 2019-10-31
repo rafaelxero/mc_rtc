@@ -6,9 +6,21 @@
 #include <mc_rtc/Configuration.h>
 #include <mc_rtc/logging.h>
 
+#include <boost/algorithm/string/case_conv.hpp>
+#include <boost/filesystem.hpp>
+namespace bfs = boost::filesystem;
+
 #include "internals/json.h"
 #include <fstream>
 #include <stdexcept>
+
+namespace
+{
+inline std::string to_lower(const std::string & in)
+{
+  return boost::algorithm::to_lower_copy(in);
+}
+} // namespace
 
 namespace mc_rtc
 {
@@ -287,7 +299,7 @@ Configuration::operator Eigen::VectorXd() const
     Eigen::VectorXd ret(v.size());
     for(size_t i = 0; i < v.size(); ++i)
     {
-      ret(i) = v[static_cast<int>(i)].asDouble();
+      ret(static_cast<int>(i)) = v[i].asDouble();
     }
     return ret;
   }
@@ -315,7 +327,7 @@ Configuration::operator Eigen::Matrix3d() const
       {
         for(size_t j = 0; j < 3; ++j)
         {
-          m(i, j) = v[3 * i + j].asDouble();
+          m(static_cast<int>(i), static_cast<int>(j)) = v[3 * i + j].asDouble();
         }
       }
       return m;
@@ -345,7 +357,7 @@ Configuration::operator Eigen::Matrix6d() const
     {
       for(size_t j = 0; j < 6; ++j)
       {
-        m(i, j) = v[6 * i + j].asDouble();
+        m(static_cast<int>(i), static_cast<int>(j)) = v[6 * i + j].asDouble();
       }
     }
     return m;
@@ -364,7 +376,7 @@ Configuration::operator Eigen::MatrixXd() const
       assert(row.size() == ret.cols());
       for(size_t j = 0; j < row.size(); ++j)
       {
-        ret(i, j) = row[j].asDouble();
+        ret(static_cast<int>(i), static_cast<int>(j)) = row[j].asDouble();
       }
     }
     return ret;
@@ -453,6 +465,20 @@ Configuration Configuration::fromData(const char * data)
   return config;
 }
 
+Configuration Configuration::fromYAMLData(const std::string & data)
+{
+  return Configuration::fromYAMLData(data.c_str());
+}
+
+Configuration Configuration::fromYAMLData(const char * data)
+{
+  mc_rtc::Configuration config;
+  auto & target = *std::static_pointer_cast<internal::RapidJSONDocument>(config.v.doc_);
+  target.SetObject();
+  mc_rtc::internal::loadYAMLData(data, config);
+  return config;
+}
+
 Configuration Configuration::rootArray()
 {
   mc_rtc::Configuration config;
@@ -474,7 +500,19 @@ void Configuration::load(const std::string & path)
 
   if(target.IsNull())
   {
-    mc_rtc::internal::loadDocument(path, target);
+    std::string extension = to_lower(bfs::path(path).extension().string());
+    if(extension == ".yml" || extension == ".yaml")
+    {
+      target.SetObject();
+      if(!mc_rtc::internal::loadYAMLDocument(path, *this))
+      {
+        LOG_WARNING("Configuration dump until the attempted conversion:\n" << this->dump(true))
+      }
+    }
+    else
+    {
+      mc_rtc::internal::loadDocument(path, target);
+    }
   }
   else
   {
@@ -549,16 +587,45 @@ void Configuration::loadData(const std::string & data)
   }
 }
 
-void Configuration::save(const std::string & path, bool pretty) const
+void Configuration::loadYAMLData(const std::string & data)
 {
-  auto & value = *static_cast<internal::RapidJSONValue *>(v.value_);
-  mc_rtc::internal::saveDocument(path, value, pretty);
+  auto & target = *std::static_pointer_cast<internal::RapidJSONDocument>(v.doc_);
+  if(target.IsNull())
+  {
+    target.SetObject();
+    mc_rtc::internal::loadYAMLData(data.c_str(), *this);
+  }
+  else
+  {
+    load(Configuration::fromYAMLData(data));
+  }
 }
 
-std::string Configuration::dump(bool pretty) const
+void Configuration::save(const std::string & path, bool pretty) const
 {
-  auto & value = *static_cast<internal::RapidJSONValue *>(v.value_);
-  return mc_rtc::internal::dumpDocument(value, pretty);
+  std::string extension = to_lower(bfs::path(path).extension().string());
+  if(extension == ".yml" || extension == ".yaml")
+  {
+    mc_rtc::internal::saveYAML(path, *this);
+  }
+  else
+  {
+    auto & value = *static_cast<internal::RapidJSONValue *>(v.value_);
+    mc_rtc::internal::saveDocument(path, value, pretty);
+  }
+}
+
+std::string Configuration::dump(bool pretty, bool yaml) const
+{
+  if(yaml)
+  {
+    return mc_rtc::internal::dumpYAML(*this);
+  }
+  else
+  {
+    auto & value = *static_cast<internal::RapidJSONValue *>(v.value_);
+    return mc_rtc::internal::dumpDocument(value, pretty);
+  }
 }
 
 size_t Configuration::toMessagePack(std::vector<char> & data) const

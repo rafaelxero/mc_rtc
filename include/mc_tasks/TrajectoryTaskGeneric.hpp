@@ -204,8 +204,8 @@ void TrajectoryTaskGeneric<T>::selectActiveJoints(
     LOG_WARNING("selectActiveJoints(names) ignored: use selectActiveJoints(solver, names) for a task already added to "
                 "the solver");
   }
-  selectorT_ = std::make_shared<tasks::qp::JointsSelector>(
-      tasks::qp::JointsSelector::ActiveJoints(robots.mbs(), rIndex, errorT.get(), activeJointsName, activeDofs));
+  selectorT_ = std::make_shared<tasks::qp::JointsSelector>(tasks::qp::JointsSelector::ActiveJoints(
+      robots.mbs(), static_cast<int>(rIndex), errorT.get(), activeJointsName, activeDofs));
   trajectoryT_ = std::make_shared<tasks::qp::TrajectoryTask>(robots.mbs(), rIndex, selectorT_.get(), 1, 2, weight_);
   trajectoryT_->setGains(stiffness_, damping_);
 }
@@ -238,8 +238,8 @@ void TrajectoryTaskGeneric<T>::selectUnactiveJoints(
     LOG_WARNING("selectUnactiveJoints(names) ignored: use selectUnactiveJoints(solver, names) for a task already added "
                 "to the solver");
   }
-  selectorT_ = std::make_shared<tasks::qp::JointsSelector>(
-      tasks::qp::JointsSelector::UnactiveJoints(robots.mbs(), rIndex, errorT.get(), unactiveJointsName, unactiveDofs));
+  selectorT_ = std::make_shared<tasks::qp::JointsSelector>(tasks::qp::JointsSelector::UnactiveJoints(
+      robots.mbs(), static_cast<int>(rIndex), errorT.get(), unactiveJointsName, unactiveDofs));
   trajectoryT_ = std::make_shared<tasks::qp::TrajectoryTask>(robots.mbs(), rIndex, selectorT_.get(), 1, 2, weight_);
   trajectoryT_->setGains(stiffness_, damping_);
 }
@@ -428,5 +428,13 @@ void TrajectoryTaskGeneric<T>::removeFromLogger(mc_rtc::Logger & logger)
   logger.removeLogEntry(name_ + "_refVel");
   logger.removeLogEntry(name_ + "_refAccel");
 }
-  
+
+template<typename T>
+std::function<bool(const mc_tasks::MetaTask & task, std::string &)> TrajectoryTaskGeneric<T>::buildCompletionCriteria(
+    double dt,
+    const mc_rtc::Configuration & config) const
+{
+  return MetaTask::buildCompletionCriteria(dt, config);
+}
+
 } // namespace mc_tasks

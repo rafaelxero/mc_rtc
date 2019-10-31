@@ -12,6 +12,10 @@ add_executable(LoggerTraits LoggerTraits.cpp)
 set_target_properties(LoggerTraits PROPERTIES FOLDER tests/compilation)
 target_link_libraries(LoggerTraits PUBLIC mc_control)
 
+add_executable(testConstraintImplementation testConstraintImplementation.cpp)
+set_target_properties(testConstraintImplementation PROPERTIES FOLDER tests/compilation)
+target_link_libraries(testConstraintImplementation PUBLIC mc_solver)
+
 #################################
 #      -- Utility tests --      #
 # -- FIXME not actuals tests -- #
@@ -19,7 +23,7 @@ target_link_libraries(LoggerTraits PUBLIC mc_control)
 
 add_executable(testBSplineTrajectory testBSplineTrajectory.cpp)
 set_target_properties(testBSplineTrajectory PROPERTIES FOLDER tests/utility)
-target_link_libraries(testBSplineTrajectory PUBLIC mc_trajectory)
+target_link_libraries(testBSplineTrajectory PUBLIC mc_trajectory mc_rtc_gui)
 
 add_executable(testQuadraticGenerator testQuadraticGenerator.cpp)
 set_target_properties(testQuadraticGenerator PROPERTIES FOLDER tests/utility)

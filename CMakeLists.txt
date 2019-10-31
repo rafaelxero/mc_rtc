@@ -40,6 +40,8 @@ if("${CMAKE_CXX_FLAGS}" MATCHES "--coverage")
   string(REPLACE "--coverage" "" CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS}")
 endif()
 
+option(TREAT_WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
+
 option(BUILD_CONTROLLER_SAMPLES "Build sample controllers in the project" ON)
 option(DISABLE_CONTROLLER_TESTS "Disable controller unit tests" OFF)
 option(DISABLE_ROBOT_TESTS "Disable RobotModule unit tests" OFF)
@@ -55,6 +57,9 @@ add_project_dependency(mc_rbdyn_urdf REQUIRED)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/CMakeModules)
 
+# hpp-spline (defines target: mc_rtc_3rd_party::hpp-spline)
+find_package(mc_rtc_3rd_party_hpp-spline REQUIRED)
+
 # LTDL (defines target: mc_rtc_3rd_party::ltdl)
 add_subdirectory(3rd-party/ltdl)
 
@@ -69,6 +74,9 @@ add_subdirectory(3rd-party/qhull)
 
 # mpack (build static version)
 add_subdirectory(3rd-party/mpack)
+
+# yaml-cpp
+add_project_dependency(yaml-cpp 0.5.0 REQUIRED)
 
 # RapidJSON
 # The code was copied from the 1.1.0 release tarball for RapidJSON
@@ -104,6 +112,7 @@ endmacro()
 find_description_package(mc_env_description)
 
 set(MC_ROBOTS_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/lib/mc_robots)
+set(MC_OBSERVERS_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/lib/mc_observers)
 set(MC_CONTROLLER_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/lib/mc_controller)
 
 configure_file(${PROJECT_SOURCE_DIR}/include/mc_rtc/config.h.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/include/mc_rtc/config.h)
