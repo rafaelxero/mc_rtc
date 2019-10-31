@@ -214,8 +214,12 @@ protected:
   void addToLogger(mc_rtc::Logger & logger) override;
 
   void removeFromLogger(mc_rtc::Logger & logger) override;
-  
-protected:
+
+  std::function<bool(const mc_tasks::MetaTask & task, std::string &)> buildCompletionCriteria(
+      double dt,
+      const mc_rtc::Configuration & config) const override;
+
+ protected:
   const mc_rbdyn::Robots & robots;
   unsigned int rIndex;
   std::shared_ptr<T> errorT = nullptr;

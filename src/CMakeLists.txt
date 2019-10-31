@@ -49,6 +49,9 @@ set(mc_rtc_utils_SRC
 )
 
 set(mc_rtc_utils_HDR
+  mc_rtc/internals/json.h
+  mc_rtc/internals/yaml.h
+  mc_rtc/internals/LogEntry.h
   ../include/mc_rtc/Configuration.h
   ../include/mc_rtc/MessagePackBuilder.h
   ../include/mc_rtc/log/FlatLog.h
@@ -60,7 +63,7 @@ set(mc_rtc_utils_HDR
 
 add_library(mc_rtc_utils SHARED ${mc_rtc_utils_SRC} ${mc_rtc_utils_HDR})
 set_target_properties(mc_rtc_utils PROPERTIES COMPILE_FLAGS "-DMC_RTC_UTILS_EXPORTS")
-target_link_libraries(mc_rtc_utils PUBLIC SpaceVecAlg::SpaceVecAlg Boost::filesystem Boost::disable_autolinking PRIVATE mc_rtc_3rd_party::RapidJSON mpack)
+target_link_libraries(mc_rtc_utils PUBLIC SpaceVecAlg::SpaceVecAlg Boost::filesystem Boost::disable_autolinking yaml-cpp PRIVATE mc_rtc_3rd_party::RapidJSON mpack)
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
   target_link_libraries(mc_rtc_utils PUBLIC atomic)
 endif()
@@ -151,9 +154,12 @@ mc_solver/CoMIncPlaneConstr.cpp
 mc_solver/CompoundJointConstraint.cpp
 mc_solver/ConstraintSetLoader.cpp
 mc_solver/ContactConstraint.cpp
+mc_solver/ContactWrenchMatrixToLambdaMatrix.cpp
 mc_solver/DynamicsConstraint.cpp
 mc_solver/KinematicsConstraint.cpp
 mc_solver/QPSolver.cpp
+mc_solver/Update.cpp
+mc_solver/UpdateNrVars.cpp
 mc_tasks/MetaTask.cpp
 )
 
@@ -162,6 +168,9 @@ set(mc_solver_HDR
 ../include/mc_solver/msg/Contact.h
 ../include/mc_solver/msg/QPResult.h
 ../include/mc_solver/msg/Robot.h
+../include/mc_solver/utils/ContactWrenchMatrixToLambdaMatrix.h
+../include/mc_solver/utils/Update.h
+../include/mc_solver/utils/UpdateNrVars.h
 ../include/mc_solver/BoundedSpeedConstr.h
 ../include/mc_solver/CollisionsConstraint.h
 ../include/mc_solver/CoMIncPlaneConstr.h
@@ -169,10 +178,11 @@ set(mc_solver_HDR
 ../include/mc_solver/ConstraintSet.h
 ../include/mc_solver/ContactConstraint.h
 ../include/mc_solver/DynamicsConstraint.h
+../include/mc_solver/EqualityConstraint.h
 ../include/mc_solver/KinematicsConstraint.h
-../include/mc_solver/QPSolver.h
 ../include/mc_solver/GenericLoader.h
 ../include/mc_solver/GenericLoader.hpp
+../include/mc_solver/QPSolver.h
 ../include/mc_tasks/MetaTask.h
 )
 
@@ -182,19 +192,26 @@ target_link_libraries(mc_solver PUBLIC mc_rbdyn mc_rtc_gui)
 install_mc_rtc_lib(mc_solver)
 
 set(mc_trajectory_SRC
-mc_trajectory/BSplineTrajectory.cpp
+mc_trajectory/BSpline.cpp
+mc_trajectory/InterpolatedRotation.cpp
 mc_trajectory/spline_utils.cpp
+mc_trajectory/ExactCubic.cpp
 )
 
 set(mc_trajectory_HDR
 ../include/mc_trajectory/api.h
-../include/mc_trajectory/BSplineTrajectory.h
+../include/mc_trajectory/Spline.h
+../include/mc_trajectory/Spline.hpp
+../include/mc_trajectory/BSpline.h
+../include/mc_trajectory/InterpolatedRotation.h
 ../include/mc_trajectory/spline_utils.h
+../include/mc_trajectory/ExactCubic.h
 )
 
 add_library(mc_trajectory SHARED ${mc_trajectory_SRC} ${mc_trajectory_HDR})
 set_target_properties(mc_trajectory PROPERTIES COMPILE_FLAGS "-DMC_TRAJECTORY_EXPORTS")
 target_link_libraries(mc_trajectory PUBLIC SpaceVecAlg::SpaceVecAlg)
+target_link_libraries(mc_trajectory PUBLIC mc_rtc_3rd_party::hpp-spline)
 install_mc_rtc_lib(mc_trajectory)
 
 set(mc_tasks_SRC
@@ -206,7 +223,8 @@ mc_tasks/EndEffectorTask.cpp
 mc_tasks/RelativeEndEffectorTask.cpp
 mc_tasks/CoMTask.cpp
 mc_tasks/AddRemoveContactTask.cpp
-mc_tasks/TrajectoryTask.cpp
+mc_tasks/BSplineTrajectoryTask.cpp
+mc_tasks/ExactCubicTrajectoryTask.cpp
 mc_tasks/ComplianceTask.cpp
 mc_tasks/AdmittanceTask.cpp
 mc_tasks/DampingTask.cpp
@@ -231,7 +249,10 @@ set(mc_tasks_HDR
 ../include/mc_tasks/SurfaceTransformTask.h
 ../include/mc_tasks/RelativeEndEffectorTask.h
 ../include/mc_tasks/SmoothTask.h
-../include/mc_tasks/TrajectoryTask.h
+../include/mc_tasks/SplineTrajectoryTask.h
+../include/mc_tasks/SplineTrajectoryTask.hpp
+../include/mc_tasks/BSplineTrajectoryTask.h
+../include/mc_tasks/ExactCubicTrajectoryTask.h
 ../include/mc_tasks/TrajectoryTaskGeneric.h
 ../include/mc_tasks/TrajectoryTaskGeneric.hpp
 ../include/mc_tasks/ComplianceTask.h
@@ -242,6 +263,7 @@ set(mc_tasks_HDR
 ../include/mc_tasks/PositionBasedVisServoTask.h
 ../include/mc_tasks/PostureTask.h
 ../include/mc_tasks/LookAtTask.h
+../include/mc_tasks/ExactCubicTrajectoryTask.h
 )
 
 if(NOT ${DISABLE_ROS})

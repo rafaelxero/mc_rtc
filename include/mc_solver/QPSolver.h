@@ -180,7 +180,7 @@ public:
    * \param id The contact id of the contact
    * \return The tasks:qp::BilateralContact entity from the solver if id is valid, otherwise, the first element of the pair is -1 and the reference is invalid
    */
-  std::pair<int, const tasks::qp::BilateralContact&> contactById(const tasks::qp::ContactId & id);
+  std::pair<int, const tasks::qp::BilateralContact&> contactById(const tasks::qp::ContactId & id) const;
 
   /** Gives access to a part to lambdaVec given a contact index
    * \param cIndex The index of the contact
@@ -377,7 +377,7 @@ public:
  public:
   
   /** \deprecated{Default constructor, not made for general usage} */
-  // QPSolver() {}
+  QPSolver() {}
 
   void enableFeedback(bool fb);
 

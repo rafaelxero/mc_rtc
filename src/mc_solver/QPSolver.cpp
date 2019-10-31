@@ -166,7 +166,7 @@ bool QPSolver::hasConstraint(const tasks::qp::Constraint* constraint)
   return solver->hasConstraint(constraint);
 }
 
-std::pair<int, const tasks::qp::BilateralContact&> QPSolver::contactById(const tasks::qp::ContactId & id)
+std::pair<int, const tasks::qp::BilateralContact&> QPSolver::contactById(const tasks::qp::ContactId & id) const
 {
   const std::vector<tasks::qp::BilateralContact> & contacts = solver->data().allContacts();
   for(size_t i = 0; i < contacts.size(); ++i)

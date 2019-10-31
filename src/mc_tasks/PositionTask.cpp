@@ -27,7 +27,7 @@ PositionTask::PositionTask(const std::string & bodyName,
   const mc_rbdyn::Robot & robot = robots.robot(rIndex);
   bIndex = robot.bodyIndexByName(bodyName);
 
-  Eigen::Vector3d curPos = robot.mbc().bodyPosW[bIndex].translation();
+  Eigen::Vector3d curPos = (sva::PTransformd{bodyPoint} * robot.mbc().bodyPosW[bIndex]).translation();
   finalize(robots.mbs(), static_cast<int>(rIndex), bodyName, curPos, bodyPoint);
   type_ = "position";
   name_ = "position_" + robot.name() + "_" + bodyName;
@@ -37,8 +37,7 @@ void PositionTask::reset()
 {
   TrajectoryTaskGeneric::reset();
   const auto & robot = robots.robot(rIndex);
-  sva::PTransformd point(errorT->bodyPoint());
-  Eigen::Vector3d curPos = (point * robot.mbc().bodyPosW[bIndex]).translation();
+  Eigen::Vector3d curPos = (sva::PTransformd{errorT->bodyPoint()} * robot.mbc().bodyPosW[bIndex]).translation();
   errorT->position(curPos);
 }
 

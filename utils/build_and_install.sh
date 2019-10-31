@@ -345,6 +345,8 @@ build_git_dependency_configure_and_build()
            -DPYTHON_BINDING_BUILD_PYTHON2_AND_PYTHON3:BOOL=${PYTHON_BUILD_PYTHON2_AND_PYTHON3} \
            -DCMAKE_BUILD_TYPE:STRING="$BUILD_TYPE" \
            -DVREP_PATH:STRING="$VREP_PATH" \
+           -DBUILD_PYTHON_INTERFACE:BOOL=OFF \
+           -DYAML_BUILD_SHARED_LIBS:BOOL=ON \
            ${CMAKE_ADDITIONAL_OPTIONS}
   make -j${BUILD_CORE} || exit 1
 }
@@ -426,7 +428,7 @@ then
     fi
   done
   cd $SOURCE_DIR/catkin_ws
-  catkin_make
+  catkin_make || exit 1
   . $SOURCE_DIR/catkin_ws/devel/setup.bash
 fi
 
@@ -479,7 +481,7 @@ then
     git_update
   fi
   cd $CATKIN_DIR
-  catkin_make
+  catkin_make || exit 1
   . $CATKIN_DIR/devel/setup.bash
 fi
 
