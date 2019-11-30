@@ -49,7 +49,7 @@ struct MC_RBDYN_DLLAPI Contact
 {
 public:
   constexpr static int nrConeGen = 4;
-  constexpr static double defaultFriction = 0.7;
+  constexpr static double defaultFriction = 0.5;  // 0.7
   constexpr static unsigned int nrBilatPoints = 4;
 
 public:
