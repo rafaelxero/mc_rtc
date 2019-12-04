@@ -782,13 +782,15 @@ void QPSolver::addTaskToGUI(mc_tasks::MetaTask * t)
 IntglTerm_QPSolver::IntglTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
                                        torque_control::IntegralTerm::IntegralTermType intTermType,
                                        torque_control::IntegralTerm::VelocityGainType velGainType,
-                                       double lambda)
+                                       double lambda, double phiSlow, double phiFast, double fastFilterWeight)
   : QPSolver(robots, timeStep)
 {
   fbTerm_ = std::make_shared<torque_control::IntegralTerm>(robots->mbs(),
                                                            robots->robotIndex(),
                                                            robots->robot().fd(),
-                                                           intTermType, velGainType, lambda);
+                                                           intTermType, velGainType, lambda,
+                                                           phiSlow, phiFast,
+                                                           fastFilterWeight , timeStep );
   elapsed_.insert({"computeFbTerm", 0});
   elapsed_.insert(fbTerm_->getElapsedTimes().begin(), fbTerm_->getElapsedTimes().end());
 }
@@ -796,12 +798,13 @@ IntglTerm_QPSolver::IntglTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots,
 IntglTerm_QPSolver::IntglTerm_QPSolver(double timeStep,
                                        torque_control::IntegralTerm::IntegralTermType intTermType,
                                        torque_control::IntegralTerm::VelocityGainType velGainType,
-                                       double lambda)
+                                       double lambda, double phiSlow, double phiFast, double fastFilterWeight)
   : QPSolver(timeStep)
 {
   fbTerm_ = std::make_shared<torque_control::IntegralTerm>(robots().mbs(),
                                                            robots().robotIndex(), robot().fd(),
-                                                           intTermType, velGainType, lambda);
+                                                           intTermType, velGainType, lambda, phiSlow,
+                                                           phiFast,fastFilterWeight, timeStep);
   elapsed_.insert({"computeFbTerm", 0});
   elapsed_.insert(fbTerm_->getElapsedTimes().begin(), fbTerm_->getElapsedTimes().end());
 }
@@ -849,7 +852,9 @@ IntglTermAntiWindup_QPSolver::IntglTermAntiWindup_QPSolver(std::shared_ptr<mc_rb
 							   const Eigen::Vector3d & maxLinAcc,
 							   const Eigen::Vector3d & maxAngAcc,
 							   const Eigen::VectorXd & torqueL,
-							   const Eigen::VectorXd & torqueU)
+							   const Eigen::VectorXd & torqueU,
+                 double phiSlow, double phiFast, 
+                 double fastFilterWeight)
   : IntglTerm_QPSolver(robots, timeStep)
 {
   fbTerm_ = std::make_shared<torque_control::IntegralTermAntiWindup>(robots->mbs(),
@@ -858,7 +863,9 @@ IntglTermAntiWindup_QPSolver::IntglTermAntiWindup_QPSolver(std::shared_ptr<mc_rb
 								     intTermType, velGainType,
 								     lambda, perc,
 								     maxLinAcc, maxAngAcc,
-								     torqueL, torqueU);
+								     torqueL, torqueU,
+                     phiSlow, phiFast, 
+                     fastFilterWeight, timeStep);
 }
 
 IntglTermAntiWindup_QPSolver::IntglTermAntiWindup_QPSolver(double timeStep,
@@ -868,7 +875,9 @@ IntglTermAntiWindup_QPSolver::IntglTermAntiWindup_QPSolver(double timeStep,
 							   const Eigen::Vector3d & maxLinAcc,
 							   const Eigen::Vector3d & maxAngAcc,
 							   const Eigen::VectorXd & torqueL,
-							   const Eigen::VectorXd & torqueU)
+							   const Eigen::VectorXd & torqueU,
+                 double phiSlow, double phiFast, 
+                 double fastFilterWeight)
   : IntglTerm_QPSolver(timeStep)
 {
   fbTerm_ = std::make_shared<torque_control::IntegralTermAntiWindup>(robots().mbs(),
@@ -877,7 +886,9 @@ IntglTermAntiWindup_QPSolver::IntglTermAntiWindup_QPSolver(double timeStep,
 								     intTermType, velGainType,
 								     lambda, perc,
 								     maxLinAcc, maxAngAcc,
-								     torqueL, torqueU);
+								     torqueL, torqueU,
+                     phiSlow, phiFast, 
+                     fastFilterWeight, timeStep);
 }
  
 /**

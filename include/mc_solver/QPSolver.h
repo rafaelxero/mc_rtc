@@ -391,7 +391,8 @@ struct MC_SOLVER_DLLAPI IntglTerm_QPSolver : public QPSolver
   IntglTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
                      torque_control::IntegralTerm::IntegralTermType intTermType = torque_control::IntegralTerm::None,
                      torque_control::IntegralTerm::VelocityGainType velGainType = torque_control::IntegralTerm::Diagonal,
-                     double lambda = 1);
+                     double lambda = 1, double phiSlow = 0, double phiFast = 0,
+                     double fastFilterWeight = 0);
 
   /** Constructor (the solver creates its own Robots instance)
    * \param timeStep Timestep of the solver
@@ -399,7 +400,8 @@ struct MC_SOLVER_DLLAPI IntglTerm_QPSolver : public QPSolver
   IntglTerm_QPSolver(double timeStep,
                      torque_control::IntegralTerm::IntegralTermType intTermType = torque_control::IntegralTerm::None,
                      torque_control::IntegralTerm::VelocityGainType velGainType = torque_control::IntegralTerm::Diagonal,
-                     double lambda = 1);
+                     double lambda = 1, double phiSlow = 0, double phiFast = 0,
+                     double fastFilterWeight = 0);
   
   bool run(bool dummy) override;
 
@@ -421,7 +423,9 @@ struct MC_SOLVER_DLLAPI IntglTermAntiWindup_QPSolver : public IntglTerm_QPSolver
 			       const Eigen::Vector3d & maxLinAcc,
 			       const Eigen::Vector3d & maxAngAcc,
 			       const Eigen::VectorXd & torqueL,
-			       const Eigen::VectorXd & torqueU);
+			       const Eigen::VectorXd & torqueU,
+             double phiSlow, double phiFast, 
+             double fastFilterWeight);
   
   /** Constructor (the solver creates its own Robots instance)
    * \param timeStep Timestep of the solver
@@ -433,7 +437,9 @@ struct MC_SOLVER_DLLAPI IntglTermAntiWindup_QPSolver : public IntglTerm_QPSolver
 			       const Eigen::Vector3d & maxLinAcc,
 			       const Eigen::Vector3d & maxAngAcc,
 			       const Eigen::VectorXd & torqueL,
-			       const Eigen::VectorXd & torqueU);
+			       const Eigen::VectorXd & torqueU,
+             double phiSlow, double phiFast, 
+             double fastFilterWeight);
 };
 
 struct MC_SOLVER_DLLAPI PassivityPIDTerm_QPSolver : public QPSolver
