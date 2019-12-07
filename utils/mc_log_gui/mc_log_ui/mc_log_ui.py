@@ -125,6 +125,16 @@ def load_UserPlots(fpath):
           userPlotList[i] = plt._replace(graph_labels = GraphLabels(**plt.graph_labels))
     return userPlotList
 
+class RobotAction(QtGui.QAction):
+  def __init__(self, display, parent):
+    super(RobotAction, self).__init__(display, parent)
+    self._actual = display
+  def actual(self, n = None):
+    if n is None:
+      return self._actual
+    else:
+      self._actual = n
+
 class CommonStyleDialog(QtGui.QDialog):
   def __init__(self, parent, name, canvas, style):
     super(CommonStyleDialog, self).__init__(parent)
@@ -602,11 +612,24 @@ class MCLogUI(QtGui.QMainWindow):
     if mc_rbdyn is not None:
       rMenu = QtGui.QMenu("Robot", self.ui.menubar)
       rGroup = QtGui.QActionGroup(rMenu)
+      rCategoryMenu = {}
+      rActions = []
       for r in mc_rbdyn.RobotLoader.available_robots():
-        rAct = QtGui.QAction(r, rGroup)
+        rAct = RobotAction(r, rGroup)
         rAct.setCheckable(True)
         rGroup.addAction(rAct)
-      rMenu.addActions(rGroup.actions())
+        if '/' in r:
+          category, name = r.split('/', 1)
+          if not category in rCategoryMenu:
+            rCategoryMenu[category] = QtGui.QMenu(category)
+          rAct.setText(name)
+          rAct.actual(r)
+          rCategoryMenu[category].addAction(rAct)
+        else:
+          rActions.append(rAct)
+      rMenu.addActions(rActions)
+      for category in sorted(rCategoryMenu):
+          rMenu.addMenu(rCategoryMenu[category])
       defaultBot = self.getDefaultRobot()
       if defaultBot in mc_rbdyn.RobotLoader.available_robots():
         actionIndex = mc_rbdyn.RobotLoader.available_robots().index(defaultBot)
@@ -790,13 +813,13 @@ class MCLogUI(QtGui.QMainWindow):
 
   def setRobot(self, action):
     try:
-      self.rm = mc_rbdyn.RobotLoader.get_robot_module(action.text())
+      self.rm = mc_rbdyn.RobotLoader.get_robot_module(action.actual())
       self.activeRobotAction = action
       for i in range(self.ui.tabWidget.count() - 1):
         tab = self.ui.tabWidget.widget(i)
         assert(isinstance(tab, MCLogTab))
         tab.setRobotModule(self.rm)
-      self.saveDefaultRobot(action.text())
+      self.saveDefaultRobot(action.actual())
     except RuntimeError:
       #QtGui.QMessageBox.warning(self, "Failed to get RobotModule", "Could not retrieve Robot Module: {}{}Check your console for more details".format(action.text(), os.linesep))
       action.setChecked(False)
@@ -874,7 +897,7 @@ class MCLogUI(QtGui.QMainWindow):
     self.data = read_log(fpath)
     i = 0
     while "qIn_{}".format(i) in self.data and "qOut_{}".format(i) in self.data:
-      self.data["error_{}".format(i)] = self.data["qOut_{}".format(i)] - self.data["qIn_{}".format(i)]
+      self.data["error_q_{}".format(i)] = self.data["qOut_{}".format(i)] - self.data["qIn_{}".format(i)]
       self.data["qIn_limits_lower_{}".format(i)] = np.full_like(self.data["qIn_{}".format(i)], 0)
       self.data["qIn_limits_upper_{}".format(i)] = np.full_like(self.data["qIn_{}".format(i)], 0)
       self.data["qOut_limits_lower_{}".format(i)] = self.data["qIn_limits_lower_{}".format(i)]
@@ -908,11 +931,11 @@ class MCLogUI(QtGui.QMainWindow):
     menuEntries = [
         ("Encoders", "qIn", None, None, None),
         ("Commands", "qOut", None, None, None),
-        ("Error", "error", None, None, None),
+        ("Error", "error_q", None, None, None),
         ("Sensor torques", "tauIn", None, None, None),
         ("Command torques", "tauOut", None, None, None),
         ("Encoders/Commands", "qIn", "qOut", None, None),
-        ("Error/Torque", "error", "tauIn", None, None),
+        ("Error/Torque", "error_q", "tauIn", None, None),
         ("Encoders velocity", None, None, "qIn", None),
         ("Command velocity", None, None, "qOut", None),
         ("Encoders/Commands velocity", None, None, "qIn", "qOut"),

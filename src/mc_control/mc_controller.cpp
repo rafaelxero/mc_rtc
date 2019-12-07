@@ -3,9 +3,13 @@
  */
 
 #include <mc_control/mc_controller.h>
+
 #include <mc_rbdyn/RobotLoader.h>
+
 #include <mc_rtc/config.h>
+#include <mc_rtc/gui/Schema.h>
 #include <mc_rtc/logging.h>
+
 #include <mc_tasks/MetaTaskLoader.h>
 
 #include <RBDyn/FK.h>
@@ -41,7 +45,7 @@ MCController::MCController(const std::vector<std::shared_ptr<mc_rbdyn::RobotModu
   if(gui_)
   {
     gui_->addElement({"Global", "Add task"},
-                     mc_rtc::gui::Schema("Add MetaTask", "metatask", [this](const mc_rtc::Configuration & config) {
+                     mc_rtc::gui::Schema("Add MetaTask", "MetaTask", [this](const mc_rtc::Configuration & config) {
                        try
                        {
                          auto t = mc_tasks::MetaTaskLoader::load(this->solver(), config);
@@ -274,72 +278,6 @@ mc_solver::QPSolver & MCController::solver()
   return *qpsolver;
 }
 
-bool MCController::set_joint_pos(const std::string & jname, const double & pos)
-{
-  if(robot().hasJoint(jname))
-  {
-    auto idx = robot().jointIndexByName(jname);
-    auto p = postureTask->posture();
-    if(p[idx].size() == 1)
-    {
-      p[idx][0] = pos;
-      postureTask->posture(p);
-      return true;
-    }
-  }
-  return false;
-}
-
-bool MCController::get_joint_pos(const std::string & jname, double & pos)
-{
-  if(robot().hasJoint(jname))
-  {
-    auto idx = robot().jointIndexByName(jname);
-    auto p = postureTask->posture();
-    if(p[idx].size() == 1)
-    {
-      pos = p[idx][0];
-      return true;
-    }
-  }
-  return false;
-}
-
-bool MCController::change_ef(const std::string &)
-{
-  return false;
-}
-
-bool MCController::move_ef(const Eigen::Vector3d &, const Eigen::Matrix3d &)
-{
-  return false;
-}
-
-bool MCController::move_com(const Eigen::Vector3d &)
-{
-  return false;
-}
-
-bool MCController::play_next_stance()
-{
-  return false;
-}
-
-bool MCController::driving_service(double, double, double, double)
-{
-  return false;
-}
-
-bool MCController::read_msg(std::string &)
-{
-  return false;
-}
-
-bool MCController::read_write_msg(std::string &, std::string &)
-{
-  return true;
-}
-
 mc_rtc::Logger & MCController::logger()
 {
   return *logger_;
@@ -375,5 +313,7 @@ sva::PTransformd MCController::anchorFrame(const mc_rbdyn::Robot &) const
   LOG_ERROR_AND_THROW(std::runtime_error, "MCController::anchorFrame() requested but no implementation available. "
                                           "Please override this function in your controller.");
 }
+
+void MCController::stop() {}
 
 } // namespace mc_control

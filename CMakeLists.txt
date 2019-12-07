@@ -110,6 +110,7 @@ macro(find_description_package PACKAGE)
 endmacro()
 
 find_description_package(mc_env_description)
+find_description_package(mc_int_obj_description)
 
 set(MC_ROBOTS_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/lib/mc_robots)
 set(MC_OBSERVERS_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/lib/mc_observers)
@@ -150,7 +151,7 @@ install(
 )
 install(
   FILES
-    etc/mc_rtc.conf
+    etc/mc_rtc.yaml
   DESTINATION etc
 )
 

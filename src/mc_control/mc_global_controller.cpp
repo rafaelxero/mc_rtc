@@ -3,8 +3,16 @@
  */
 
 #include <mc_control/mc_global_controller.h>
+
+#include "mc_global_controller_ros_services.h"
+
 #include <mc_rbdyn/RobotLoader.h>
+
 #include <mc_rtc/config.h>
+#include <mc_rtc/gui/Button.h>
+#include <mc_rtc/gui/Form.h>
+#include <mc_rtc/gui/Label.h>
+#include <mc_rtc/gui/NumberInput.h>
 #include <mc_rtc/logging.h>
 #include <mc_rtc/ros.h>
 
@@ -14,7 +22,6 @@
 
 #include <boost/chrono.hpp>
 
-#include "mc_global_controller_ros_services.h"
 #include <algorithm>
 #include <cstdlib>
 #include <fstream>
@@ -263,6 +270,13 @@ void MCGlobalController::init(const std::vector<double> & initq, const std::arra
 void MCGlobalController::setSensorPosition(const Eigen::Vector3d & pos)
 {
   robot().bodySensor().position(pos);
+  realRobot().bodySensor().position(pos);
+}
+
+void MCGlobalController::setSensorPositions(const std::map<std::string, Eigen::Vector3d> & poses)
+{
+  setSensorPositions(robot(), poses);
+  setSensorPositions(realRobot(), poses);
 }
 
 void MCGlobalController::setSensorPositions(mc_rbdyn::Robot & robot,
@@ -277,6 +291,13 @@ void MCGlobalController::setSensorPositions(mc_rbdyn::Robot & robot,
 void MCGlobalController::setSensorOrientation(const Eigen::Quaterniond & ori)
 {
   robot().bodySensor().orientation(ori);
+  realRobot().bodySensor().orientation(ori);
+}
+
+void MCGlobalController::setSensorOrientations(const std::map<std::string, Eigen::Quaterniond> & oris)
+{
+  setSensorOrientations(robot(), oris);
+  setSensorOrientations(realRobot(), oris);
 }
 
 void MCGlobalController::setSensorOrientations(mc_rbdyn::Robot & robot,
@@ -291,6 +312,13 @@ void MCGlobalController::setSensorOrientations(mc_rbdyn::Robot & robot,
 void MCGlobalController::setSensorLinearVelocity(const Eigen::Vector3d & vel)
 {
   robot().bodySensor().linearVelocity(vel);
+  realRobot().bodySensor().linearVelocity(vel);
+}
+
+void MCGlobalController::setSensorLinearVelocities(const std::map<std::string, Eigen::Vector3d> & linearVels)
+{
+  setSensorLinearVelocities(robot(), linearVels);
+  setSensorLinearVelocities(realRobot(), linearVels);
 }
 
 void MCGlobalController::setSensorLinearVelocities(mc_rbdyn::Robot & robot,
@@ -305,8 +333,14 @@ void MCGlobalController::setSensorLinearVelocities(mc_rbdyn::Robot & robot,
 void MCGlobalController::setSensorAngularVelocity(const Eigen::Vector3d & vel)
 {
   robot().bodySensor().angularVelocity(vel);
+  realRobot().bodySensor().angularVelocity(vel);
 }
 
+void MCGlobalController::setSensorAngularVelocities(const std::map<std::string, Eigen::Vector3d> & angularVels)
+{
+  setSensorAngularVelocities(robot(), angularVels);
+  setSensorAngularVelocities(realRobot(), angularVels);
+}
 void MCGlobalController::setSensorAngularVelocities(mc_rbdyn::Robot & robot,
                                                     const std::map<std::string, Eigen::Vector3d> & angularVels)
 {
@@ -319,6 +353,13 @@ void MCGlobalController::setSensorAngularVelocities(mc_rbdyn::Robot & robot,
 void MCGlobalController::setSensorAcceleration(const Eigen::Vector3d & acc)
 {
   robot().bodySensor().acceleration(acc);
+  realRobot().bodySensor().acceleration(acc);
+}
+
+void MCGlobalController::setSensorAccelerations(const std::map<std::string, Eigen::Vector3d> & accels)
+{
+  setSensorAccelerations(robot(), accels);
+  setSensorAccelerations(realRobot(), accels);
 }
 
 void MCGlobalController::setSensorAccelerations(mc_rbdyn::Robot & robot,
@@ -333,21 +374,25 @@ void MCGlobalController::setSensorAccelerations(mc_rbdyn::Robot & robot,
 void MCGlobalController::setEncoderValues(const std::vector<double> & eValues)
 {
   robot().encoderValues(eValues);
+  realRobot().encoderValues(eValues);
 }
 
 void MCGlobalController::setEncoderVelocities(const std::vector<double> & eVelocities)
 {
   robot().encoderVelocities(eVelocities);
+  realRobot().encoderVelocities(eVelocities);
 }
 
 void MCGlobalController::setFlexibilityValues(const std::vector<double> & fValues)
 {
   robot().flexibilityValues(fValues);
+  realRobot().flexibilityValues(fValues);
 }
 
 void MCGlobalController::setJointTorques(const std::vector<double> & tValues)
 {
   robot().jointTorques(tValues);
+  realRobot().jointTorques(tValues);
 }
 
 void MCGlobalController::setWrenches(const std::map<std::string, sva::ForceVecd> & wrenches)
@@ -361,8 +406,7 @@ void MCGlobalController::setWrenches(unsigned int robotIndex, const std::map<std
   for(const auto & w : wrenches)
   {
     robot.forceSensor(w.first).wrench(w.second);
-    controller_->real_robots->robot(robotIndex).forceSensor(w.first).wrench(w.second);
-    ;
+    realRobots().robot(robotIndex).forceSensor(w.first).wrench(w.second);
   }
 }
 
@@ -422,6 +466,7 @@ bool MCGlobalController::run()
     {
       /*XXX Need to be careful here */
       /*XXX Need to get the current contacts from the controller when needed */
+      controller_->stop();
       LOG_INFO("Reset with q[0]")
       std::cout << controller_->robot().mbc().q[0][0] << " ";
       std::cout << controller_->robot().mbc().q[0][1] << " ";
@@ -904,6 +949,11 @@ void MCGlobalController::setup_log()
 mc_rbdyn::Robots & MCGlobalController::realRobots()
 {
   return *real_robots;
+}
+
+mc_rbdyn::Robot & MCGlobalController::realRobot()
+{
+  return real_robots->robot();
 }
 
 } // namespace mc_control

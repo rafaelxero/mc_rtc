@@ -8,6 +8,9 @@
 #include <mc_solver/KinematicsConstraint.h>
 #include <mc_solver/QPSolver.h>
 
+#include <mc_rtc/gui/Button.h>
+#include <mc_rtc/gui/Form.h>
+
 #include <Tasks/Bounds.h>
 
 #include <RBDyn/EulerIntegration.h>

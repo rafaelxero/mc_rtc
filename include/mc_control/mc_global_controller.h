@@ -11,9 +11,6 @@
 #include <mc_rtc/loader.h>
 #include <mc_rtc/log/Logger.h>
 
-#include <boost/filesystem.hpp>
-namespace bfs = boost::filesystem;
-
 #include <array>
 #include <fstream>
 #include <sstream>
@@ -126,13 +123,21 @@ public:
    * @{
    */
 
-  /*! \brief A robot's position given by a sensor */
+  /*! \brief Sets the main robot position sensor (control+real)
+   *
+   * \param pos Position given by a sensor
+   */
   void setSensorPosition(const Eigen::Vector3d & pos);
-
+  /*! \brief Set multiple body sensors' position for the main robot
+   * (control+real)
+   */
+  void setSensorPositions(const std::map<std::string, Eigen::Vector3d> & poses);
   /*! \brief Set multiple body sensors' position for a given robot */
   void setSensorPositions(mc_rbdyn::Robot & robot, const std::map<std::string, Eigen::Vector3d> & poses);
 
-  /*! \brief A robot's orientation given by a sensor
+  /*! \brief Sets the main robot orientation sensor (control + real)
+   *
+   * \param ori Orientation given by a sensor
    *
    * \note By convention, this rotation should be given from the inertial frame
    * (i.e. a fixed frame in the real world) to a body frame of the robot. For
@@ -141,59 +146,83 @@ public:
    *
    */
   void setSensorOrientation(const Eigen::Quaterniond & ori);
-
+  /*! \brief Set multiple body sensors' orientation for the main robot
+   * (control+real) */
+  void setSensorOrientations(const std::map<std::string, Eigen::Quaterniond> & oris);
   /*! \brief Set multiple body sensors' orientation for a given robot */
   void setSensorOrientations(mc_rbdyn::Robot & robot, const std::map<std::string, Eigen::Quaterniond> & oris);
 
-  /*! \brief A robot's linear velocity given by a sensor */
+  /*! \brief Sets the main robot linear velocity sensor (control+real)
+   *
+   * \param vel Linear velocity given by a sensor
+   */
   void setSensorLinearVelocity(const Eigen::Vector3d & vel);
-
+  /*! \brief Set multiple body sensor's linear velocities for the main robot
+   * (control+real) */
+  void setSensorLinearVelocities(const std::map<std::string, Eigen::Vector3d> & linearVels);
   /*! \brief Set multiple body sensor's linear velocities for a given robot */
   void setSensorLinearVelocities(mc_rbdyn::Robot & robot, const std::map<std::string, Eigen::Vector3d> & linearVels);
 
-  /*! \brief A robot's angular velocity given by a sensor */
+  /*! \brief Sets the main robot angular velocity sensor (control+real)
+   *
+   * \param vel Angular velocity given by a sensor
+   */
   void setSensorAngularVelocity(const Eigen::Vector3d & vel);
-
+  /*! \brief Set multiple body sensor's angular velocities for the main robot
+   * (control + real)*/
+  void setSensorAngularVelocities(const std::map<std::string, Eigen::Vector3d> & angularVels);
   /*! \brief Set multiple body sensor's angular velocities for a given robot */
   void setSensorAngularVelocities(mc_rbdyn::Robot & robot, const std::map<std::string, Eigen::Vector3d> & angularVels);
 
-  /*! \brief A robot's acceleration given by a sensor */
+  /*! \brief Sets the main robot acceleration (control+real)
+   *
+   * \param acc Acceleration given by a sensor
+   */
   void setSensorAcceleration(const Eigen::Vector3d & acc);
-
+  /*! \brief Set multiple body sensors' acceleration for a given robot for the
+   * main robot (control+real) */
+  void setSensorAccelerations(const std::map<std::string, Eigen::Vector3d> & accels);
   /*! \brief Set multiple body sensors' acceleration for a given robot */
   void setSensorAccelerations(mc_rbdyn::Robot & robot, const std::map<std::string, Eigen::Vector3d> & accels);
 
-  /*! \brief A robot's actual joints' values provided by encoders
+  /*! \brief Sets the main robot actual joints' values (control+real)
+   *
+   * \param eValues Actual joint values provided by encoders
    *
    * \note It is expected that these values follow the order given by
    * ref_joint_order
    */
   void setEncoderValues(const std::vector<double> & eValues);
 
-  /*! \brief A robot's actual joints' velocities
+  /*! \brief Sets the main robot's actual joint velocities (control+real)
+   *
+   * \param eVelocities Actual joint velocities
    *
    * \note It is expected that these values follow the order given by
    * ref_joint_order
    */
   void setEncoderVelocities(const std::vector<double> & eVelocities);
 
-  /*! \brief A robot's flexible joints' values provided by an estimator
+  /*! \brief Sets the main robot's flexible joint values (control+real)
+   *
+   * \param eValues Flexible joint values (provided by an estimator)
    *
    * \note It is expected that these values follow the order given by
    * robot.flexibility()
    */
   void setFlexibilityValues(const std::vector<double> & fValues);
 
-  /*! \brief A robot's actual joints' torques provided by sensors
+  /*! \brief Sets the main robot's actual joint torques (control+real)
+   *
+   * \param tValues  Actual joint torques (provided by sensors)
    *
    * \note It is expected that these values follow the order given by
    * ref_joint_order
    */
   void setJointTorques(const std::vector<double> & tValues);
 
-  /*! \brief Force sensors' readings provided by the sensors */
+  /*! \brief Force sensors' readings provided by the sensors (sets control+real)*/
   void setWrenches(const std::map<std::string, sva::ForceVecd> & wrenches);
-
   /*! \brief Force sensors' readings for another robot than the main robot */
   void setWrenches(unsigned int robotIndex, const std::map<std::string, sva::ForceVecd> & wrenches);
 
@@ -320,79 +349,9 @@ public:
    * These functions acts as a proxy between the caller and the current
    * controller.
    *
-   * These services can be active or inactive for each individual controller.
-   * You will find some information in this document that only pertains to the
-   * default implementation of the service call.
-   *
    * @{
    *
    */
-
-  /*! \brief Set a given joint position
-   *
-   * The value of pos is not checked w.r.t the angular limits of the given
-   * joint as this should be insured by the controller.
-   *
-   * \param name Name of the joint
-   *
-   * \param pos Position value
-   *
-   * \returns True if successful (the joint exists and has one dof), false
-   * otherwise
-   */
-  bool set_joint_pos(const std::string & jname, const double & pos);
-
-  /*! \brief Get a given joint position
-   *
-   * \param name Name of the joint
-   *
-   * \param pos Will retrieve the given joint value
-   *
-   * \returns True if successful
-   */
-  bool get_joint_pos(const std::string & jname, double & pos);
-
-  /*! \brief Change the end-effector controlled by the service
-   *
-   * \param ef_name Name of the end-effector
-   *
-   * \returns True if successful (the body exists within the robot), false
-   * otherwise
-   *
-   */
-  bool change_ef(const std::string & ef_name);
-
-  /*! \brief Translate the current end-effector by a given amount
-   *
-   * \param t Translation to apply (in world frame)
-   *
-   * \returns True if successful
-   *
-   */
-  bool translate_ef(const Eigen::Vector3d & t);
-
-  /*! \brief Rotate the current end-effector by a given amount
-   *
-   * \param m Rotation matrix to apply (in world frame)
-   *
-   * \returns True if successful
-   */
-  bool rotate_ef(const Eigen::Matrix3d & m);
-
-  /*! \brief Move the main robot's CoM by a given amount
-   *
-   * \param v Translation to apply to the CoM (in world frame)
-   *
-   * \returns True is succesful
-   *
-   */
-  bool move_com(const Eigen::Vector3d & v);
-
-  /*! \brief Trigger the next step in an FSM
-   *
-   * \returns True if successful
-   */
-  bool play_next_stance();
 
   /*! \brief Returns to half-sit pose after an experiment
    *
@@ -403,46 +362,6 @@ public:
   bool GoToHalfSitPose_service();
   /*! \brief See mc_rtc::MCGlobalController::GoToHalfSitPose_service */
   bool GoToHalfSitPose();
-
-  /*! \brief Used to control driving controller
-   *
-   * \param w Wheel angle
-   *
-   * \param a Ankle angle
-   *
-   * \param p Pan angle
-   *
-   * \param t Tilt angle
-   *
-   * \returns True if successful
-   *
-   */
-  bool driving_service(double w, double a, double p, double t);
-
-  /*! \brief Send a message to the controller instance
-   *
-   * This method should be the preferred way to pass message to the controller
-   *
-   * \param msg Message passed to the controller
-   *
-   * \returns True if the controller successfully handled the message
-   *
-   */
-  bool send_msg(const std::string & msg);
-
-  /*! \brief Send a message and receive an answer from the controller
-   *
-   * This method should be the preferred way to pass/receive message to/from
-   * the controller
-   *
-   * \param msg Message passed to the controller
-   *
-   * \param out Message received from the controller
-   *
-   * \returns True if the controller successfully handled the message
-   *
-   */
-  bool send_recv_msg(const std::string & msg, std::string & out);
 
   /** @} */
 
@@ -461,6 +380,9 @@ public:
    * robots than the main robot.
    */
   mc_rbdyn::Robots & realRobots();
+
+  /*! \brief Get access to the main real robot instance. */
+  mc_rbdyn::Robot & realRobot();
 
 public:
   /*! \brief Returns true if the controller is running
@@ -505,7 +427,7 @@ public:
 
     bool enable_log = true;
     mc_rtc::Logger::Policy log_policy = mc_rtc::Logger::Policy::NON_THREADED;
-    bfs::path log_directory;
+    std::string log_directory;
     std::string log_template = "mc-control";
 
     bool enable_gui_server = true;
