@@ -194,6 +194,7 @@ cdef extern from "<mc_rbdyn/Robot.h>" namespace "mc_rbdyn":
     Vector3d comVelocity()
     Vector3d comAcceleration()
 
+    PTransformd surfacePose(string)
     ForceVecd surfaceWrench(string)
     Vector2d cop(string,double)
     Vector3d copW(string,double)
@@ -374,8 +375,7 @@ cdef extern from "mc_rbdyn_wrapper.hpp" namespace "mc_rbdyn":
   string CollisionToString(const Collision &)
   #FIXME Work-around the lack of variadic template support
   RobotModulePtr get_robot_module(const string&) except +
-  RobotModulePtr get_robot_module(const string&, const cppbool&) except +
-  RobotModulePtr get_robot_module_str "mc_rbdyn::get_robot_module"(const string&, const string&) except +
+  RobotModulePtr get_robot_module(const string&, const string&) except +
   RobotModulePtr get_robot_module(const string&, const string&, const string&) except +
   #XXX
   void update_robot_module_path(const vector[string] &)
