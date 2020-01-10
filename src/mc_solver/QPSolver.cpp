@@ -81,7 +81,7 @@ namespace mc_solver
 QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
   : robots_p(robots), timeStep(timeStep), solver(),
     first_run_(true), feedback_(false),
-    lambda_switch_(0.0), switch_T_(0.1)
+    lambda_switch_(0.0), switch_T_(0.1), switch_trigger(false)
 {
   solver = std::make_shared<tasks::qp::QPSolver>();
   mbcs_calc_ = std::make_shared<std::vector<rbd::MultiBodyConfig>>();
@@ -679,6 +679,7 @@ void QPSolver::enableFeedback(bool fb)
 {
   if (!feedback_ && fb)
   {
+    switch_trigger = true;
     lambda_switch_ = 0.0;
     q_old_ = robot().mbc().q;
     alpha_old_ = robot().mbc().alpha;
@@ -826,7 +827,50 @@ bool IntglTerm_QPSolver::run(bool dummy)
   elapsed_.at("updateCurrentState") = (int) (clock() - time);
     
   time = clock();
-  fbTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
+
+  std::vector<std::vector<double>> sentJointTorques(robot().mb().nrJoints());
+
+  for(size_t i = 0; i < static_cast<int>(robot().mbc().q.size()); ++i)
+  {
+    sentJointTorques[i].resize(robot().mb().joint(i).dof());
+  }
+
+  for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
+  {
+    const auto & jn = robot().refJointOrder()[i];
+
+    if(robot().hasJoint(jn))
+      {
+        size_t j = robot().jointIndexByName(jn);
+
+        if(robot().mb().joint(j).dof() == 0)
+          continue;
+
+        sentJointTorques[j][0] = robot().jointTorques()[i];
+      }
+  }
+  
+  Eigen::VectorXd sent_torques = rbd::dofToVector(robot().mb(), robot().mbc().jointTorque);
+  Eigen::VectorXd ref_torques = rbd::dofToVector(robot().mb(), sentJointTorques);
+
+  Eigen::VectorXd diff_torques = Eigen::VectorXd::Zero(ref_torques.size());
+
+  if (switch_trigger)
+  {
+    diff_torques = sent_torques - ref_torques;
+    fbTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()], diff_torques);
+    switch_trigger = false;
+  }
+  else
+  {
+    fbTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
+  }
+
+  // std::cout << "Rafa, in IntglTerm_QPSolver::run, sent_torques = " << sent_torques.transpose() << std::endl;
+  // std::cout << "Rafa, in IntglTerm_QPSolver::run, ref_torques = " << ref_torques.transpose() << std::endl;
+  // std::cout << "Rafa, in IntglTerm_QPSolver::run, diff_torques = " << diff_torques.transpose() << std::endl;
+  
+  // fbTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
   elapsed_.at("computeFbTerm") = (int) (clock() - time);
 
   for (ElapsedTimeMap::iterator it = fbTerm_->getElapsedTimes().begin(); it != fbTerm_->getElapsedTimes().end(); it++)

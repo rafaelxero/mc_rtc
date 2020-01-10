@@ -338,6 +338,7 @@ public:
   std::vector<std::vector<double>> alpha_old_;
   double lambda_switch_;
   double switch_T_;
+  bool switch_trigger;
 
   // Rafa's version
   std::vector<double> encoder_prev_;
