@@ -429,12 +429,18 @@ void QPSolver::updateCurrentState()
     {
       lambda_switch_ += timeStep / switch_T_;
       lambda_switch_ = std::min(lambda_switch_, 1.0);
-      
+
+      std::cout << "Rafa, in QPSolver::updateCurrentState, lambda_switch_ = " << lambda_switch_ << std::endl;
+
       Eigen::Quaterniond qt_old(q_old_[0][0], q_old_[0][1], q_old_[0][2], q_old_[0][3]);
       Eigen::Quaterniond qt_res = qt_old.slerp(lambda_switch_, qtIn);
-      Eigen::Vector3d p_res = Eigen::Vector3d(q_old_[0][4], q_old_[0][5], q_old_[0][6]) * lambda_switch_ + pIn * (1.0 - lambda_switch_);
-      Eigen::Vector3d rate_res = Eigen::Vector3d(alpha_old_[0][0], alpha_old_[0][1], alpha_old_[0][2]) * lambda_switch_ + rateIn * (1.0 - lambda_switch_);
-      Eigen::Vector3d vel_res  = Eigen::Vector3d(alpha_old_[0][3], alpha_old_[0][4], alpha_old_[0][5]) * lambda_switch_ + velIn  * (1.0 - lambda_switch_);
+      Eigen::Vector3d p_res = pIn * lambda_switch_ + Eigen::Vector3d(q_old_[0][4], q_old_[0][5], q_old_[0][6]) * (1.0 - lambda_switch_);
+      Eigen::Vector3d rate_res = rateIn * lambda_switch_ + Eigen::Vector3d(alpha_old_[0][0], alpha_old_[0][1], alpha_old_[0][2]) * (1.0 - lambda_switch_);
+      Eigen::Vector3d vel_res  = velIn * lambda_switch_ + Eigen::Vector3d(alpha_old_[0][3], alpha_old_[0][4], alpha_old_[0][5]) * (1.0 - lambda_switch_);
+
+      std::cout << "Rafa, in QPSolver::updateCurrentState, q_old_[0][4~6] = " << Eigen::Vector3d(q_old_[0][4], q_old_[0][5], q_old_[0][6]).transpose() << std::endl;
+      std::cout << "Rafa, in QPSolver::updateCurrentState, pIn = " << pIn.transpose() << std::endl;
+      std::cout << "Rafa, in QPSolver::updateCurrentState, p_res = " << p_res.transpose() << std::endl;
       
       robot().mbc().q[0] = {qt_res.w(), qt_res.x(), qt_res.y(), qt_res.z(), p_res.x(), p_res.y(), p_res.z()};
       robot().mbc().alpha[0] = {rate_res.x(), rate_res.y(), rate_res.z(), vel_res.x(), vel_res.y(), vel_res.z()};
@@ -849,14 +855,16 @@ bool IntglTerm_QPSolver::run(bool dummy)
         sentJointTorques[j][0] = robot().jointTorques()[i];
       }
   }
-  
-  Eigen::VectorXd sent_torques = rbd::dofToVector(robot().mb(), robot().mbc().jointTorque);
-  Eigen::VectorXd ref_torques = rbd::dofToVector(robot().mb(), sentJointTorques);
+
+  Eigen::VectorXd sent_torques = rbd::dofToVector(robot().mb(), sentJointTorques);
+  Eigen::VectorXd ref_torques = rbd::dofToVector(robot().mb(), robot().mbc().jointTorque);
 
   Eigen::VectorXd diff_torques = Eigen::VectorXd::Zero(ref_torques.size());
 
   if (switch_trigger)
   {
+    std::cout << "Rafa, in IntglTerm_QPSolver::run, switch_trigger happened !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+    
     diff_torques = sent_torques - ref_torques;
     fbTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()], diff_torques);
     switch_trigger = false;
@@ -866,9 +874,9 @@ bool IntglTerm_QPSolver::run(bool dummy)
     fbTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
   }
 
-  // std::cout << "Rafa, in IntglTerm_QPSolver::run, sent_torques = " << sent_torques.transpose() << std::endl;
-  // std::cout << "Rafa, in IntglTerm_QPSolver::run, ref_torques = " << ref_torques.transpose() << std::endl;
-  // std::cout << "Rafa, in IntglTerm_QPSolver::run, diff_torques = " << diff_torques.transpose() << std::endl;
+  std::cout << "Rafa, in IntglTerm_QPSolver::run, sent_torques = " << sent_torques.transpose() << std::endl;
+  std::cout << "Rafa, in IntglTerm_QPSolver::run, ref_torques = " << ref_torques.transpose() << std::endl;
+  std::cout << "Rafa, in IntglTerm_QPSolver::run, diff_torques = " << diff_torques.transpose() << std::endl;
   
   // fbTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
   elapsed_.at("computeFbTerm") = (int) (clock() - time);
