@@ -81,7 +81,7 @@ namespace mc_solver
 QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
   : robots_p(robots), timeStep(timeStep), solver(),
     first_run_(true), feedback_(false),
-    lambda_switch_(0.0), switch_T_(0.1), switch_trigger(false)
+    lambda_switch_(0.0), switch_T_(0.005), switch_trigger(false)  // switch_T_(0.1)
 {
   solver = std::make_shared<tasks::qp::QPSolver>();
   mbcs_calc_ = std::make_shared<std::vector<rbd::MultiBodyConfig>>();
@@ -422,6 +422,8 @@ void QPSolver::updateCurrentState()
   }
 
   encoder_prev_ = encoder;
+
+  std::cout << "Rafa, in QPSolver::updateCurrentState, robot().mbc().q[0][4~6] = " << Eigen::Vector3d(robot().mbc().q[0][4], robot().mbc().q[0][5], robot().mbc().q[0][6]).transpose() << std::endl;
 
   if(feedback_)
   {
