@@ -332,12 +332,7 @@ public:
   // Rafa's version
   bool first_run_;
   bool feedback_;
-
-  // Rafa's version
-  std::vector<std::vector<double>> q_old_;
-  std::vector<std::vector<double>> alpha_old_;
-  double lambda_switch_;
-  double switch_T_;
+  bool feedback_old_;
   bool switch_trigger;
 
   // Rafa's version
