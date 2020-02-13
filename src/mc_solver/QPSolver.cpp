@@ -421,6 +421,8 @@ void QPSolver::updateCurrentState()
 
   if(feedback_)
   {
+    // std::cout << "Rafa, in QPSolver::updateCurrentState, closing the loop with measured values" << std::endl;
+    
     robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
     robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
     
@@ -641,6 +643,11 @@ void QPSolver::enableFeedback(bool fb)
   // {
   // switch_trigger = true;
   // }
+
+  /*
+  if (fb)
+    std::cout << "Rafa, in QPSolver::enableFeedback, feedback_ = true" << std::endl;
+  */
   
   feedback_ = fb;
 }
@@ -814,7 +821,7 @@ bool IntglTerm_QPSolver::run(bool dummy)
 
   if (switch_trigger)
   {
-    // std::cout << "Rafa, in IntglTerm_QPSolver::run, switch_trigger happened !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+    // std::cout << "Rafa, in IntglTerm_QPSolver::run, switch_trigger happened !!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
     
     diff_torques = sent_torques - ref_torques;
     fbTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()], diff_torques);
