@@ -80,15 +80,11 @@ namespace mc_solver
 
 QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
   : robots_p(robots), timeStep(timeStep), solver(),
-    first_run_(true), feedback_(false),
-    lambda_switch_(0.0), switch_T_(0.005), switch_trigger(false)  // switch_T_(0.1)
+    first_run_(true), feedback_(false), feedback_old_(false), switch_trigger(false)
 {
   solver = std::make_shared<tasks::qp::QPSolver>();
   mbcs_calc_ = std::make_shared<std::vector<rbd::MultiBodyConfig>>();
 
-  q_old_ = robot().mbc().q;
-  alpha_old_ = robot().mbc().alpha;
-  
   if(timeStep <= 0)
   {
     LOG_ERROR_AND_THROW(std::invalid_argument, "timeStep has to be > 0! timeStep = " << timeStep)
@@ -423,68 +419,26 @@ void QPSolver::updateCurrentState()
 
   encoder_prev_ = encoder;
 
-  // std::cout << "Rafa, in QPSolver::updateCurrentState, robot().mbc().q[0][4~6] = " << Eigen::Vector3d(robot().mbc().q[0][4], robot().mbc().q[0][5], robot().mbc().q[0][6]).transpose() << std::endl;
-
   if(feedback_)
   {
-    if (lambda_switch_ < 1.0)
+    // std::cout << "Rafa, in QPSolver::updateCurrentState, closing the loop with measured values" << std::endl;
+    
+    robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
+    robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
+    
+    for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
     {
-      lambda_switch_ += timeStep / switch_T_;
-      lambda_switch_ = std::min(lambda_switch_, 1.0);
-
-      // std::cout << "Rafa, in QPSolver::updateCurrentState, lambda_switch_ = " << lambda_switch_ << std::endl;
-
-      Eigen::Quaterniond qt_old(q_old_[0][0], q_old_[0][1], q_old_[0][2], q_old_[0][3]);
-      Eigen::Quaterniond qt_res = qt_old.slerp(lambda_switch_, qtIn);
-      Eigen::Vector3d p_res = pIn * lambda_switch_ + Eigen::Vector3d(q_old_[0][4], q_old_[0][5], q_old_[0][6]) * (1.0 - lambda_switch_);
-      Eigen::Vector3d rate_res = rateIn * lambda_switch_ + Eigen::Vector3d(alpha_old_[0][0], alpha_old_[0][1], alpha_old_[0][2]) * (1.0 - lambda_switch_);
-      Eigen::Vector3d vel_res  = velIn * lambda_switch_ + Eigen::Vector3d(alpha_old_[0][3], alpha_old_[0][4], alpha_old_[0][5]) * (1.0 - lambda_switch_);
-
-      // std::cout << "Rafa, in QPSolver::updateCurrentState, q_old_[0][4~6] = " << Eigen::Vector3d(q_old_[0][4], q_old_[0][5], q_old_[0][6]).transpose() << std::endl;
-      // std::cout << "Rafa, in QPSolver::updateCurrentState, pIn = " << pIn.transpose() << std::endl;
-      // std::cout << "Rafa, in QPSolver::updateCurrentState, p_res = " << p_res.transpose() << std::endl;
+      const auto & jn = robot().refJointOrder()[i];
       
-      robot().mbc().q[0] = {qt_res.w(), qt_res.x(), qt_res.y(), qt_res.z(), p_res.x(), p_res.y(), p_res.z()};
-      robot().mbc().alpha[0] = {rate_res.x(), rate_res.y(), rate_res.z(), vel_res.x(), vel_res.y(), vel_res.z()};
-
-      for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
+      if(robot().hasJoint(jn))
       {
-        const auto & jn = robot().refJointOrder()[i];
-
-        if(robot().hasJoint(jn))
-        {
-          size_t j = robot().jointIndexByName(jn);
-
-	  // std::cout << "Rafa, in QPSolver::updateCurrentState, robot has joint " << jn << "and robot().mbc().q[j].size() = " << robot().mbc().q[j].size() << std::endl;
-	  
-          if(robot().mb().joint(j).dof() == 0)
-            continue;
-
-          robot().mbc().q[j][0] = encoder[i] * lambda_switch_ + q_old_[j][0] * (1.0 - lambda_switch_);
-          robot().mbc().alpha[j][0] = encoderVel[i] * lambda_switch_ + alpha_old_[j][0] * (1.0 - lambda_switch_);
-        }
-      }
-    }
-
-    else
-    {
-      robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
-      robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
-
-      for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
-      {
-        const auto & jn = robot().refJointOrder()[i];
-
-        if(robot().hasJoint(jn))
-        {
-          size_t j = robot().jointIndexByName(jn);
-          
-          if(robot().mb().joint(j).dof() == 0)
-            continue;
+        size_t j = robot().jointIndexByName(jn);
         
-          robot().mbc().q[j][0] = encoder[i];
-          robot().mbc().alpha[j][0] = encoderVel[i];
-        }
+        if(robot().mb().joint(j).dof() == 0)
+          continue;
+        
+        robot().mbc().q[j][0] = encoder[i];
+        robot().mbc().alpha[j][0] = encoderVel[i];
       }
     }
   }
@@ -685,14 +639,16 @@ void QPSolver::fillTorque(tasks::qp::MotionConstr* motionConstr)
 
 void QPSolver::enableFeedback(bool fb)
 {
-  if (!feedback_ && fb)
-  {
-    switch_trigger = true;
-    lambda_switch_ = 0.0;
-    q_old_ = robot().mbc().q;
-    alpha_old_ = robot().mbc().alpha;
-  }
+  // if (!feedback_ && fb)
+  // {
+  // switch_trigger = true;
+  // }
 
+  /*
+  if (fb)
+    std::cout << "Rafa, in QPSolver::enableFeedback, feedback_ = true" << std::endl;
+  */
+  
   feedback_ = fb;
 }
 
@@ -833,9 +789,9 @@ bool IntglTerm_QPSolver::run(bool dummy)
   time = clock();
   updateCurrentState();
   elapsed_.at("updateCurrentState") = (int) (clock() - time);
-    
+  
   time = clock();
-
+  
   std::vector<std::vector<double>> sentJointTorques(robot().mb().nrJoints());
 
   for(size_t i = 0; i < static_cast<int>(robot().mbc().q.size()); ++i)
@@ -865,7 +821,7 @@ bool IntglTerm_QPSolver::run(bool dummy)
 
   if (switch_trigger)
   {
-    // std::cout << "Rafa, in IntglTerm_QPSolver::run, switch_trigger happened !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+    // std::cout << "Rafa, in IntglTerm_QPSolver::run, switch_trigger happened !!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
     
     diff_torques = sent_torques - ref_torques;
     fbTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()], diff_torques);
@@ -875,6 +831,13 @@ bool IntglTerm_QPSolver::run(bool dummy)
   {
     fbTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
   }
+
+  if (!feedback_old_ && feedback_)
+  {
+    switch_trigger = true;
+  }
+
+  feedback_old_ = feedback_;
 
   // std::cout << "Rafa, in IntglTerm_QPSolver::run, sent_torques = " << sent_torques.transpose() << std::endl;
   // std::cout << "Rafa, in IntglTerm_QPSolver::run, ref_torques = " << ref_torques.transpose() << std::endl;
