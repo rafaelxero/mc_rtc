@@ -383,7 +383,7 @@ bool QPSolver::run(bool dummy) // Rafa's version
   
   for(auto & t : metaTasks_)
   {
-    t->update();
+    t->update(*this);
   }
 
   time = clock();
@@ -809,7 +809,7 @@ bool IntglTerm_QPSolver::run(bool dummy)
   
   for(auto & t : metaTasks_)
   {
-    t->update();
+    t->update(*this);
   }
 
   time = clock();
@@ -968,7 +968,7 @@ bool PassivityPIDTerm_QPSolver::run(bool dummy)
 {
   for(auto & t : metaTasks_)
   {
-    t->update();
+    t->update(*this);
   }
 
   updateCurrentState();
