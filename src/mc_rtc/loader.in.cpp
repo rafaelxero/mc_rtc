@@ -14,6 +14,27 @@
 #include <boost/range/adaptors.hpp>
 namespace bfs = boost::filesystem;
 
+#ifdef WIN32
+namespace
+{
+
+/** Get the PATH variable at the program start */
+char * getPATH()
+{
+  static std::unique_ptr<char> PATH;
+  if(PATH)
+  {
+    return PATH.get();
+  }
+  int plen = GetEnvironmentVariable("PATH", nullptr, 0);
+  PATH.reset(new char[plen]);
+  GetEnvironmentVariable("PATH", PATH.get(), plen);
+  return PATH.get();
+};
+
+} // namespace
+#endif
+
 namespace mc_rtc
 {
 
@@ -22,8 +43,11 @@ LTDLHandle::~LTDLHandle()
   close();
 }
 
-LTDLHandle::LTDLHandle(const std::string & class_name, const std::string & path, bool verbose)
-: path_(path), verbose_(verbose)
+LTDLHandle::LTDLHandle(const std::string & class_name,
+                       const std::string & path,
+                       const std::string & rpath,
+                       bool verbose)
+: path_(path), rpath_(rpath), verbose_(verbose)
 {
   auto get_classes = get_symbol<void (*)(std::vector<std::string> &)>(class_name);
   valid_ = get_classes != nullptr;
@@ -51,7 +75,13 @@ bool LTDLHandle::open()
   if(verbose_)
   {
     LOG_INFO("Attempt to open " << path_)
+#ifdef WIN32
+    LOG_INFO("Search path: " << rpath_)
+#endif
   }
+#ifdef WIN32
+  SetEnvironmentVariable("PATH", rpath_.c_str());
+#endif
 #ifndef WIN32
   if(global_)
   {
@@ -82,6 +112,9 @@ bool LTDLHandle::open()
       LOG_WARNING("Failed to load " << path_ << "\n" << error)
     }
   }
+#ifdef WIN32
+  SetEnvironmentVariable("PATH", getPATH());
+#endif
   return open_;
 }
 
@@ -134,6 +167,17 @@ void Loader::load_libraries(const std::string & class_name,
                             bool verbose,
                             Loader::callback_t cb)
 {
+#ifdef WIN32
+  std::stringstream ss;
+  for(const auto & path : paths)
+  {
+    ss << path << ";";
+  }
+  ss << getPATH();
+  std::string rpath = ss.str();
+#else
+  std::string rpath = "";
+#endif
   for(const auto & path : paths)
   {
     if(!bfs::exists(path))
@@ -156,7 +200,7 @@ void Loader::load_libraries(const std::string & class_name,
       /* Attempt to load all dynamics libraries in the directory */
       if((!bfs::is_directory(p)) && (!bfs::is_symlink(p)) && bfs::extension(p) == "@CMAKE_SHARED_LIBRARY_SUFFIX@")
       {
-        auto handle = std::make_shared<LTDLHandle>(class_name, p.string(), verbose);
+        auto handle = std::make_shared<LTDLHandle>(class_name, p.string(), rpath, verbose);
         for(const auto & cn : handle->classes())
         {
           if(out.count(cn))

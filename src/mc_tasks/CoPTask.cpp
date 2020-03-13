@@ -34,12 +34,12 @@ void CoPTask::reset()
   DampingTask::reset();
 }
 
-void CoPTask::update()
+void CoPTask::update(mc_solver::QPSolver & solver)
 {
   double pressure = std::max(0., measuredWrench().force().z());
   Eigen::Vector3d targetTorque = {+targetCoP_.y() * pressure, -targetCoP_.x() * pressure, 0.};
   DampingTask::targetWrench({targetTorque, targetForce_});
-  DampingTask::update();
+  DampingTask::update(solver);
 }
 
 void CoPTask::addToLogger(mc_rtc::Logger & logger)
@@ -128,7 +128,7 @@ std::function<bool(const mc_tasks::MetaTask &, std::string &)> CoPTask::buildCom
 namespace
 {
 
-static bool registered = mc_tasks::MetaTaskLoader::register_load_function(
+static auto registered = mc_tasks::MetaTaskLoader::register_load_function(
     "cop",
     [](mc_solver::QPSolver & solver, const mc_rtc::Configuration & config) {
       auto t = std::make_shared<mc_tasks::force::CoPTask>(config("surface"), solver.robots(), config("robotIndex"));

@@ -66,9 +66,12 @@ struct MC_RTC_LOADER_DLLAPI LTDLHandle
    *
    * \param path Path to the library
    *
+   * \param rpath Path(s) used to search for libraries, this is only used on Windows,
+   *        on Linux/macOS one is advised to use RPATH capabilties
+   *
    * \param verbose If true, output debug information
    */
-  LTDLHandle(const std::string & class_name, const std::string & path, bool verbose);
+  LTDLHandle(const std::string & class_name, const std::string & path, const std::string & rpath, bool verbose);
 
   ~LTDLHandle();
 
@@ -102,6 +105,7 @@ struct MC_RTC_LOADER_DLLAPI LTDLHandle
 
 private:
   std::string path_;
+  std::string rpath_;
   bool verbose_;
   lt_dlhandle handle_;
   bool valid_ = false;
@@ -239,11 +243,6 @@ public:
   template<typename... Args>
   std::shared_ptr<T> create_object(const std::string & name, Args... args);
 
-protected:
-  std::string class_name;
-  bool enable_sandbox;
-  bool verbose;
-  Loader::handle_map_t handles_;
   struct ObjectDeleter
   {
     ObjectDeleter() {}
@@ -253,7 +252,32 @@ protected:
   private:
     void (*delete_fn_)(T *) = nullptr;
   };
+
+  using unique_ptr = std::unique_ptr<T, ObjectDeleter>;
+
+  /** Create a new object of type name
+   *
+   * \param name the object's name
+   *
+   * \param Args arguments required by the constructor
+   *
+   * \returns a unique pointer with a destructor provided by the library
+   *
+   * \throws LoaderException if the name does not exist or if symbol resolution fails
+   */
+  template<typename... Args>
+  unique_ptr create_unique_object(const std::string & name, Args... args);
+
+protected:
+  std::string class_name;
+  bool enable_sandbox;
+  bool verbose;
+  Loader::handle_map_t handles_;
   std::map<std::string, ObjectDeleter> deleters_;
+
+  /** Internal function creates a raw pointer then build a shared or unique pointer accordingly */
+  template<typename... Args>
+  T * create(const std::string & name, Args... args);
 };
 
 } // namespace mc_rtc

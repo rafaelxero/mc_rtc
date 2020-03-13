@@ -82,8 +82,14 @@
       id: derived-fsm
       title: Deriving the FSM controller
     -
+      id: datastore
+      title: "DataStore: Sharing Objects"
+    -
       id: observers
       title: Using the observers pipeline
+    -
+      id: lipm-stabilizer
+      title: Using the LIPM Stabilizer
     -
       id: speed-constraint
       title: Constraint the speed of a body

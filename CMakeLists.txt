@@ -12,6 +12,7 @@ endif()
 
 set(PROJECT_NAME mc_rtc)
 set(PROJECT_DESCRIPTION mc_rtc)
+set(PROJECT_VERSION 1.1.0)
 set(PROJECT_URL https://gite.lirmm.fr/multi-contact/mc_rtc)
 set(PROJECT_DEBUG_POSTFIX "_d")
 set(PROJECT_USE_KEYWORD_LINK_LIBRARIES TRUE)
@@ -53,6 +54,7 @@ option(DISABLE_ROS "Do not build with ROS support (even if ROS was found)" OFF)
 add_project_dependency(Boost REQUIRED COMPONENTS filesystem timer)
 add_project_dependency(Tasks REQUIRED)
 add_project_dependency(mc_rbdyn_urdf REQUIRED)
+add_project_dependency(eigen-quadprog REQUIRED)
 
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/CMakeModules)
@@ -86,13 +88,6 @@ set_target_properties(mc_rtc_3rd_party::RapidJSON PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/3rd-party/RapidJSON
 )
 
-# ROS (defines target: mc_rtc_3rd_party::ROS)
-if(NOT ${DISABLE_ROS})
-  find_package(mc_rtc_3rd_party_ros REQUIRED)
-else()
-  set(ROSCPP_FOUND False)
-endif()
-
 macro(find_description_package PACKAGE)
   set(PACKAGE_PATH_VAR "${PACKAGE}_PATH")
   string(TOUPPER "${PACKAGE_PATH_VAR}" PACKAGE_PATH_VAR)
@@ -112,6 +107,7 @@ endmacro()
 find_description_package(mc_env_description)
 find_description_package(mc_int_obj_description)
 
+set(MC_PLUGINS_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/lib/mc_plugins)
 set(MC_ROBOTS_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/lib/mc_robots)
 set(MC_OBSERVERS_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/lib/mc_observers)
 set(MC_CONTROLLER_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/lib/mc_controller)
@@ -124,9 +120,12 @@ if(MSVC)
   set(CMAKE_MSVCIDE_RUN_PATH "\$(SolutionDir)/3rd-party/ltdl/\$(Configuration);\$(SolutionDir)/src/\$(Configuration);\$(SolutionDir)/src/mc_control/fsm/\$(Configuration)")
 endif(MSVC)
 
+include(CMakeModules/ListAllFiles.cmake)
+
 add_subdirectory(CMakeModules)
 add_subdirectory(doc)
 add_subdirectory(src)
+add_subdirectory(plugins)
 if(${BUILD_TESTING})
   add_subdirectory(tests)
 endif()

@@ -27,7 +27,7 @@ LookAtSurfaceTask::LookAtSurfaceTask(const mc_rbdyn::Robots & robots,
   name_ = "look_at_surface_" + robot.name() + "_" + bodyName + "_" + surfaceName;
 }
 
-void LookAtSurfaceTask::update()
+void LookAtSurfaceTask::update(mc_solver::QPSolver &)
 {
   auto & robot = robots.robot(sRobotIndex);
   LookAtTask::target((offset_ * robot.surfacePose(sName)).translation());
@@ -48,7 +48,7 @@ void LookAtSurfaceTask::offset(const sva::PTransformd & off)
 namespace
 {
 
-static bool registered_lookat_surface = mc_tasks::MetaTaskLoader::register_load_function(
+static auto registered_lookat_surface = mc_tasks::MetaTaskLoader::register_load_function(
     "lookAtSurface",
     [](mc_solver::QPSolver & solver, const mc_rtc::Configuration & config) {
       auto t = std::make_shared<mc_tasks::LookAtSurfaceTask>(solver.robots(), config("robotIndex"), config("body"),

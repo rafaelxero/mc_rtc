@@ -58,7 +58,7 @@ void RelativeEndEffectorTask::set_ef_pose(const sva::PTransformd & tf)
   curTransform = tf;
 }
 
-void RelativeEndEffectorTask::update()
+void RelativeEndEffectorTask::update(mc_solver::QPSolver &)
 {
   const sva::PTransformd & X_0_rel = robots.robot(robotIndex).mbc().bodyPosW[relBodyIdx];
   sva::PTransformd X_0_bodyDes = curTransform * X_0_rel; /* X_0_body = X_rel_body * X_0_rel */
@@ -240,9 +240,10 @@ mc_tasks::MetaTaskPtr load_relef_task(mc_solver::QPSolver & solver, const mc_rtc
   return t;
 }
 
-static bool registered = mc_tasks::MetaTaskLoader::register_load_function("orientation", &load_orientation_task)
-                         && mc_tasks::MetaTaskLoader::register_load_function("position", &load_position_task)
-                         && mc_tasks::MetaTaskLoader::register_load_function("body6d", &load_ef_task)
-                         && mc_tasks::MetaTaskLoader::register_load_function("relBody6d", &load_relef_task);
+static auto orientation_registered =
+    mc_tasks::MetaTaskLoader::register_load_function("orientation", &load_orientation_task);
+static auto position_registered = mc_tasks::MetaTaskLoader::register_load_function("position", &load_position_task);
+static auto body6d_registered = mc_tasks::MetaTaskLoader::register_load_function("body6d", &load_ef_task);
+static auto relbody6d_registered = mc_tasks::MetaTaskLoader::register_load_function("relBody6d", &load_relef_task);
 
 } // namespace

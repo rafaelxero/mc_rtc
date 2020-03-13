@@ -247,7 +247,7 @@ bool QPSolver::runOpenLoop()
 {
   for(auto & t : metaTasks_)
   {
-    t->update();
+    t->update(*this);
   }
   if(solver->solveNoMbcUpdate(robots_p->mbs(), robots_p->mbcs()))
   {
@@ -321,7 +321,7 @@ bool QPSolver::runJointsFeedback(bool wVelocity)
   }
   for(auto & t : metaTasks_)
   {
-    t->update();
+    t->update(*this);
   }
   if(solver->solveNoMbcUpdate(robots_p->mbs(), robots_p->mbcs()))
   {
@@ -359,7 +359,7 @@ bool QPSolver::runClosedLoop(std::shared_ptr<mc_rbdyn::Robots> real_robots)
   // COMPUTE QP on estimated robot
   for(auto & t : metaTasks_)
   {
-    t->update();
+    t->update(*this);
   }
   bool success = solver->solveNoMbcUpdate(robots().mbs(), robots().mbcs());
   solver->updateMbc(robot().mbc(), static_cast<int>(robots().robotIndex()));
@@ -590,6 +590,21 @@ const rbd::MultiBodyConfig & QPSolver::mbc_calc() const
 {
   return (*mbcs_calc_)[robots().robotIndex()];
 }
+    
+void QPSolver::realRobots(std::shared_ptr<mc_rbdyn::Robots> realRobots)
+{
+  realRobots_p = realRobots;
+}
+const mc_rbdyn::Robots & QPSolver::realRobots() const
+{
+  assert(realRobots_p);
+  return *realRobots_p;
+}
+mc_rbdyn::Robots & QPSolver::realRobots()
+{
+  assert(realRobots_p);
+  return *realRobots_p;
+}
 
 void QPSolver::updateConstrSize()
 {
@@ -686,6 +701,11 @@ void QPSolver::logger(std::shared_ptr<mc_rtc::Logger> logger)
   }
 }
 
+std::shared_ptr<mc_rtc::Logger> QPSolver::logger() const
+{
+  return logger_;
+}
+
 void QPSolver::gui(std::shared_ptr<mc_rtc::gui::StateBuilder> gui)
 {
   if(gui_)
@@ -733,6 +753,12 @@ void QPSolver::gui(std::shared_ptr<mc_rtc::gui::StateBuilder> gui)
                                        mc_rtc::gui::FormDataComboInput{"R1", true, {"robots"}},
                                        mc_rtc::gui::FormDataComboInput{"R1 surface", true, {"surfaces", "$R1"}}));
   }
+}
+
+/** Access to the gui instance */
+std::shared_ptr<mc_rtc::gui::StateBuilder> QPSolver::gui() const
+{
+  return gui_;
 }
 
 void QPSolver::addTaskToGUI(mc_tasks::MetaTask * t)

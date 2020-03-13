@@ -1,0 +1,3 @@
+base: HalfSitting
+stiffness: 10
+eval: 0.001

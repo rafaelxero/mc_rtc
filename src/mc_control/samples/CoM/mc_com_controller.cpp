@@ -20,6 +20,7 @@ MCCoMController::MCCoMController(std::shared_ptr<mc_rbdyn::RobotModule> robot_mo
   qpsolver->addConstraintSet(contactConstraint);
   qpsolver->addConstraintSet(dynamicsConstraint);
   qpsolver->addConstraintSet(selfCollisionConstraint);
+  qpsolver->addConstraintSet(*compoundJointConstraint);
   qpsolver->addTask(postureTask);
 
   comTask.reset(new mc_tasks::CoMTask(robots(), robots().robotIndex()));
@@ -47,24 +48,6 @@ void MCCoMController::reset(const ControllerResetData & reset_data)
   {
     LOG_ERROR("MCCoMController does not support robot " << robot().name())
     LOG_ERROR_AND_THROW(std::runtime_error, "MCCoMController does not support your robot")
-  }
-}
-
-sva::PTransformd MCCoMController::anchorFrame(const mc_rbdyn::Robot & robot) const
-{
-  sva::PTransformd X_0_anchor;
-  const auto & contacts = solver().contacts();
-
-  if(contacts.size() == 2)
-  {
-    sva::PTransformd X_0_c1 = contacts[0].X_0_r2s(robot);
-    sva::PTransformd X_0_c2 = contacts[1].X_0_r2s(robot);
-    return sva::interpolate(X_0_c1, X_0_c2, 0.5);
-  }
-  else
-  {
-    LOG_ERROR_AND_THROW(std::runtime_error,
-                        "anchorFrame implementation expects two contacts, " << contacts.size() << " set");
   }
 }
 

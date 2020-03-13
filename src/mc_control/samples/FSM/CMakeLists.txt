@@ -1,0 +1,10 @@
+add_subdirectory(src)
+
+set(AROBASE "@")
+set(FSM_STATES_INSTALL_PREFIX "${MC_CONTROLLER_INSTALL_PREFIX}/fsm/states")
+set(FSM_STATES_DATA_INSTALL_PREFIX "${MC_CONTROLLER_INSTALL_PREFIX}/fsm/states/data")
+configure_file(etc/FSM.conf.cmake ${CMAKE_CURRENT_BINARY_DIR}/etc/FSM.conf)
+unset(AROBASE)
+
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/etc/FSM.conf
+  DESTINATION ${MC_CONTROLLER_INSTALL_PREFIX}/etc/)

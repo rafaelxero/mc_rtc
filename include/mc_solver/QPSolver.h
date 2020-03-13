@@ -268,6 +268,16 @@ public:
   const std::vector<tasks::qp::GenInequality *> & getGenInEqConstr() const { return solver->getGenInEqConstr(); }
   const std::vector<tasks::qp::Bound *> & getBoundConstr() const { return solver->getBoundConstr(); }
   
+  /** Allows to set the real robots used by this solver
+   * XXX could be dangerous / misleading if users set it but tasks have stored
+   * it too
+   */
+  void realRobots(std::shared_ptr<mc_rbdyn::Robots> realRobots);
+  /** Gives access to the real robots used by this solver */
+  const mc_rbdyn::Robots & realRobots() const;
+  /** Gives access to the real robots used by this solver */
+  mc_rbdyn::Robots & realRobots();
+
   /** Update number of variables
    *
    * This should be called when/if you add new robots into the scene after the
@@ -303,13 +313,19 @@ public:
 
   /** Set the logger for this solver instance */
   void logger(std::shared_ptr<mc_rtc::Logger> logger);
+  /** Access to the logger instance */
+  std::shared_ptr<mc_rtc::Logger> logger() const;
 
   /** Set the GUI helper for this solver instance */
   void gui(std::shared_ptr<mc_rtc::gui::StateBuilder> gui);
-  
+
+  /** Access to the gui instance */
+  std::shared_ptr<mc_rtc::gui::StateBuilder> gui() const;
+
  protected:
   
   std::shared_ptr<mc_rbdyn::Robots> robots_p;
+  std::shared_ptr<mc_rbdyn::Robots> realRobots_p;
   double timeStep;
 
   /** Holds mc_rbdyn::Contact in the solver */

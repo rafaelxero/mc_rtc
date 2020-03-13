@@ -34,7 +34,7 @@ target_link_libraries(testQuadraticGenerator PUBLIC mc_rbdyn)
 #################################
 
 set(ROBOTS_BUILD_DIR src/mc_robots)
-if(NOT DEFINED CMAKE_BUILD_TYPE)
+if(CMAKE_CONFIGURATION_TYPES)
   set(ROBOTS_BUILD_DIR "${ROBOTS_BUILD_DIR}/$<CONFIGURATION>")
 endif()
 set(CONFIG_HEADER_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/include/$<CONFIGURATION>")
@@ -71,6 +71,7 @@ mc_rtc_test(testMetaTaskLoader mc_tasks)
 mc_rtc_test(testSolverTaskStorage mc_tasks)
 mc_rtc_test(testCompletionCriteria mc_control)
 mc_rtc_test(testSimulationContactPair mc_control)
+mc_rtc_test(testDataStore mc_rtc_utils mc_rbdyn)
 
 ###########################
 # -- FSM related tests -- #
@@ -120,3 +121,10 @@ target_link_libraries(dummyClient PUBLIC mc_control_client)
 add_executable(dummyServer dummyServer.cpp)
 set_target_properties(dummyServer PROPERTIES FOLDER tests/GUI)
 target_link_libraries(dummyServer PUBLIC mc_control)
+
+######################
+# -- Filters test -- #
+######################
+add_executable(test_filters test_filters.cpp)
+target_link_libraries(test_filters PUBLIC mc_filter SpaceVecAlg::SpaceVecAlg Boost::unit_test_framework Boost::disable_autolinking)
+target_compile_definitions(test_filters PRIVATE -DBOOST_TEST_DYN_LINK -DBOOST_TEST_MAIN)

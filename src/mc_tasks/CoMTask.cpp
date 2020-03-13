@@ -31,6 +31,37 @@ void CoMTask::reset()
   errorT->com(cur_com_);
 }
 
+void CoMTask::load(mc_solver::QPSolver & solver, const mc_rtc::Configuration & config)
+{
+  TrajectoryBase::load(solver, config);
+  if(config.has("com"))
+  {
+    this->com(config("com"));
+  }
+  if(config.has("move_com"))
+  {
+    this->move_com(config("move_com"));
+  }
+  if(config.has("above"))
+  {
+    std::vector<std::string> surfaces = config("above");
+    auto com = this->com();
+    Eigen::Vector3d target = Eigen::Vector3d::Zero();
+    auto & robot = solver.robot(config("robotIndex"));
+    for(const auto & s : surfaces)
+    {
+      target += robot.surface(s).X_0_s(robot).translation();
+    }
+    target /= static_cast<double>(surfaces.size());
+    this->com({target.x(), target.y(), com.z()});
+  }
+  if(config.has("offset"))
+  {
+    Eigen::Vector3d offset = config("offset", Eigen::Vector3d::Zero().eval());
+    this->com(this->com() + offset);
+  }
+}
+
 void CoMTask::move_com(const Eigen::Vector3d & com)
 {
   cur_com_ += com;
@@ -43,15 +74,20 @@ void CoMTask::com(const Eigen::Vector3d & com)
   errorT->com(com);
 }
 
-Eigen::Vector3d CoMTask::com()
+const Eigen::Vector3d & CoMTask::com() const
 {
   return errorT->com();
+}
+
+const Eigen::Vector3d & CoMTask::actual() const
+{
+  return errorT->actual();
 }
 
 void CoMTask::addToLogger(mc_rtc::Logger & logger)
 {
   TrajectoryBase::addToLogger(logger);
-  logger.addLogEntry(name_ + "_pos", [this]() -> Eigen::Vector3d { return cur_com_ - eval(); });
+  logger.addLogEntry(name_ + "_pos", [this]() -> const Eigen::Vector3d & { return actual(); });
   logger.addLogEntry(name_ + "_target", [this]() -> const Eigen::Vector3d & { return cur_com_; });
 }
 
@@ -66,9 +102,9 @@ void CoMTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
 {
   TrajectoryTaskGeneric<tasks::qp::CoMTask>::addToGUI(gui);
   gui.addElement({"Tasks", name_},
-                 mc_rtc::gui::Point3D("com_target", [this]() { return this->com(); },
+                 mc_rtc::gui::Point3D("com_target", [this]() -> const Eigen::Vector3d & { return this->com(); },
                                       [this](const Eigen::Vector3d & com) { this->com(com); }),
-                 mc_rtc::gui::Point3D("com", [this]() { return (this->com() - this->eval()).eval(); }));
+                 mc_rtc::gui::Point3D("com", [this]() -> const Eigen::Vector3d & { return this->actual(); }));
 }
 
 } // namespace mc_tasks
@@ -76,36 +112,10 @@ void CoMTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
 namespace
 {
 
-static bool registered = mc_tasks::MetaTaskLoader::register_load_function(
+static auto registered = mc_tasks::MetaTaskLoader::register_load_function(
     "com",
     [](mc_solver::QPSolver & solver, const mc_rtc::Configuration & config) {
       auto t = std::make_shared<mc_tasks::CoMTask>(solver.robots(), config("robotIndex"));
-      if(config.has("com"))
-      {
-        t->com(config("com"));
-      }
-      if(config.has("move_com"))
-      {
-        t->move_com(config("move_com"));
-      }
-      if(config.has("above"))
-      {
-        std::vector<std::string> surfaces = config("above");
-        auto com = t->com();
-        Eigen::Vector3d target = Eigen::Vector3d::Zero();
-        auto & robot = solver.robot(config("robotIndex"));
-        for(const auto & s : surfaces)
-        {
-          target += robot.surface(s).X_0_s(robot).translation();
-        }
-        target /= static_cast<double>(surfaces.size());
-        t->com({target.x(), target.y(), com.z()});
-      }
-      if(config.has("offset"))
-      {
-        Eigen::Vector3d offset = config("offset", Eigen::Vector3d::Zero().eval());
-        t->com(t->com() + offset);
-      }
       t->load(solver, config);
       return t;
     });

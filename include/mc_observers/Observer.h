@@ -31,7 +31,7 @@ namespace mc_observers
  * All new observers must inherit from this Observer class, and implement the
  * required virtual functions (at least reset, run, updateRobots)
  */
-struct MC_OBSERVER_DLLAPI Observer
+struct MC_OBSERVERS_DLLAPI Observer
 {
   Observer(const std::string & name, double dt, const mc_rtc::Configuration & config = {});
   virtual ~Observer();
@@ -116,8 +116,6 @@ using ObserverPtr = std::shared_ptr<mc_observers::Observer>;
 
 } // namespace mc_observers
 
-/* Set of macros to assist with the writing of an Observer */
-
 #ifdef WIN32
 #  define OBSERVER_MODULE_API __declspec(dllexport)
 #else
@@ -127,26 +125,3 @@ using ObserverPtr = std::shared_ptr<mc_observers::Observer>;
 #    define OBSERVER_MODULE_API
 #  endif
 #endif
-
-#define EXPORT_OBSERVER_MODULE(NAME, TYPE)                                                    \
-  extern "C"                                                                                  \
-  {                                                                                           \
-    OBSERVER_MODULE_API void MC_RTC_OBSERVER_MODULE(std::vector<std::string> & names)         \
-    {                                                                                         \
-      names = {NAME};                                                                         \
-    }                                                                                         \
-    OBSERVER_MODULE_API void destroy(mc_observers::Observer * ptr)                            \
-    {                                                                                         \
-      delete ptr;                                                                             \
-    }                                                                                         \
-    OBSERVER_MODULE_API unsigned int create_args_required()                                   \
-    {                                                                                         \
-      return 3;                                                                               \
-    }                                                                                         \
-    OBSERVER_MODULE_API mc_observers::Observer * create(const std::string & name,             \
-                                                        const double & dt,                    \
-                                                        const mc_rtc::Configuration & config) \
-    {                                                                                         \
-      return new TYPE(name, dt, config);                                                      \
-    }                                                                                         \
-  }

@@ -1,0 +1,5 @@
+{
+  "base": "HalfSitting",
+  "stiffness": 10,
+  "eval": 1e-3
+}

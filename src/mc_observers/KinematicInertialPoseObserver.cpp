@@ -5,9 +5,10 @@
  * lipm_walking_controller <https://github.com/stephane-caron/lipm_walking_controller>
  */
 
-#include "KinematicInertialPoseObserver.h"
+#include <mc_observers/KinematicInertialPoseObserver.h>
+#include <mc_observers/ObserverMacros.h>
 
-#include <mc_control/mc_controller.h>
+#include <mc_control/MCController.h>
 #include <mc_rbdyn/rpy_utils.h>
 
 namespace mc_observers
@@ -15,7 +16,7 @@ namespace mc_observers
 KinematicInertialPoseObserver::KinematicInertialPoseObserver(const std::string & name,
                                                              double dt,
                                                              const mc_rtc::Configuration & /* config */)
-: Observer(name, dt), orientation_(Eigen::Matrix3d::Identity()), position_(Eigen::Vector3d::Zero()), leftFootRatio_(0.5)
+: Observer(name, dt), orientation_(Eigen::Matrix3d::Identity()), position_(Eigen::Vector3d::Zero())
 {
 }
 
@@ -51,12 +52,9 @@ void KinematicInertialPoseObserver::estimateOrientation(const mc_rbdyn::Robot & 
 
 void KinematicInertialPoseObserver::estimatePosition(const mc_control::MCController & ctl)
 {
-  const auto & robot = ctl.robot();
-  const auto & realRobot = ctl.realRobot();
-  sva::PTransformd X_0_c = ctl.anchorFrame(robot);
-  sva::PTransformd X_0_s = ctl.anchorFrame(realRobot);
-  const sva::PTransformd & X_0_real = realRobot.posW();
-  sva::PTransformd X_real_s = X_0_s * X_0_real.inv();
+  const sva::PTransformd X_0_c = ctl.anchorFrame();
+  const sva::PTransformd X_0_s = ctl.anchorFrameReal();
+  const sva::PTransformd X_real_s = X_0_s * ctl.realRobot().posW().inv();
   const Eigen::Vector3d & r_c_0 = X_0_c.translation();
   const Eigen::Vector3d & r_s_real = X_real_s.translation();
   position_ = r_c_0 - orientation_.transpose() * r_s_real;
@@ -68,13 +66,24 @@ void KinematicInertialPoseObserver::updateRobots(const mc_control::MCController 
   realRobots.robot().posW(sva::PTransformd{orientation_, position_});
 }
 
-void KinematicInertialPoseObserver::addToLogger(const mc_control::MCController &, mc_rtc::Logger & logger)
+void KinematicInertialPoseObserver::updateBodySensor(mc_rbdyn::Robots & robots, const std::string & sensorName)
+{
+  auto & sensor = robots.robot().bodySensor(sensorName);
+  sensor.orientation(Eigen::Quaterniond(orientation_));
+  sensor.position(position_);
+}
+
+void KinematicInertialPoseObserver::addToLogger(const mc_control::MCController & ctl, mc_rtc::Logger & logger)
 {
   logger.addLogEntry("observer_" + name() + "_posW", [this]() { return posW(); });
+  logger.addLogEntry("observer_" + name() + "_anchorFrame", [&ctl]() { return ctl.anchorFrame(); });
+  logger.addLogEntry("observer_" + name() + "_anchorFrameReal", [&ctl]() { return ctl.anchorFrameReal(); });
 }
 void KinematicInertialPoseObserver::removeFromLogger(mc_rtc::Logger & logger)
 {
   logger.removeLogEntry("observer_" + name() + "_posW");
+  logger.removeLogEntry("observer_" + name() + "_anchorFrame");
+  logger.removeLogEntry("observer_" + name() + "_anchorFrameReal");
 }
 
 } // namespace mc_observers

@@ -12,6 +12,7 @@
 #include <mc_rbdyn/Mimic.h>
 #include <mc_rbdyn/Springs.h>
 #include <mc_rbdyn/api.h>
+#include <mc_rbdyn/lipm_stabilizer/StabilizerConfiguration.h>
 
 #include <mc_rbdyn_urdf/urdf.h>
 
@@ -263,6 +264,12 @@ struct MC_RBDYN_DLLAPI RobotModule
     return _default_attitude;
   }
 
+  /** Return default configuration for the lipm stabilizer */
+  const mc_rbdyn::lipm_stabilizer::StabilizerConfiguration & defaultLIPMStabilizerConfiguration() const
+  {
+    return _lipmStabilizerConfig;
+  }
+
   /** Generate correct bounds from URDF bounds
    *
    * URDF outputs bounds in {lower, upper, velocity, torque} forms
@@ -293,7 +300,7 @@ struct MC_RBDYN_DLLAPI RobotModule
    *
    * \see mc_rbdyn::CompoundJointConstraintDescription for details on the expected data
    */
-  inline const std::vector<CompoundJointConstraintDescription> & compoundJoints() const
+  inline const CompoundJointConstraintDescriptionVector & compoundJoints() const
   {
     return _compoundJoints;
   }
@@ -353,9 +360,11 @@ struct MC_RBDYN_DLLAPI RobotModule
   /** \see default_attitude() */
   std::array<double, 7> _default_attitude = {{1., 0., 0., 0., 0., 0., 0.}};
   /** \see compoundJoints() */
-  std::vector<CompoundJointConstraintDescription> _compoundJoints;
+  CompoundJointConstraintDescriptionVector _compoundJoints;
   /** \see parameters() */
   std::vector<std::string> _parameters;
+  /** \see defaultLIPMStabilizerConfiguration() */
+  mc_rbdyn::lipm_stabilizer::StabilizerConfiguration _lipmStabilizerConfig;
 };
 
 typedef std::shared_ptr<RobotModule> RobotModulePtr;
@@ -367,9 +376,9 @@ typedef std::shared_ptr<RobotModule> RobotModulePtr;
  */
 RobotModule::bounds_t MC_RBDYN_DLLAPI urdf_limits_to_bounds(const mc_rbdyn_urdf::Limits & limits);
 
-} // namespace mc_rbdyn
+using RobotModuleVector = std::vector<RobotModule, Eigen::aligned_allocator<RobotModule>>;
 
-/* Set of macros to assist with the writing of a RobotModule */
+} // namespace mc_rbdyn
 
 #ifdef WIN32
 #  define ROBOT_MODULE_API __declspec(dllexport)
@@ -380,57 +389,3 @@ RobotModule::bounds_t MC_RBDYN_DLLAPI urdf_limits_to_bounds(const mc_rbdyn_urdf:
 #    define ROBOT_MODULE_API
 #  endif
 #endif
-
-/*! ROBOT_MODULE_COMMON
- * Declare a destroy symbol and CLASS_NAME symbol
- * Constructor should be declared by the user
- */
-#define ROBOT_MODULE_COMMON(NAME)                                             \
-  ROBOT_MODULE_API void MC_RTC_ROBOT_MODULE(std::vector<std::string> & names) \
-  {                                                                           \
-    names = {NAME};                                                           \
-  }                                                                           \
-  ROBOT_MODULE_API void destroy(mc_rbdyn::RobotModule * ptr)                  \
-  {                                                                           \
-    delete ptr;                                                               \
-  }
-
-/*! ROBOT_MODULE_DEFAULT_CONSTRUCTOR
- * Declare an external symbol for creation using a default constructor
- * Also declare destruction symbol
- * Exclusive of ROBOT_MODULE_CANONIC_CONSTRUCTOR
- */
-#define ROBOT_MODULE_DEFAULT_CONSTRUCTOR(NAME, TYPE)                     \
-  extern "C"                                                             \
-  {                                                                      \
-    ROBOT_MODULE_COMMON(NAME)                                            \
-    ROBOT_MODULE_API unsigned int create_args_required()                 \
-    {                                                                    \
-      return 1;                                                          \
-    }                                                                    \
-    ROBOT_MODULE_API mc_rbdyn::RobotModule * create(const std::string &) \
-    {                                                                    \
-      return new TYPE();                                                 \
-    }                                                                    \
-  }
-
-/*! ROBOT_MODULE_CANONIC_CONSTRUCTOR
- * Declare an external symbol for creation using the cannonical constructor (const string &, const string &)
- * Also declare destruction symbol
- * Exclusive of ROBOT_MODULE_DEFAULT_CONSTRUCTOR
- */
-#define ROBOT_MODULE_CANONIC_CONSTRUCTOR(NAME, TYPE)                          \
-  extern "C"                                                                  \
-  {                                                                           \
-    ROBOT_MODULE_COMMON(NAME)                                                 \
-    ROBOT_MODULE_API unsigned int create_args_required()                      \
-    {                                                                         \
-      return 3;                                                               \
-    }                                                                         \
-    ROBOT_MODULE_API mc_rbdyn::RobotModule * create(const std::string &,      \
-                                                    const std::string & path, \
-                                                    const std::string & name) \
-    {                                                                         \
-      return new TYPE(path, name);                                            \
-    }                                                                         \
-  }
