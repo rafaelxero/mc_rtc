@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ * Copyright 2015-2020 CNRS-UM LIRMM, CNRS-AIST JRL
  */
 
 #pragma once
@@ -8,14 +8,18 @@
 #include <mc_rbdyn/RobotModule.h>
 #include <mc_rbdyn/Surface.h>
 
+#include <mc_control/generic_gripper.h>
+
 #include <RBDyn/MultiBody.h>
 #include <RBDyn/MultiBodyConfig.h>
 #include <RBDyn/MultiBodyGraph.h>
 #include <RBDyn/FD.h>
 #include <RBDyn/Friction.h>
 
-#include <memory>
 #include <sch/S_Object/S_Object.h>
+
+#include <memory>
+#include <unordered_map>
 
 namespace mc_rbdyn
 {
@@ -36,7 +40,7 @@ public:
   Robot & operator=(Robot &&) = default;
 
   /** Returns the name of the robot */
-  std::string name() const;
+  const std::string & name() const;
 
   /** Set the name of the robot
    *
@@ -234,6 +238,11 @@ public:
 
   /** Compute the gravity-free wrench in surface frame
    *
+   * @note If the surface is indirectly attached to the sensor (i.e there are
+   * joints in-between), then the kinematic transformation will be taken into
+   * account but the effect of bodies in-between is not accounted for in the
+   * returned wrench.
+   *
    * @param surfaceName A surface attached to a force sensor
    *
    * @return Measured wrench in surface frame
@@ -243,6 +252,11 @@ public:
   sva::ForceVecd surfaceWrench(const std::string & surfaceName) const;
 
   /** Compute the gravity-free wrench in body frame
+   *
+   * @note If the body is indirectly attached to the sensor (i.e there are
+   * joints in-between), then the kinematic transformation will be taken into
+   * account but the effect of bodies in-between is not accounted for in the
+   * returned wrench.
    *
    * @param bodyName A body attached to a force sensor
    *
@@ -483,12 +497,43 @@ public:
    *
    * @return The attached sensor
    *
-   * @throws If no sensor is attached to this body
+   * @throws If no sensor is directly attached to this body
+   *
+   * @note if the body in indirectly attached to a body, use
+   * findBodyForceSensor() instead
    */
   ForceSensor & bodyForceSensor(const std::string & body);
 
   /** Const variant */
   const ForceSensor & bodyForceSensor(const std::string & body) const;
+
+  /**
+   * @brief Looks for a force sensor from a body up the kinematic chain until the root.
+   *
+   * @param body Name of body indirectly attached to the sensor
+   *
+   * @return The sensor to which the body is indirectly attached
+   *
+   * @throws If no sensor is found between the body and the root
+   */
+  ForceSensor & findBodyForceSensor(const std::string & body);
+
+  /** Const variant */
+  const ForceSensor & findBodyForceSensor(const std::string & body) const;
+
+  /**
+   * @brief Looks for a force sensor from a surface up the kinematic chain until the root.
+   *
+   * @param surface Name of surface indirectly attached to the sensor
+   *
+   * @return The sensor to which the surface is indirectly attached
+   *
+   * @throws If no sensor is found between the surface and the root
+   */
+  ForceSensor & findSurfaceForceSensor(const std::string & surface);
+
+  /** Const variant */
+  const ForceSensor & findSurfaceForceSensor(const std::string & surface) const;
 
   /** Returns all force sensors */
   std::vector<ForceSensor> & forceSensors();
@@ -498,6 +543,77 @@ public:
 
   /** @} */
   /* End of Force sensors group */
+
+  /** @name Devices
+   *
+   * These functions are related to generic devices handling
+   *
+   * @{
+   */
+
+  /** Returns true if a generic device of type T and named name exists in the robot
+   *
+   * \param name Name of the device
+   *
+   * \tparam T Type of device requested
+   *
+   */
+  template<typename T>
+  bool hasDevice(const std::string & name) const;
+
+  /** Alias for \see hasDevice */
+  template<typename T>
+  inline bool hasSensor(const std::string & name) const
+  {
+    return hasDevice<T>(name);
+  }
+
+  /** Get a generic device of type T named name
+   *
+   * The reference returned by this function is remains valid
+   *
+   * \param name Name of the device
+   *
+   * \tparam T type of the device requested
+   *
+   * \throws If the device does not exist or does not have the right type
+   *
+   */
+  template<typename T>
+  const T & device(const std::string & name) const;
+
+  /** Non-const variant */
+  template<typename T>
+  T & device(const std::string & name)
+  {
+    return const_cast<T &>(const_cast<const Robot *>(this)->device<T>(name));
+  }
+
+  /** Alias for \see device */
+  template<typename T>
+  inline const T & sensor(const std::string & name) const
+  {
+    return device<T>(name);
+  }
+
+  /** Alias for \see device */
+  template<typename T>
+  inline T & sensor(const std::string & name)
+  {
+    return device<T>(name);
+  }
+
+  /** Add a generic device to the robot */
+  void addDevice(DevicePtr device);
+
+  /** Alias for \see addDevice */
+  inline void addSensor(SensorPtr sensor)
+  {
+    addDevice(std::move(sensor));
+  }
+
+  /** @} */
+  /* End of Devices group */
 
   /** Check if a surface \p surface exists
    *
@@ -654,6 +770,25 @@ public:
   /** Return the robot's floating base velocity expressed in the inertial frame */
   const sva::MotionVecd & velW() const;
 
+  /** Access a gripper by name
+   *
+   * \param gripper Gripper name
+   *
+   * \throws If the gripper does not exist within this robot
+   */
+  mc_control::Gripper & gripper(const std::string & gripper);
+
+  inline const std::unordered_map<std::string, mc_control::GripperPtr> & grippersByName() const
+  {
+    return grippers_;
+  }
+
+  /** Access all grippers */
+  inline const std::vector<mc_control::GripperRef> & grippers() const
+  {
+    return grippersRef_;
+  }
+
 private:
   Robots * robots_;
   unsigned int robots_idx_;
@@ -687,19 +822,27 @@ private:
   /** Hold all body sensors */
   BodySensorVector bodySensors_;
   /** Correspondance between body sensor's name and body sensor index*/
-  std::map<std::string, size_t> bodySensorsIndex_;
+  std::unordered_map<std::string, size_t> bodySensorsIndex_;
   /** Correspondance between bodies' names and attached body sensors */
-  std::map<std::string, size_t> bodyBodySensors_;
+  std::unordered_map<std::string, size_t> bodyBodySensors_;
   Springs springs_;
   std::vector<std::vector<Eigen::VectorXd>> tlPoly_;
   std::vector<std::vector<Eigen::VectorXd>> tuPoly_;
   std::vector<Flexibility> flexibility_;
   /** Correspondance between force sensor's name and force sensor index */
-  std::map<std::string, size_t> forceSensorsIndex_;
+  std::unordered_map<std::string, size_t> forceSensorsIndex_;
   /** Correspondance between bodies' names and attached force sensors */
   std::map<std::string, size_t> bodyForceSensors_;
   std::shared_ptr<rbd::ForwardDynamics> fd_;
   std::shared_ptr<rbd::Friction> friction_;
+  /** Grippers attached to this robot */
+  std::unordered_map<std::string, mc_control::GripperPtr> grippers_;
+  /** Grippers reference for this robot */
+  std::vector<mc_control::GripperRef> grippersRef_;
+  /** Hold all devices that are neither force sensors nor body sensors */
+  DevicePtrVector devices_;
+  /** Correspondance between a device's name and a device index */
+  std::unordered_map<std::string, size_t> devicesIndex_;
 
 protected:
   /** Invoked by Robots parent instance after mb/mbc/mbg/RobotModule are stored
@@ -730,8 +873,85 @@ private:
   Robot & operator=(const Robot &) = delete;
 };
 
+/** @defgroup robotFromConfig Helpers to obtain robot index/name from configuration
+ *  The intent of these functions is:
+ *  - to facilitate supporting managing robots by name in the FSM, while maintaining compatibility with the existing
+ * FSMs using robotIndex.
+ *  - to facilitate the upcoming transition from Tasks (requires robotIndex) to TVM (using only robotName).
+ *    When the transition occurs, robotIndexFromConfig can be deprecated, and its uses be replaced with
+ * robotNameFromConfig instead.
+ *  @{
+ */
+
+/**
+ * @brief Obtains a reference to a loaded robot from configuration (using robotName or robotIndex)
+ *
+ * - If robotName is present, it is used to find the robot
+ * - Otherwise, it'll attempt to use robotIndex and inform the user that its use
+ *   is deprecated in favor of robotName
+ *
+ * @param config Configuration from which to look for robotName/robotIndex
+ * @param robots Loaded robots
+ * @param prefix Prefix used for printint outputs to the user (deprecation
+ * warning, non-existing robot, etc).
+ * @param required
+ * - When true, throws if the robotName/robotIndex is invalid or missing.
+ * - When false, returns the main robot if the robotName/robotIndex is invalid or missing.
+ *
+ * @param robotIndexKey Configuration key for robotIndex
+ * @param robotNameKey Configuration key for robotName
+ * @param defaultRobotName When empty, return the main robot name, otherwise use
+ * the specified name
+ *
+ * @return Robot as configured by the robotName or robotIndex configuration
+ * entry.
+ */
+MC_RBDYN_DLLAPI const mc_rbdyn::Robot & robotFromConfig(const mc_rtc::Configuration & config,
+                                                        const mc_rbdyn::Robots & robots,
+                                                        const std::string & prefix,
+                                                        bool required = false,
+                                                        const std::string & robotIndexKey = "robotIndex",
+                                                        const std::string & robotNameKey = "robot",
+                                                        const std::string & defaultRobotName = "");
+
+/**
+ * @brief Helper to obtain the robot name from configuration
+ *
+ * @see const mc_rbdyn::Robot & robotFromConfig(const mc_rtc::Configuration & config, const mc_rbdyn::Robots & robots,
+ * const std::string & prefix, bool required);
+ */
+std::string MC_RBDYN_DLLAPI robotNameFromConfig(const mc_rtc::Configuration & config,
+                                                const mc_rbdyn::Robots & robots,
+                                                const std::string & prefix = "",
+                                                bool required = false,
+                                                const std::string & robotIndexKey = "robotIndex",
+                                                const std::string & robotNameKey = "robot",
+                                                const std::string & defaultRobotName = "");
+
+/**
+ * @brief Helper to obtain the robot index from configuration
+ *
+ * @note This function will be removed when transitioning to TVM. To facilitate
+ * the transition from index-based to named-based robots, this function can be
+ * deprecated to help with the transition.
+ *
+ * @see const mc_rbdyn::Robot & robotFromConfig(const mc_rtc::Configuration & config, const mc_rbdyn::Robots & robots,
+ * const std::string & prefix, bool required);
+ */
+unsigned int MC_RBDYN_DLLAPI robotIndexFromConfig(const mc_rtc::Configuration & config,
+                                                  const mc_rbdyn::Robots & robots,
+                                                  const std::string & prefix = "",
+                                                  bool required = false,
+                                                  const std::string & robotIndexKey = "robotIndex",
+                                                  const std::string & robotNameKey = "robot",
+                                                  const std::string & defaultRobotName = "");
+
+/** @} */
+
 /*FIXME Not implemetend for now, only used for ATLAS
 void loadPolyTorqueBoundsData(const std::string & file, Robot & robot);
 */
 
 } // namespace mc_rbdyn
+
+#include <mc_rbdyn/Robot.hpp>

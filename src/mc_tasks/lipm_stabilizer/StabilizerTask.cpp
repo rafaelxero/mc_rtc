@@ -7,8 +7,8 @@
 
 #include <mc_filter/utils/clamp.h>
 #include <mc_rbdyn/ZMP.h>
-#include <mc_rbdyn/constants.h>
 #include <mc_rbdyn/rpy_utils.h>
+#include <mc_rtc/constants.h>
 #include <mc_tasks/MetaTaskLoader.h>
 #include <mc_tasks/lipm_stabilizer/StabilizerTask.h>
 
@@ -22,7 +22,7 @@ namespace lipm_stabilizer
 using internal::Contact;
 using ::mc_filter::utils::clamp;
 using ::mc_filter::utils::clampInPlaceAndWarn;
-namespace constants = ::mc_rbdyn::constants;
+namespace constants = ::mc_rtc::constants;
 
 // Repeat static constexpr declarations
 // Fixes https://github.com/stephane-caron/lipm_walking_controller/issues/21
@@ -885,7 +885,7 @@ namespace
 static auto registered = mc_tasks::MetaTaskLoader::register_load_function(
     "lipm_stabilizer",
     [](mc_solver::QPSolver & solver, const mc_rtc::Configuration & config) {
-      unsigned robotIndex = config("robotIndex", 0u);
+      unsigned robotIndex = robotIndexFromConfig(config, solver.robots(), "lipm_stabilizer");
       const auto & robot = solver.robots().robot(robotIndex);
 
       // Load default configuration from robot module

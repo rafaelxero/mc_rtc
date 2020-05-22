@@ -162,7 +162,10 @@ public:
   template<typename ... Fun>
   void addConstraint(tasks::qp::ConstraintFunction<Fun...> * constraint)
   {
-    constraint->addToSolver(robots().mbs(), *solver);
+    // constraint->addToSolver(robots().mbs(), *solver);  // Rafa had it like this before
+    constraint->addToSolver(robots().mbs(), solver);
+    solver.updateConstrSize();
+    solver.updateNrVars(robots().mbs());
   }
 
   /** Remove a constraint function from the solver
@@ -171,7 +174,10 @@ public:
   template<typename ... Fun>
   void removeConstraint(tasks::qp::ConstraintFunction<Fun...> * constraint)
   {
-    constraint->removeFromSolver(*solver);
+    // constraint->removeFromSolver(*solver);  // Rafa had it like this before
+    constraint->removeFromSolver(solver);
+    solver.updateConstrSize();
+    solver.updateNrVars(robots().mbs());
   }
 
   bool hasConstraint(const tasks::qp::Constraint* constraint);
@@ -235,6 +241,17 @@ public:
    * \param curTime Unused
    */
   const QPResultMsg & send(double curTime = 0);
+
+  /** Non-const access to QPResultMsg
+   *
+   * You are unlikely to need this function, it is used by the framework to
+   * change the gripper's states
+   *
+   */
+  inline QPResultMsg & result()
+  {
+    return qpRes;
+  }
 
   /** Gives access to the main robot in the solver */
   const mc_rbdyn::Robot & robot() const;

@@ -76,6 +76,9 @@
       id: fsm
       title: Using the FSM facilities
     -
+      id: fsm-main-states
+      title: Main FSM states
+    -
       id: fsm-example
       title: FSM controller in practice
     -
@@ -125,3 +128,6 @@
     -
       id: new-robot
       title: Integrate a new robot in mc_rtc
+    -
+      id: debug-lssol-output-6
+      title: Debugging LSSOL output 6

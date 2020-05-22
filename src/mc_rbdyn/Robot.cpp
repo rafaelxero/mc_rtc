@@ -8,11 +8,9 @@
 #include <mc_rbdyn/SCHAddon.h>
 #include <mc_rbdyn/Surface.h>
 #include <mc_rbdyn/ZMP.h>
-#include <mc_rbdyn/constants.h>
 #include <mc_rbdyn/surface_utils.h>
+#include <mc_rtc/constants.h>
 #include <mc_rtc/logging.h>
-
-#include <mc_rbdyn_urdf/urdf.h>
 
 #include <RBDyn/CoM.h>
 #include <RBDyn/EulerIntegration.h>
@@ -23,6 +21,7 @@
 #include <boost/filesystem.hpp>
 namespace bfs = boost::filesystem;
 
+#include <fstream>
 #include <tuple>
 
 namespace
@@ -138,7 +137,7 @@ Robot::Robot(Robots & robots,
     mbc() = rbd::MultiBodyConfig(mb());
   }
 
-  mbc().gravity = constants::gravity;
+  mbc().gravity = mc_rtc::constants::gravity;
   mbc().zero(mb());
   {
     auto initQ = mbc().q;
@@ -219,10 +218,7 @@ Robot::Robot(Robots & robots,
   for(auto & fs : forceSensors_)
   {
     bfs::path calib_file = bfs::path(module_.calib_dir) / std::string("calib_data." + fs.name());
-    if(bfs::exists(calib_file))
-    {
-      fs.loadCalibrator(calib_file.string(), mbc().gravity);
-    }
+    fs.loadCalibrator(calib_file.string(), mbc().gravity);
   }
   for(size_t i = 0; i < forceSensors_.size(); ++i)
   {
@@ -244,6 +240,13 @@ Robot::Robot(Robots & robots,
     const auto & bS = bodySensors_[i];
     bodySensorsIndex_[bS.name()] = i;
     bodyBodySensors_[bS.parentBody()] = i;
+  }
+
+  devices_ = module_.devices();
+  for(size_t i = 0; i < devices_.size(); ++i)
+  {
+    const auto & d = devices_[i];
+    devicesIndex_[d->name()] = i;
   }
 
   refJointOrder_ = module_.ref_joint_order();
@@ -269,9 +272,48 @@ Robot::Robot(Robots & robots,
   friction_ = std::make_shared<rbd::ImplEulerIntModelRatStictionFriction>(mb(), 25000);
   
   zmp_ = Eigen::Vector3d::Zero();
+
+  std::string urdf;
+  auto loadUrdf = [&module_, &urdf]() -> const std::string & {
+    if(urdf.size())
+    {
+      return urdf;
+    }
+    const auto & urdfPath = module_.urdf_path;
+    std::ifstream ifs(urdfPath);
+    if(ifs.is_open())
+    {
+      std::stringstream urdfSS;
+      urdfSS << ifs.rdbuf();
+      urdf = urdfSS.str();
+      return urdf;
+    }
+    LOG_ERROR("Could not open urdf file " << urdfPath << " for robot " << module_.name
+                                          << ", cannot initialize grippers")
+    LOG_ERROR_AND_THROW(std::runtime_error, "Failed to initialize grippers")
+  };
+  for(const auto & gripper : module_.grippers())
+  {
+    auto mimics = gripper.mimics();
+    auto safety = gripper.safety();
+    if(mimics)
+    {
+      grippers_[gripper.name].reset(new mc_control::Gripper(*this, gripper.joints, *mimics, gripper.reverse_limits,
+                                                            safety ? *safety : module_.gripperSafety()));
+    }
+    else
+    {
+      grippers_[gripper.name].reset(new mc_control::Gripper(*this, gripper.joints, loadUrdf(), gripper.reverse_limits,
+                                                            safety ? *safety : module_.gripperSafety()));
+    }
+  }
+  for(auto & g : grippers_)
+  {
+    grippersRef_.push_back(std::ref(*g.second));
+  }
 }
 
-std::string Robot::name() const
+const std::string & Robot::name() const
 {
   return name_;
 }
@@ -493,19 +535,46 @@ Eigen::Vector3d Robot::comAcceleration() const
 
 sva::ForceVecd Robot::bodyWrench(const std::string & bodyName) const
 {
-  const auto & fs = bodyForceSensor(bodyName);
-  sva::ForceVecd w_fsactual = fs.wrenchWithoutGravity(*this);
-  sva::PTransformd X_fsactual_surf = fs.X_fsactual_parent();
-  return X_fsactual_surf.dualMul(w_fsactual);
+  if(hasForceSensor(bodyName))
+  {
+    const auto & fs = bodyForceSensor(bodyName);
+    sva::ForceVecd w_fsactual = fs.wrenchWithoutGravity(*this);
+    sva::PTransformd X_fsactual_surf = fs.X_fsactual_parent();
+    return X_fsactual_surf.dualMul(w_fsactual);
+  }
+  else
+  { /* If a force sensor is not directly attached to the body,
+       attempt to find it up the kinematic tree */
+    const auto & fs = findBodyForceSensor(bodyName);
+    sva::ForceVecd w_fsactual = fs.wrenchWithoutGravity(*this);
+    const auto & X_0_body = bodyPosW(bodyName);
+    const auto & X_0_parent = bodyPosW(fs.parentBody());
+    const auto X_parent_body = X_0_body * X_0_parent.inv();
+    sva::PTransformd X_fsactual_surf = X_parent_body * fs.X_fsactual_parent();
+    return X_fsactual_surf.dualMul(w_fsactual);
+  }
 }
 
 sva::ForceVecd Robot::surfaceWrench(const std::string & surfaceName) const
 {
   const auto & bodyName = surface(surfaceName).bodyName();
-  const auto & fs = bodyForceSensor(bodyName);
-  sva::ForceVecd w_fsactual = fs.wrenchWithoutGravity(*this);
-  sva::PTransformd X_fsactual_surf = surface(surfaceName).X_b_s() * fs.X_fsactual_parent();
-  return X_fsactual_surf.dualMul(w_fsactual);
+  if(hasForceSensor(bodyName))
+  {
+    const auto & fs = bodyForceSensor(bodyName);
+    sva::ForceVecd w_fsactual = fs.wrenchWithoutGravity(*this);
+    sva::PTransformd X_fsactual_surf = surface(surfaceName).X_b_s() * fs.X_fsactual_parent();
+    return X_fsactual_surf.dualMul(w_fsactual);
+  }
+  else
+  { /* If a force sensor is not directly attached to the body,
+       attempt to find it up the kinematic tree */
+    const auto & fs = findBodyForceSensor(bodyName);
+    sva::ForceVecd w_fsactual = fs.wrenchWithoutGravity(*this);
+    const auto & X_0_fsParent = bodyPosW(fs.parentBody());
+    const auto X_fsParent_surf = surface(surfaceName).X_0_s(*this) * X_0_fsParent.inv();
+    sva::PTransformd X_fsactual_surf = X_fsParent_surf * fs.X_fsactual_parent();
+    return X_fsactual_surf.dualMul(w_fsactual);
+  }
 }
 
 Eigen::Vector2d Robot::cop(const std::string & surfaceName, double min_pressure) const
@@ -704,6 +773,37 @@ ForceSensor & Robot::bodyForceSensor(const std::string & body)
 const ForceSensor & Robot::bodyForceSensor(const std::string & body) const
 {
   return forceSensors_.at(bodyForceSensors_.at(body));
+}
+
+const ForceSensor & Robot::findBodyForceSensor(const std::string & body) const
+{
+  int nextIndex = mb().bodyIndexByName().at(body);
+  while(nextIndex >= 0)
+  {
+    const auto & b = mb().body(nextIndex);
+    if(bodyHasForceSensor(b.name()))
+    {
+      return bodyForceSensor(b.name());
+    }
+    nextIndex = mb().parent(nextIndex);
+  }
+  LOG_ERROR_AND_THROW(std::runtime_error, "No force sensor (directly or indirectly) attached to body " << body);
+}
+
+ForceSensor & Robot::findBodyForceSensor(const std::string & body)
+{
+  return const_cast<ForceSensor &>(static_cast<const Robot *>(this)->bodyForceSensor(body));
+}
+
+const ForceSensor & Robot::findSurfaceForceSensor(const std::string & surface) const
+{
+  const auto & bodyName = this->surface(surface).bodyName();
+  return findBodyForceSensor(bodyName);
+}
+
+ForceSensor & Robot::findSurfaceForceSensor(const std::string & surface)
+{
+  return const_cast<ForceSensor &>(static_cast<const Robot *>(this)->findSurfaceForceSensor(surface));
 }
 
 bool Robot::hasSurface(const std::string & surface) const
@@ -1077,6 +1177,103 @@ void mc_rbdyn::Robot::zmpTarget(const Eigen::Vector3d & zmp)
 const Eigen::Vector3d & mc_rbdyn::Robot::zmpTarget() const
 {
   return zmp_;
+}
+
+mc_control::Gripper & Robot::gripper(const std::string & gripper)
+{
+  if(!grippers_.count(gripper))
+  {
+    LOG_ERROR_AND_THROW(std::runtime_error, "No gripper named " << gripper << " in robot " << name());
+  }
+  return *grippers_.at(gripper);
+}
+
+unsigned int robotIndexFromConfig(const mc_rtc::Configuration & config,
+                                  const mc_rbdyn::Robots & robots,
+                                  const std::string & prefix,
+                                  bool required,
+                                  const std::string & robotIndexKey,
+                                  const std::string & robotNameKey,
+                                  const std::string & defaultRobotName)
+{
+  const auto & robot = robotFromConfig(config, robots, prefix, required, robotIndexKey, robotNameKey, defaultRobotName);
+  return robot.robotIndex();
+}
+
+std::string robotNameFromConfig(const mc_rtc::Configuration & config,
+                                const mc_rbdyn::Robots & robots,
+                                const std::string & prefix,
+                                bool required,
+                                const std::string & robotIndexKey,
+                                const std::string & robotNameKey,
+                                const std::string & defaultRobotName)
+{
+  const auto & robot = robotFromConfig(config, robots, prefix, required, robotIndexKey, robotNameKey, defaultRobotName);
+  return robot.name();
+}
+
+const mc_rbdyn::Robot & robotFromConfig(const mc_rtc::Configuration & config,
+                                        const mc_rbdyn::Robots & robots,
+                                        const std::string & prefix,
+                                        bool required,
+                                        const std::string & robotIndexKey,
+                                        const std::string & robotNameKey,
+                                        const std::string & defaultRobotName)
+{
+  auto p = std::string{""};
+  if(prefix.size())
+  {
+    p = "[" + prefix + "] ";
+  }
+  if(config.has(robotNameKey))
+  {
+    const std::string & robotName = config(robotNameKey);
+    if(robots.hasRobot(robotName))
+    {
+      return robots.robot(robotName);
+    }
+    else
+    {
+      LOG_ERROR_AND_THROW(std::runtime_error, p + "No robot named " << robotName << " in this controller");
+    }
+  }
+  else if(config.has(robotIndexKey))
+  {
+    LOG_WARNING("[MC_RTC_DEPRECATED]" + p
+                + " \"robotIndex\" will be deprecated in future versions, use \"robot: <robot "
+                  "name>\" instead");
+    const unsigned int robotIndex = config(robotIndexKey);
+    if(robotIndex < robots.size())
+    {
+      return robots.robot(robotIndex);
+    }
+    else
+    {
+      LOG_ERROR_AND_THROW(std::runtime_error, p + "No robot with index " << robotIndex << " in this controller ("
+                                                                         << robots.size() << " robots loaded)");
+    }
+  }
+  else
+  {
+    if(!required)
+    {
+      return defaultRobotName.size() ? robots.robot(defaultRobotName) : robots.robot();
+    }
+    else
+    {
+      LOG_ERROR_AND_THROW(std::runtime_error, p + "\"robotName\" is required.");
+    }
+  }
+}
+
+void Robot::addDevice(DevicePtr device)
+{
+  if(devicesIndex_.count(device->name()))
+  {
+    LOG_ERROR_AND_THROW(std::runtime_error, "You cannot have multiple generic sensor with the same name in a robot");
+  }
+  devices_.push_back(std::move(device));
+  devicesIndex_[device->name()] = devices_.size() - 1;
 }
 
 } // namespace mc_rbdyn

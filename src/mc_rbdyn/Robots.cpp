@@ -8,6 +8,7 @@
 #include <mc_rtc/logging.h>
 
 #include <RBDyn/FK.h>
+#include <RBDyn/parsers/urdf.h>
 
 #include <boost/filesystem.hpp>
 namespace bfs = boost::filesystem;
@@ -116,6 +117,19 @@ unsigned int Robots::envIndex() const
   return envIndex_;
 }
 
+unsigned int Robots::robotIndex(const std::string & name) const
+{
+  auto it = getRobot(name);
+  if(it != robots_.end())
+  {
+    return it->robots_idx_;
+  }
+  else
+  {
+    LOG_ERROR_AND_THROW(std::runtime_error, "No robot named " << name);
+  }
+}
+
 Robot & Robots::robot()
 {
   return robots_[robotIndex_];
@@ -132,6 +146,17 @@ Robot & Robots::env()
 const Robot & Robots::env() const
 {
   return robots_[envIndex_];
+}
+
+std::vector<mc_rbdyn::Robot>::const_iterator Robots::getRobot(const std::string & name) const
+{
+  return std::find_if(robots_.begin(), robots_.end(), [&name](const Robot & r) { return r.name() == name; });
+}
+
+bool Robots::hasRobot(const std::string & name) const
+{
+  auto it = getRobot(name);
+  return it != robots_.end();
 }
 
 Robot & Robots::robot(size_t idx)
@@ -155,7 +180,7 @@ Robot & Robots::robot(const std::string & name)
 
 const Robot & Robots::robot(const std::string & name) const
 {
-  auto it = std::find_if(robots_.begin(), robots_.end(), [&name](const Robot & r) { return r.name() == name; });
+  auto it = getRobot(name);
   if(it != robots_.end())
   {
     return *it;
@@ -185,7 +210,7 @@ void Robots::createRobotWithBase(Robot & robot, const Base & base, const Eigen::
 
 void Robots::removeRobot(const std::string & name)
 {
-  auto it = std::find_if(robots_.begin(), robots_.end(), [&name](const Robot & r) { return r.name() == name; });
+  auto it = getRobot(name);
   if(it != robots_.end())
   {
     removeRobot(it->robots_idx_);
@@ -336,8 +361,7 @@ Robot & Robots::loadFromUrdf(const std::string & name,
                              sva::PTransformd * base,
                              const std::string & baseName)
 {
-  mc_rbdyn_urdf::URDFParserResult res =
-      mc_rbdyn_urdf::rbdyn_from_urdf(urdf, fixed, filteredLinks, true, "", withVirtualLinks);
+  auto res = rbd::parsers::from_urdf(urdf, fixed, filteredLinks, true, "", withVirtualLinks);
 
   mc_rbdyn::RobotModule module(name, res);
 

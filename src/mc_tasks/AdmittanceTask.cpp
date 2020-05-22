@@ -30,6 +30,12 @@ AdmittanceTask::AdmittanceTask(const std::string & surfaceName,
 : SurfaceTransformTask(surfaceName, robots, robotIndex, stiffness, weight), robots_(robots), rIndex_(robotIndex),
   surface_(robots.robot(robotIndex).surface(surfaceName))
 {
+  const auto & robot = robots.robot(robotIndex);
+  if(!robot.bodyHasForceSensor(robot.surface(surfaceName).bodyName()))
+  {
+    LOG_ERROR_AND_THROW(std::runtime_error, "[mc_tasks::AdmittanceTask] Surface "
+                                                << surfaceName << " does not have a force sensor attached")
+  }
   name_ = "admittance_" + robots_.robot(rIndex_).name() + "_" + surfaceName;
   reset();
 }
@@ -194,8 +200,9 @@ namespace
 static auto registered = mc_tasks::MetaTaskLoader::register_load_function(
     "admittance",
     [](mc_solver::QPSolver & solver, const mc_rtc::Configuration & config) {
-      auto t =
-          std::make_shared<mc_tasks::force::AdmittanceTask>(config("surface"), solver.robots(), config("robotIndex"));
+      auto t = std::make_shared<mc_tasks::force::AdmittanceTask>(
+          config("surface"), solver.robots(), robotIndexFromConfig(config, solver.robots(), "admittance"));
+
       t->load(solver, config);
       return t;
     });

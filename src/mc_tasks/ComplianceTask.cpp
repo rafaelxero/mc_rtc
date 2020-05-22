@@ -40,6 +40,11 @@ ComplianceTask::ComplianceTask(const mc_rbdyn::Robots & robots,
   sensor_(robots_.robot(rIndex_).bodyForceSensor(body)), timestep_(timestep), forceThresh_(forceThresh),
   torqueThresh_(torqueThresh), forceGain_(forceGain), torqueGain_(torqueGain), dof_(dof)
 {
+  const auto & robot = robots.robot(robotIndex);
+  if(!robot.bodyHasForceSensor(body))
+  {
+    LOG_ERROR_AND_THROW(std::runtime_error, "[mc_tasks::ComplianceTask] No force sensor attached to " << body)
+  }
   efTask_ = std::make_shared<EndEffectorTask>(body, robots, robotIndex, stiffness, weight);
   clampTrans_ = clamper(0.01);
   clampRot_ = clamper(0.1);
@@ -140,6 +145,7 @@ void ComplianceTask::selectActiveJoints(mc_solver::QPSolver & solver,
                                         const std::vector<std::string> & activeJointsName,
                                         const std::map<std::string, std::vector<std::array<int, 2>>> & activeDofs)
 {
+  ensureHasJoints(robots_.robot(rIndex_), activeJointsName, "[" + name() + "::selectActiveJoints]");
   efTask_->selectActiveJoints(solver, activeJointsName, activeDofs);
 }
 
@@ -147,6 +153,7 @@ void ComplianceTask::selectUnactiveJoints(mc_solver::QPSolver & solver,
                                           const std::vector<std::string> & unactiveJointsName,
                                           const std::map<std::string, std::vector<std::array<int, 2>>> & unactiveDofs)
 {
+  ensureHasJoints(robots_.robot(rIndex_), unactiveJointsName, "[" + name() + "::selectUnActiveJoints]");
   efTask_->selectUnactiveJoints(solver, unactiveJointsName, unactiveDofs);
 }
 
@@ -167,8 +174,9 @@ static auto registered = mc_tasks::MetaTaskLoader::register_load_function(
     [](mc_solver::QPSolver & solver, const mc_rtc::Configuration & config) {
       Eigen::Matrix6d dof = Eigen::Matrix6d::Identity();
       config("dof", dof);
-      auto t = std::shared_ptr<mc_tasks::force::ComplianceTask>(
-          new mc_tasks::force::ComplianceTask(solver.robots(), config("robotIndex"), config("body"), solver.dt(), dof));
+      auto t = std::shared_ptr<mc_tasks::force::ComplianceTask>(new mc_tasks::force::ComplianceTask(
+          solver.robots(), robotIndexFromConfig(config, solver.robots(), "compliance"), config("body"), solver.dt(),
+          dof));
       if(config.has("stiffness"))
       {
         t->stiffness(config("stiffness"));

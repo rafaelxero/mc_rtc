@@ -5,10 +5,12 @@
 #include <mc_control/MCController.h>
 
 #include <mc_rbdyn/RobotLoader.h>
-#include <mc_rbdyn/constants.h>
+#include <mc_rbdyn/RobotModule.h>
+#include <mc_rtc/constants.h>
 
 #include <mc_rtc/config.h>
 #include <mc_rtc/gui/Schema.h>
+#include <mc_rtc/io_utils.h>
 #include <mc_rtc/logging.h>
 
 #include <mc_tasks/MetaTaskLoader.h>
@@ -70,46 +72,6 @@ MCController::MCController(const std::vector<std::shared_ptr<mc_rbdyn::RobotModu
                        }
                      }));
   }
-
-  /* Initialize grippers */
-  const auto & mimics = robots_modules[0]->gripperMimics();
-  if(mimics.size())
-  {
-    for(const auto & gripper : robots_modules[0]->grippers())
-    {
-      if(!mimics.count(gripper.name))
-      {
-        LOG_ERROR_AND_THROW(std::runtime_error, "Mimics information not specified for gripper: " << gripper.name)
-      }
-      grippers[gripper.name] = std::make_shared<mc_control::Gripper>(robot(), gripper.joints, mimics.at(gripper.name),
-                                                                     std::vector<double>(gripper.joints.size(), 0.0),
-                                                                     timeStep, gripper.reverse_limits);
-    }
-  }
-  else
-  {
-    std::string urdfPath = robots_modules[0]->urdf_path;
-    std::ifstream ifs(urdfPath);
-    if(ifs.is_open())
-    {
-      std::stringstream urdf;
-      urdf << ifs.rdbuf();
-      auto urdfRobot = mc_rbdyn::loadRobotFromUrdf("temp_robot", urdf.str());
-      for(const auto & gripper : robots_modules[0]->grippers())
-      {
-        grippers[gripper.name] = std::make_shared<mc_control::Gripper>(urdfRobot->robot(), gripper.joints, urdf.str(),
-                                                                       std::vector<double>(gripper.joints.size(), 0.0),
-                                                                       timeStep, gripper.reverse_limits);
-      }
-    }
-    else
-    {
-      LOG_ERROR("Could not open urdf file " << urdfPath << " for robot " << robots_modules[0]->name
-                                            << ", cannot initialize grippers")
-      LOG_ERROR_AND_THROW(std::runtime_error, "Failed to initialize grippers")
-    }
-  }
-
   /* Initialize constraints and tasks */
   std::array<double, 3> damper = {0.1, 0.01, 0.5};
   contactConstraint = mc_solver::ContactConstraint(timeStep, mc_solver::ContactConstraint::Velocity);
@@ -129,7 +91,7 @@ mc_rbdyn::Robot & MCController::loadRobot(mc_rbdyn::RobotModulePtr rm, const std
   assert(rm);
   auto & r = robots().load(*rm);
   r.name(name);
-  r.mbc().gravity = mc_rbdyn::constants::gravity;
+  r.mbc().gravity = mc_rtc::constants::gravity;
   r.forwardKinematics();
   r.forwardVelocity();
   if(gui_)
@@ -157,6 +119,12 @@ mc_rbdyn::Robot & MCController::loadRobot(mc_rbdyn::RobotModulePtr rm, const std
   }
   solver().updateNrVars();
   return r;
+}
+
+void MCController::removeRobot(const std::string & name)
+{
+  robots().removeRobot(name);
+  solver().updateNrVars();
 }
 
 bool MCController::resetObservers()
@@ -252,6 +220,16 @@ const mc_solver::QPResultMsg & MCController::send(const double & t)
 
 void MCController::reset(const ControllerResetData & reset_data)
 {
+  std::vector<std::string> supported;
+  supported_robots(supported);
+  if(supported.size() && std::find(supported.cbegin(), supported.cend(), robot().name()) == supported.end())
+  {
+    LOG_ERROR_AND_THROW(std::runtime_error, "[MCController] The main robot "
+                                                << robot().name()
+                                                << " is not supported by this controller. Supported robots are: ["
+                                                << mc_rtc::io::to_string(supported) << "].");
+  }
+
   robot().mbc().zero(robot().mb());
   robot().mbc().q = reset_data.q;
   postureTask->posture(reset_data.q);
@@ -306,9 +284,9 @@ mc_rtc::Logger & MCController::logger()
   return *logger_;
 }
 
-std::vector<std::string> MCController::supported_robots() const
+void MCController::supported_robots(std::vector<std::string> & out) const
 {
-  return {};
+  out = {};
 }
 
 void MCController::realRobots(std::shared_ptr<mc_rbdyn::Robots> realRobots)
@@ -358,5 +336,10 @@ void MCController::anchorFrameReal(const sva::PTransformd & anchor)
 }
 
 void MCController::stop() {}
+
+Gripper & MCController::gripper(const std::string & robot, const std::string & gripper)
+{
+  return robots().robot(robot).gripper(gripper);
+}
 
 } // namespace mc_control

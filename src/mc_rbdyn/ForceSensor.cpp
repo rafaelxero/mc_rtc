@@ -7,7 +7,9 @@
 #include <mc_rbdyn/rpy_utils.h>
 #include <mc_rtc/logging.h>
 
+#include <boost/filesystem.hpp>
 #include <fstream>
+namespace bfs = boost::filesystem;
 
 namespace mc_rbdyn
 {
@@ -28,16 +30,15 @@ public:
    * should contain 13 parameters in that order: mass (1),
    * rpy for X_f_ds (3), position for X_p_vb (3), wrench
    * offset (6).
-   * @return Default calibration if the file does not exist,
-   * throws if the file is ill-formed. */
-  ForceSensorCalibData(const std::string & filename, const Eigen::Vector3d & gravity) : ForceSensorCalibData()
-  {
-    loadData(filename, gravity);
-  }
-
+   *
+   * If the file does not exist, default calibration parameters that do nothing
+   * will be used. If the file exists but its parameters are invalid, an exception will be thrown.
+   *
+   * @throws std::invalid_argument if the file is ill-formed.
+   **/
   void loadData(const std::string & filename, const Eigen::Vector3d & gravity)
   {
-    const int nr_params = 13;
+    constexpr int nr_params = 13;
     std::ifstream strm(filename);
     if(!strm.is_open())
     {
@@ -53,13 +54,13 @@ public:
       strm >> temp;
       if(!strm.good())
       {
-        LOG_ERROR("Invalid calibration file")
-        return;
+        LOG_ERROR_AND_THROW(std::invalid_argument, "[ForceSensorCalibData] Invalid calibration file "
+                                                       << filename << ". " << dataRequirements())
       }
       if(strm.eof())
       {
-        LOG_ERROR("File too short, should have " << nr_params << " parameters")
-        return;
+        LOG_ERROR_AND_THROW(std::invalid_argument, "[ForceSensorCalibData] Calibration file "
+                                                       << filename << " too short. " << dataRequirements())
       }
       X(i) = temp;
     }
@@ -69,6 +70,15 @@ public:
     X_f_ds_ = mc_rbdyn::rpyToPT(X.segment<3>(1));
     X_p_vb_ = sva::PTransformd(Eigen::Matrix3d::Identity(), X.segment<3>(4));
     offset_ = sva::ForceVecd(X.segment<6>(7));
+  }
+
+  static std::string dataRequirements()
+  {
+    return R"(The file should contain 13 parameters in that order:
+    - mass (1)
+    - rpy of local rotation between the model force sensor and real one (3)
+    - translation from the parent body to the virtual link CoM (3)
+    - wrench offset (6).)";
   }
 
   /** Return the gravity wrench applied on the force sensor in the sensor
@@ -121,46 +131,25 @@ private:
 ForceSensor::ForceSensor() : ForceSensor("", "", sva::PTransformd::Identity()) {}
 
 ForceSensor::ForceSensor(const std::string & name, const std::string & parentBodyName, const sva::PTransformd & X_p_f)
-: name_(name), parentBody_(parentBodyName), X_p_f_(X_p_f), wrench_(Eigen::Vector6d::Zero()),
+: Device(name, parentBodyName, X_p_f), wrench_(Eigen::Vector6d::Zero()),
   calibration_(std::make_shared<detail::ForceSensorCalibData>())
 {
+  type_ = "ForceSensor";
 }
 
-ForceSensor::~ForceSensor() {}
-
-const std::string & ForceSensor::name() const
-{
-  return name_;
-}
-
-const std::string & ForceSensor::parentBody() const
-{
-  return parentBody_;
-}
-
-const sva::PTransformd & ForceSensor::X_p_f() const
-{
-  return X_p_f_;
-}
-
-const sva::PTransformd ForceSensor::X_0_f(const mc_rbdyn::Robot & robot) const
-{
-  return X_p_f() * robot.bodyPosW(parentBody_);
-}
-
-const sva::ForceVecd & ForceSensor::wrench() const
-{
-  return wrench_;
-}
-
-void ForceSensor::wrench(const sva::ForceVecd & wrench)
-{
-  wrench_ = wrench;
-}
+ForceSensor::~ForceSensor() noexcept = default;
 
 void ForceSensor::loadCalibrator(const std::string & calib_file, const Eigen::Vector3d & gravity)
 {
-  calibration_->loadData(calib_file, gravity);
+  if(!bfs::exists(calib_file))
+  {
+    LOG_WARNING("No calibration file " << calib_file << " found for force sensor " << name());
+    return;
+  }
+  else
+  {
+    calibration_->loadData(calib_file, gravity);
+  }
 }
 
 const sva::PTransformd & ForceSensor::X_fsmodel_fsactual() const
@@ -170,7 +159,7 @@ const sva::PTransformd & ForceSensor::X_fsmodel_fsactual() const
 
 const sva::PTransformd ForceSensor::X_fsactual_parent() const
 {
-  return (X_fsmodel_fsactual() * X_p_f_).inv();
+  return (X_fsmodel_fsactual() * X_p_s_).inv();
 }
 
 double ForceSensor::mass() const
@@ -183,17 +172,17 @@ const sva::ForceVecd & ForceSensor::offset() const
   return calibration_->offset();
 }
 
-const sva::ForceVecd ForceSensor::wrenchWithoutGravity(const mc_rbdyn::Robot & robot) const
+sva::ForceVecd ForceSensor::wrenchWithoutGravity(const mc_rbdyn::Robot & robot) const
 {
-  sva::PTransformd X_0_p = robot.mbc().bodyPosW[robot.bodyIndexByName(parentBody_)];
-  auto w = wrench_ - calibration_->wfToSensor(X_0_p, X_p_f_);
+  sva::PTransformd X_0_p = robot.mbc().bodyPosW[robot.bodyIndexByName(parent_)];
+  auto w = wrench_ - calibration_->wfToSensor(X_0_p, X_p_s_);
   return w;
 }
 
 sva::ForceVecd ForceSensor::worldWrench(const mc_rbdyn::Robot & robot) const
 {
   sva::ForceVecd w_fsactual = wrench();
-  sva::PTransformd X_parent_0 = robot.mbc().bodyPosW[robot.bodyIndexByName(parentBody_)].inv();
+  sva::PTransformd X_parent_0 = robot.mbc().bodyPosW[robot.bodyIndexByName(parent_)].inv();
   sva::PTransformd X_fsactual_0 = X_parent_0 * X_fsactual_parent();
   return X_fsactual_0.dualMul(w_fsactual);
 }
@@ -201,9 +190,14 @@ sva::ForceVecd ForceSensor::worldWrench(const mc_rbdyn::Robot & robot) const
 sva::ForceVecd ForceSensor::worldWrenchWithoutGravity(const mc_rbdyn::Robot & robot) const
 {
   sva::ForceVecd w_fsactual = wrenchWithoutGravity(robot);
-  sva::PTransformd X_parent_0 = robot.mbc().bodyPosW[robot.bodyIndexByName(parentBody_)].inv();
+  sva::PTransformd X_parent_0 = robot.mbc().bodyPosW[robot.bodyIndexByName(parent_)].inv();
   sva::PTransformd X_fsactual_0 = X_parent_0 * X_fsactual_parent();
   return X_fsactual_0.dualMul(w_fsactual);
+}
+
+DevicePtr ForceSensor::clone() const
+{
+  return DevicePtr(new ForceSensor(*this));
 }
 
 } // namespace mc_rbdyn

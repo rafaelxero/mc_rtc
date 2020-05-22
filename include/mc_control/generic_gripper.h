@@ -5,12 +5,16 @@
 #pragma once
 
 #include <mc_control/api.h>
-#include <mc_rbdyn/Mimic.h>
-#include <mc_rbdyn/Robots.h>
+#include <mc_rbdyn/RobotModule.h>
 
 #include <map>
 #include <string>
 #include <vector>
+
+namespace mc_rbdyn
+{
+struct Robot;
+} // namespace mc_rbdyn
 
 namespace mc_control
 {
@@ -27,24 +31,22 @@ namespace mc_control
  * In real operations the actuated joints are also monitored to avoid
  * potential servo errors.
  */
-struct MC_CONTROL_DLLAPI Gripper
+struct MC_RBDYN_DLLAPI Gripper
 {
-public:
+
   /*! \brief Constructor
    *
    * \param robot The full robot including uncontrolled joints
    * \param jointNames Name of the active joints involved in the gripper
    * \param robot_urdf URDF of the robot
-   * \param currentQ Current values of the active joints involved in the gripper
-   * \param timeStep Controller timestep
    * \param reverseLimits If set to true, then the gripper is considered "open" when the joints' values are minimal
+   * \param safety Default gripper safety parameters
    */
   Gripper(const mc_rbdyn::Robot & robot,
           const std::vector<std::string> & jointNames,
           const std::string & robot_urdf,
-          const std::vector<double> & currentQ,
-          double timeStep,
-          bool reverseLimits = false);
+          bool reverseLimits,
+          const mc_rbdyn::RobotModule::Gripper::Safety & safety);
 
   /*! \brief Constructor
    *
@@ -53,21 +55,50 @@ public:
    * \param robot Robot, must have the active joints of the gripper to work properly
    * \param jointNames Name of the active joints involved in the gripper
    * \param mimics Mimic joints for the gripper
-   * \param currentQ Current values of the active joints
-   * \param timeStep Controller timestep
    * \param reverseLimits If true, the gripper is considered "open" when the joints values are minimal
+   * \param safety Default gripper safety parameters
    */
   Gripper(const mc_rbdyn::Robot & robot,
           const std::vector<std::string> & jointNames,
           const std::vector<mc_rbdyn::Mimic> & mimics,
-          const std::vector<double> & currentQ,
-          double timeStep,
-          bool reverseLimits = false);
+          bool reverseLimits,
+          const mc_rbdyn::RobotModule::Gripper::Safety & safety);
 
-  /*! \brief Set the current configuration of the active joints involved in the gripper
-   * \param curentQ Current values of the active joints involved in the gripper
+  /** \brief Resets the gripper parameters to their default value (percentVMax, actualCommandDiffTrigger) */
+  void resetDefaults();
+
+  /** \brief Saves the current gripper configuration parameters contained in
+   * Config **/
+  void saveConfig();
+
+  /** \brief Restores the gripper configuration parameters from their saved
+   * value
+   *
+   * \see saveConfig()
+   **/
+  void restoreConfig();
+
+  /*! \brief Reset the gripper state to the current actual state of the gripper
+   *
+   * \param currentQ Current encoder values for the robot
    */
-  void setCurrentQ(const std::vector<double> & currentQ);
+  void reset(const std::vector<double> & currentQ);
+
+  /*! \brief Reset from another gripper
+   *
+   * \param gripper Gripper used to reset this one
+   */
+  void reset(const Gripper & gripper);
+
+  /*! \brief Run one iteration of control
+   *
+   * \param robot Robot for which this gripper control is running
+   *
+   * \param qOut Output of the gripper state
+   *
+   * The gripper control updates both the robot's configuration and the output
+   */
+  void run(double timeStep, mc_rbdyn::Robot & robot, std::map<std::string, std::vector<double>> & qOut);
 
   /*! \brief Set the target configuration of the active joints involved in the gripper
    * \param targetQ Desired values of the active joints involved in the gripper
@@ -84,10 +115,25 @@ public:
    */
   std::vector<double> curPosition() const;
 
+  /*! \brief Returns all joints involved in the gripper */
+  inline const std::vector<std::string> & joints() const
+  {
+    return names;
+  }
+
+  /*! \brief Returns all active joints involved in the gripper */
+  inline const std::vector<std::string> & activeJoints() const
+  {
+    return active_joints;
+  }
+
   /*! \brief Return all gripper joints configuration
    * \return Current values of all the gripper's joints, including passive joints
    */
-  const std::vector<double> & q();
+  inline const std::vector<double> & q() const
+  {
+    return _q;
+  }
 
   /*! \brief Get the current opening percentage
    *
@@ -97,31 +143,85 @@ public:
    */
   double opening() const;
 
-  /*! \brief Set the encoder-based values of the gripper's active joints
-   * \param q Encoder value of the gripper's active joints
-   */
-  void setActualQ(const std::vector<double> & q);
+  /** Set gripper speed as a percentage of maximum velocity */
+  void percentVMAX(double percent);
+  /** Get gripper speed (percentage of max velocity) */
+  double percentVMAX() const;
 
-public:
-  /*! Gripper name */
-  std::string name;
+  /*! Set safety trigger threshold (difference between the command and the reality)
+   *
+   * This safety is meant to prevent over-torques on position controlled
+   * grippers with no torque readings by checking how far the encoder output is
+   * from the desired command. If it is over the limit, it can only stay there
+   * for overCommandLimitIterN iterations before being released
+   **/
+  void actualCommandDiffTrigger(double d)
+  {
+    config_.actualCommandDiffTrigger = d;
+  }
+  /*! Difference between the command and the reality that triggers the safety */
+  double actualCommandDiffTrigger() const
+  {
+    return config_.actualCommandDiffTrigger;
+  }
+
+  /*! Number of iterations where actualCommandDiffTrigger() threshold may be
+   * exceeded before the security is triggered */
+  void overCommandLimitIterN(unsigned int N)
+  {
+    config_.overCommandLimitIterN = std::max(N, 1u);
+  }
+  /*! Number of iterations where actualCommandDiffTrigger() threshold may be
+   * exceeded before the security is triggered */
+  unsigned int overCommandLimitIterN() const
+  {
+    return config_.overCommandLimitIterN;
+  }
+
+  /** Offset by which the gripper is released if overCommandDiffTrigger is
+   * trigger for more than overCommandLimitIterN
+   *
+   * @param offset offset angle in [rad]
+   **/
+  void releaseSafetyOffset(double offset)
+  {
+    config_.releaseSafetyOffset = offset;
+  }
+  /** Offset by which the gripper is release if overCommandDiffTrigger is
+   * trigger for more than overCommandLimitIterN */
+  double releaseSafetyOffset() const
+  {
+    return config_.releaseSafetyOffset;
+  }
+
+  /*! \brief Check if the gripper motion stopped moving.
+   *
+   * The gripper will stop if
+   * - the desired motion is finished
+   * - the gripper encountered an obstacle and gripper safety was triggered.
+   *   This is defined by an encoder error threshold (actualCommandDiffTrigger) and a maximum number of iterations
+   *   where the gripper is allowed to be at this threshold (overCommandLimitIterN)
+   *
+   * \return True if gripper is not moving, False if it is moving
+   */
+  bool complete() const;
+
+protected:
   /*! Name of joints involved in the gripper */
   std::vector<std::string> names;
   /*! Name of active joints involved in the gripper */
   std::vector<std::string> active_joints;
+  /*! Active joints indexes in the reference joint order */
+  std::vector<size_t> active_joints_idx;
+  /*! All joint indexes in mbc, -1 if absent */
+  std::vector<int> joints_mbc_idx;
 
-  /*! True if the gripper is reversed */
-  bool reversed;
   /*! Lower limits of active joints in the gripper (closed-gripper values) */
   std::vector<double> closeP;
   /*! Upper limits of active joints in the gripper (open-gripper values) */
   std::vector<double> openP;
   /*! Maximum velocity of active joints in the gripper */
   std::vector<double> vmax;
-  /*! Controller timestep */
-  double timeStep;
-  /*! Current opening percentage */
-  std::vector<double> percentOpen;
 
   /*! Mimic multiplier, first element is the joint to mimic, second is the multiplier */
   std::vector<std::pair<size_t, double>> mult;
@@ -135,16 +235,29 @@ public:
   /*! Current gripper target: NULL if target has been reached or safety was triggered */
   std::vector<double> * targetQ;
 
+  /*! Joints' values from the encoders */
+  std::vector<double> actualQ;
+
+protected:
+  using Config = mc_rbdyn::RobotModule::Gripper::Safety;
+  /** Current configuration of the gripper parameters */
+  Config config_;
+  /** Saved configuration of the parameters saved by saveConfig() */
+  Config savedConfig_;
+  /** Default configuration provided at construction */
+  Config defaultConfig_;
+
+  /*! Current opening percentage */
+  std::vector<double> percentOpen;
   /*! True if the gripper has been too far from the command for over overCommandLimitIterN iterations */
   std::vector<bool> overCommandLimit;
   /*! Store the number of iterations where the gripper command was over the limit */
   std::vector<unsigned int> overCommandLimitIter;
-  /*! Number of iterations before the security is triggered */
-  unsigned int overCommandLimitIterN;
-  /*! Joints' values from the encoders */
-  std::vector<double> actualQ;
-  /*! Difference between the command and the reality that triggers the safety */
-  double actualCommandDiffTrigger;
+  /*! True if the gripper is reversed */
+  bool reversed = false;
 };
+
+using GripperPtr = std::unique_ptr<Gripper>;
+using GripperRef = std::reference_wrapper<Gripper>;
 
 } // namespace mc_control

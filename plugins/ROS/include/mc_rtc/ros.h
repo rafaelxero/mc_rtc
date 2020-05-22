@@ -28,8 +28,6 @@ struct Robot;
 namespace mc_control
 {
 struct MCGlobalController;
-
-struct Gripper;
 } // namespace mc_control
 
 namespace mc_rtc
@@ -63,13 +61,13 @@ struct MC_RTC_ROS_DLLAPI ROSBridge
    *
    * \param robot Which robot to publish
    *
-   * \param gripperJ List of gripper joints managed by mc_rtc
-   *
-   * \param gripperQ Actual gripper values for the gripper joints managed
-   * by mc_rtc
+   * \param use_real Use the real URDF rather than the default one
    *
    */
-  static void init_robot_publisher(const std::string & publisher, double dt, const mc_rbdyn::Robot & robot);
+  static void init_robot_publisher(const std::string & publisher,
+                                   double dt,
+                                   const mc_rbdyn::Robot & robot,
+                                   bool use_real = false);
 
   /** Update the robot publisher state
    *
@@ -79,13 +77,8 @@ struct MC_RTC_ROS_DLLAPI ROSBridge
    *
    * \param robot Which robot to publish
    *
-   * \param grippers List of grippers managed by mc_rtc for this robot
-   *
    */
-  static void update_robot_publisher(const std::string & publisher,
-                                     double dt,
-                                     const mc_rbdyn::Robot & robot,
-                                     const std::map<std::string, std::shared_ptr<mc_control::Gripper>> & grippers = {});
+  static void update_robot_publisher(const std::string & publisher, double dt, const mc_rbdyn::Robot & robot);
 
   /*! \brief Stop ROS */
   static void shutdown();
@@ -122,12 +115,10 @@ public:
   ~RobotPublisher();
 
   /*! \brief Initialize the publisher */
-  void init(const mc_rbdyn::Robot & robot);
+  void init(const mc_rbdyn::Robot & robot, bool use_real = false);
 
   /*! \brief Update the publisher */
-  void update(double dt,
-              const mc_rbdyn::Robot & robot,
-              const std::map<std::string, std::shared_ptr<mc_control::Gripper>> & grippers);
+  void update(double dt, const mc_rbdyn::Robot & robot);
 
 private:
   std::unique_ptr<RobotPublisherImpl> impl;

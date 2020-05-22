@@ -3,8 +3,8 @@
   "type": "object",
   "properties":
   {
-    "type": { "enum": ["boundedSpeed"], "type": "string" },
-    "robotIndex": { "type": "integer", "minimum": 0 },
+    "type": { "enum": ["boundedSpeed"] },
+    "robot": { "$ref": "/../../common/ConstraintSet_robot.json" },
     "constraints":
     {
       "type": "array",
@@ -25,5 +25,5 @@
       }
     }
   },
-  "required": ["type", "robotIndex"]
+  "required": ["type"]
 }

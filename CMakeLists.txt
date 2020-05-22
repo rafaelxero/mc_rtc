@@ -12,7 +12,7 @@ endif()
 
 set(PROJECT_NAME mc_rtc)
 set(PROJECT_DESCRIPTION mc_rtc)
-set(PROJECT_VERSION 1.1.0)
+set(PROJECT_VERSION 1.3.0)
 set(PROJECT_URL https://gite.lirmm.fr/multi-contact/mc_rtc)
 set(PROJECT_DEBUG_POSTFIX "_d")
 set(PROJECT_USE_KEYWORD_LINK_LIBRARIES TRUE)
@@ -54,6 +54,9 @@ option(DISABLE_ROS "Do not build with ROS support (even if ROS was found)" OFF)
 add_project_dependency(Boost REQUIRED COMPONENTS filesystem timer)
 add_project_dependency(Tasks REQUIRED)
 add_project_dependency(mc_rbdyn_urdf REQUIRED)
+if(NOT TARGET RBDyn::Parsers)
+  message(FATAL_ERROR "RBDyn must be built with parsers support")
+endif()
 add_project_dependency(eigen-quadprog REQUIRED)
 
 

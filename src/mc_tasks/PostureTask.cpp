@@ -11,11 +11,6 @@
 #include <mc_rtc/gui/NumberInput.h>
 #include <mc_rtc/gui/NumberSlider.h>
 
-#ifndef M_PI
-#  include <boost/math/constants/constants.hpp>
-#  define M_PI boost::math::constants::pi<double>()
-#endif
-
 namespace mc_tasks
 {
 
@@ -48,6 +43,7 @@ void PostureTask::selectActiveJoints(mc_solver::QPSolver & solver,
                                      const std::vector<std::string> & activeJointsName,
                                      const std::map<std::string, std::vector<std::array<int, 2>>> &)
 {
+  ensureHasJoints(robots_.robot(rIndex_), activeJointsName, "[" + name() + "::selectActiveJoints]");
   std::vector<std::string> unactiveJoints = {};
   for(const auto & j : robots_.robot(rIndex_).mb().joints())
   {
@@ -63,6 +59,7 @@ void PostureTask::selectUnactiveJoints(mc_solver::QPSolver & solver,
                                        const std::vector<std::string> & unactiveJointsName,
                                        const std::map<std::string, std::vector<std::array<int, 2>>> &)
 {
+  ensureHasJoints(robots_.robot(rIndex_), unactiveJointsName, "[" + name() + "::selectUnActiveJoints]");
   std::vector<tasks::qp::JointStiffness> jsv;
   for(const auto & j : unactiveJointsName)
   {
@@ -186,9 +183,20 @@ void PostureTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
                                           [this](const double & s) { this->stiffness(s); }),
                  mc_rtc::gui::NumberInput("weight", [this]() { return this->weight(); },
                                           [this](const double & w) { this->weight(w); }));
+  std::vector<std::string> active_gripper_joints;
+  for(const auto & g : robots_.robot(rIndex_).grippers())
+  {
+    for(const auto & n : g.get().activeJoints())
+    {
+      active_gripper_joints.push_back(n);
+    }
+  }
+  auto isActiveGripperJoint = [&](const std::string & j) {
+    return std::find(active_gripper_joints.begin(), active_gripper_joints.end(), j) != active_gripper_joints.end();
+  };
   for(const auto & j : robots_.robot(rIndex_).mb().joints())
   {
-    if(j.dof() != 1 || j.isMimic())
+    if(j.dof() != 1 || j.isMimic() || isActiveGripperJoint(j.name()))
     {
       continue;
     }
@@ -232,8 +240,8 @@ namespace
 static auto registered = mc_tasks::MetaTaskLoader::register_load_function(
     "posture",
     [](mc_solver::QPSolver & solver, const mc_rtc::Configuration & config) {
-      auto t =
-          std::make_shared<mc_tasks::PostureTask>(solver, config("robotIndex"), config("stiffness"), config("weight"));
+      const auto robotIndex = robotIndexFromConfig(config, solver.robots(), "posture");
+      auto t = std::make_shared<mc_tasks::PostureTask>(solver, robotIndex, config("stiffness"), config("weight"));
       t->load(solver, config);
       if(config.has("posture"))
       {

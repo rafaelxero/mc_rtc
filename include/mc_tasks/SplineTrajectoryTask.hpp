@@ -6,6 +6,7 @@
 
 #include <mc_tasks/SplineTrajectoryTask.h>
 
+#include <mc_rtc/gui/Checkbox.h>
 #include <mc_rtc/gui/Rotation.h>
 #include <mc_rtc/gui/Transform.h>
 
@@ -48,10 +49,45 @@ std::function<bool(const mc_tasks::MetaTask &, std::string &)> SplineTrajectoryT
     {
       return [](const mc_tasks::MetaTask & t, std::string & out) {
         const auto & self = static_cast<const SplineTrajectoryBase &>(t);
-        out += "duration";
-        return self.timeElapsed();
+        if(self.timeElapsed())
+        {
+          out += "duration";
+          return true;
+        }
+        return false;
       };
     }
+  }
+  if(config.has("wrench"))
+  {
+    sva::ForceVecd target_w = config("wrench");
+    Eigen::Vector6d target = target_w.vector();
+    Eigen::Vector6d dof = Eigen::Vector6d::Ones();
+    for(int i = 0; i < 6; ++i)
+    {
+      if(std::isnan(target(i)))
+      {
+        dof(i) = 0.;
+        target(i) = 0.;
+      }
+      else if(target(i) < 0)
+      {
+        dof(i) = -1.;
+      }
+    }
+    return [dof, target](const mc_tasks::MetaTask & t, std::string & out) {
+      const auto & self = static_cast<const SplineTrajectoryTask &>(t);
+      Eigen::Vector6d w = self.robots.robot(self.rIndex).surfaceWrench(self.surfaceName_).vector();
+      for(int i = 0; i < 6; ++i)
+      {
+        if(dof(i) * fabs(w(i)) < target(i))
+        {
+          return false;
+        }
+      }
+      out += "wrench";
+      return true;
+    };
   }
   return TrajectoryBase::buildCompletionCriteria(dt, config);
 }
@@ -63,28 +99,35 @@ void SplineTrajectoryTask<Derived>::update(mc_solver::QPSolver &)
   spline.samplingPoints(samples_);
   spline.update();
 
-  // Interpolate position
-  auto res = spline.splev(currTime_, 2);
-  Eigen::Vector3d & pos = res[0];
-  Eigen::Vector3d & vel = res[1];
-  Eigen::Vector3d & acc = res[2];
+  if(!paused_)
+  {
+    // Interpolate position
+    auto res = spline.splev(currTime_, 2);
+    Eigen::Vector3d & pos = res[0];
+    Eigen::Vector3d & vel = res[1];
+    Eigen::Vector3d & acc = res[2];
 
-  // Interpolate orientation
-  Eigen::Matrix3d ori_target = oriSpline_.eval(currTime_);
-  sva::PTransformd target(ori_target, pos);
+    // Interpolate orientation
+    Eigen::Matrix3d ori_target = oriSpline_.eval(currTime_);
+    sva::PTransformd target(ori_target, pos);
 
-  // Set the trajectory tracking task targets from the trajectory.
-  Eigen::VectorXd refVel(6);
-  Eigen::VectorXd refAcc(6);
-  refVel.head<3>() = Eigen::Vector3d::Zero();
-  refVel.tail<3>() = vel;
-  refAcc.head<3>() = Eigen::Vector3d::Zero();
-  refAcc.tail<3>() = acc;
-  this->refVel(refVel);
-  this->refAccel(refAcc);
-  this->refPose(target);
-
-  currTime_ = std::min(currTime_ + timeStep_, duration_);
+    // Set the trajectory tracking task targets from the trajectory.
+    Eigen::VectorXd refVel(6);
+    Eigen::VectorXd refAcc(6);
+    refVel.head<3>() = Eigen::Vector3d::Zero();
+    refVel.tail<3>() = vel;
+    refAcc.head<3>() = Eigen::Vector3d::Zero();
+    refAcc.tail<3>() = acc;
+    this->refVel(refVel);
+    this->refAccel(refAcc);
+    this->refPose(target);
+    currTime_ = std::min(currTime_ + timeStep_, duration_);
+  }
+  else
+  {
+    this->refVel(Eigen::Vector6d::Zero());
+    this->refAccel(Eigen::Vector6d::Zero());
+  }
 }
 
 template<typename Derived>
@@ -207,6 +250,8 @@ void SplineTrajectoryTask<Derived>::addToGUI(mc_rtc::gui::StateBuilder & gui)
   TrajectoryTask::addToGUI(gui);
 
   auto & spline = static_cast<Derived &>(*this).spline();
+  gui.addElement({"Tasks", name_},
+                 mc_rtc::gui::Checkbox("Paused", [this]() { return paused_; }, [this]() { paused_ = !paused_; }));
   gui.addElement({"Tasks", name_}, mc_rtc::gui::Transform("Surface pose", [this]() {
                    const auto & robot = this->robots.robot(rIndex_);
                    return robot.surface(surfaceName_).X_0_s(robot);

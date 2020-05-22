@@ -14,7 +14,13 @@
 #include <mc_rbdyn/api.h>
 #include <mc_rbdyn/lipm_stabilizer/StabilizerConfiguration.h>
 
+#include <mc/rtc/deprecated.hh>
+
+#include <mc_rtc/constants.h>
+
 #include <mc_rbdyn_urdf/urdf.h>
+
+#include <RBDyn/parsers/common.h>
 
 #include <array>
 #include <map>
@@ -25,7 +31,42 @@
 namespace mc_rbdyn
 {
 
-/* TODO Functions are declared const here but most implementations will likely not respect the constness */
+/** Holds a vector of unique pointers
+ *
+ * This enables copy operation by cloning the devices
+ */
+struct DevicePtrVector : public std::vector<DevicePtr>
+{
+  inline DevicePtrVector() = default;
+
+  MC_RBDYN_DLLAPI DevicePtrVector(const DevicePtrVector & v);
+  MC_RBDYN_DLLAPI DevicePtrVector & operator=(const DevicePtrVector & v);
+
+  inline DevicePtrVector(DevicePtrVector && v) = default;
+  inline DevicePtrVector & operator=(DevicePtrVector && v) = default;
+};
+
+/** Holds a map from body's names to visual representations
+ *
+ * Provide a conversion operator for backward compatibility
+ */
+struct VisualMap : public std::map<std::string, std::vector<rbd::parsers::Visual>>
+{
+  inline VisualMap() = default;
+
+  inline VisualMap(const VisualMap & v) = default;
+  inline VisualMap & operator=(const VisualMap & v) = default;
+
+  inline VisualMap(VisualMap && v) = default;
+  inline VisualMap & operator=(VisualMap && v) = default;
+
+  using std::map<std::string, std::vector<rbd::parsers::Visual>>::operator=;
+
+  MC_RTC_DEPRECATED MC_RBDYN_DLLAPI VisualMap(const std::map<std::string, std::vector<mc_rbdyn_urdf::Visual>> & rhs);
+  MC_RTC_DEPRECATED MC_RBDYN_DLLAPI VisualMap & operator=(
+      const std::map<std::string, std::vector<mc_rbdyn_urdf::Visual>> & rhs);
+};
+
 struct MC_RBDYN_DLLAPI RobotModule
 {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -42,14 +83,92 @@ struct MC_RBDYN_DLLAPI RobotModule
   using bounds_t = std::vector<std::map<std::string, std::vector<double>>>;
 
   /*! Holds necessary information to create a gripper */
-  struct Gripper
+  struct MC_RBDYN_DLLAPI Gripper
   {
+    /*! Holds information regarding gripper control safety parameters */
+    struct MC_RBDYN_DLLAPI Safety
+    {
+      /*! Percentage of max velocity of active joints in the gripper */
+      static constexpr double DEFAULT_PERCENT_VMAX = 0.25;
+      /*! Difference between the command and the reality that triggers the safety */
+      static constexpr double DEFAULT_ACTUAL_COMMAND_DIFF_TRIGGER = mc_rtc::constants::toRad(8.);
+      /** Release offset [gripper units] */
+      static constexpr double DEFAULT_RELEASE_OFFSET = mc_rtc::constants::toRad(2);
+      /*! Number of iterations before the security is triggered */
+      static constexpr unsigned int DEFAULT_OVER_COMMAND_LIMIT_ITER_N = 5;
+
+      // FIXME These constructors are only needed to facilitate initialization and not required in C++14
+      inline Safety() : Safety(DEFAULT_PERCENT_VMAX) {}
+
+      inline Safety(double percentVMax,
+                    double actualCommandDiffTrigger = DEFAULT_ACTUAL_COMMAND_DIFF_TRIGGER,
+                    double releaseSafetyOffset = DEFAULT_RELEASE_OFFSET,
+                    unsigned int overCommandLimitIterN = DEFAULT_OVER_COMMAND_LIMIT_ITER_N)
+      : percentVMax(percentVMax), actualCommandDiffTrigger(actualCommandDiffTrigger),
+        releaseSafetyOffset(releaseSafetyOffset), overCommandLimitIterN(overCommandLimitIterN)
+      {
+      }
+      /*! Percentage of max velocity of active joints in the gripper */
+      double percentVMax;
+      /*! Difference between the command and the reality that triggers the safety */
+      double actualCommandDiffTrigger;
+      /** Offset by which the gripper is released when safety is triggered */
+      double releaseSafetyOffset;
+      /*! Number of iterations before the security is triggered */
+      unsigned int overCommandLimitIterN;
+    };
+
+    /** Constructor with no mimics and no safety information */
+    Gripper(const std::string & name, const std::vector<std::string> & joints, bool reverse_limits);
+
+    /** Constructor with safety parameters but no mimics information */
+    Gripper(const std::string & name,
+            const std::vector<std::string> & joints,
+            bool reverse_limits,
+            const Safety & safety);
+
+    /** Constructor with mimics and safety information */
+    Gripper(const std::string & name,
+            const std::vector<std::string> & joints,
+            bool reverse_limits,
+            const Safety & safety,
+            const std::vector<Mimic> & mimics);
+
     /*! Gripper's name */
     std::string name;
     /*! Active joints in the gripper */
     std::vector<std::string> joints;
     /*! Whether the limits should be reversed, see mc_control::Gripper */
     bool reverse_limits;
+
+    // FIXME In C++17 std::optional is a better semantic
+    /*! Returns the safety parameters if provided, otherwise a nullptr */
+    inline const Safety * safety() const
+    {
+      return hasSafety_ ? &safety_ : nullptr;
+    }
+
+    /*! Returns the mimics parameters if provided, otherwise a nullptr */
+    inline const std::vector<Mimic> * mimics() const
+    {
+      return hasMimics_ ? &mimics_ : nullptr;
+    }
+
+  private:
+    /*! True if safety parameters were provided by the user */
+    bool hasSafety_ = false;
+    /*! Gripper safety parameters */
+    Safety safety_;
+    /*! True if mimic parameters were provided by the user */
+    bool hasMimics_ = false;
+    /*! User-provided mimic information */
+    std::vector<Mimic> mimics_;
+    /*! Internal constructor used by the others */
+    Gripper(const std::string & name,
+            const std::vector<std::string> & joints,
+            bool reverse_limits,
+            const Safety * safety,
+            const std::vector<Mimic> * mimics);
   };
 
   /** Construct from a provided path and name
@@ -85,12 +204,27 @@ struct MC_RBDYN_DLLAPI RobotModule
    * \param urdf_path Path to the robot URDF
    */
   RobotModule(const std::string & path, const std::string & name, const std::string & urdf_path)
-  : path(path), name(name), urdf_path(urdf_path), rsdf_dir(path + "/rsdf/" + name), calib_dir(path + "/calib/" + name)
+  : path(path), name(name), urdf_path(urdf_path), rsdf_dir(path + "/rsdf/" + name), calib_dir(path + "/calib/" + name),
+    _real_urdf(urdf_path)
   {
   }
 
-  /** Construct from the result of an URDF parse */
-  RobotModule(const std::string & name, const mc_rbdyn_urdf::URDFParserResult & res);
+  /** Construct from a parser result */
+  RobotModule(const std::string & name, const rbd::parsers::ParserResult & res);
+
+  /** \deprecated{Use rbd::parsers version instead } */
+  MC_RTC_DEPRECATED RobotModule(const std::string & name, const mc_rbdyn_urdf::URDFParserResult & res);
+
+  /** Initialize the module from a parser resul
+   *
+   * - Initialize mb, mbc and mbg
+   * - Initial limits
+   * - Initialize _collisionTransforms
+   * - Initialize _visual
+   * - Create a default joint order
+   * - Create a default stance
+   */
+  void init(const rbd::parsers::ParserResult & res);
 
   /** Returns the robot's bounds
    *
@@ -236,13 +370,15 @@ struct MC_RBDYN_DLLAPI RobotModule
     return _grippers;
   }
 
-  /** Return a map of mimics joints associated to a gripper.
+  /** Returns default gripper safety parameters if one is not provided by a gripper.
    *
-   * If this is empty, the mimics are deduced from the URDF.
+   * This can also be used to provide identical settings for every grippers in a robot
+   *
+   * \see mc_rbdyn::Gripper::Safety for details on the safety parameters
    */
-  const std::map<std::string, std::vector<Mimic>> & gripperMimics() const
+  inline const Gripper::Safety & gripperSafety() const
   {
-    return _gripperMimics;
+    return _gripperSafety;
   }
 
   /** Return the reference (native controller) joint order of the robot
@@ -277,7 +413,10 @@ struct MC_RBDYN_DLLAPI RobotModule
    * This function set _bounds to:
    * {lower, upper, -velocity, velocity, -torque, torque}
    */
-  void boundsFromURDF(const mc_rbdyn_urdf::Limits & limits);
+  void boundsFromURDF(const rbd::parsers::Limits & limits);
+
+  /** \deprecated{Use rbd::parsers version instead} */
+  MC_RTC_DEPRECATED void boundsFromURDF(const mc_rbdyn_urdf::Limits & limits);
 
   /** Add missing elements to the current module stance
    *
@@ -311,6 +450,24 @@ struct MC_RBDYN_DLLAPI RobotModule
     return _parameters;
   }
 
+  /** Returns the path to a "real" URDF file
+   *
+   * This will be used to show a visually distinct robot for displaying the
+   * control and observed models simulatenously.
+   *
+   * This defaults to urdf_path
+   */
+  std::string real_urdf() const
+  {
+    return _real_urdf;
+  }
+
+  /** Returns a list of non standard sensors supported by this module */
+  inline const DevicePtrVector & devices() const
+  {
+    return _devices;
+  }
+
   /** Path to the robot's description package */
   std::string path;
   /** (default) Name of the robot */
@@ -336,7 +493,7 @@ struct MC_RBDYN_DLLAPI RobotModule
   /** \see stpbvHull() */
   std::map<std::string, std::pair<std::string, std::string>> _stpbvHull;
   /** Holds visual representation of bodies in the robot */
-  std::map<std::string, std::vector<mc_rbdyn_urdf::Visual>> _visual;
+  VisualMap _visual;
   /** \see collisionTransforms() */
   std::map<std::string, sva::PTransformd> _collisionTransforms;
   /** \see flexibility() */
@@ -353,8 +510,8 @@ struct MC_RBDYN_DLLAPI RobotModule
   std::vector<mc_rbdyn::Collision> _commonSelfCollisions;
   /** \see grippers() */
   std::vector<Gripper> _grippers;
-  /** \see gripperMimics() */
-  std::map<std::string, std::vector<Mimic>> _gripperMimics;
+  /** \see gripperSafety() */
+  Gripper::Safety _gripperSafety;
   /** \see ref_joint_order() */
   std::vector<std::string> _ref_joint_order;
   /** \see default_attitude() */
@@ -365,16 +522,23 @@ struct MC_RBDYN_DLLAPI RobotModule
   std::vector<std::string> _parameters;
   /** \see defaultLIPMStabilizerConfiguration() */
   mc_rbdyn::lipm_stabilizer::StabilizerConfiguration _lipmStabilizerConfig;
+  /** \see real_urdf() */
+  std::string _real_urdf;
+  /** \see sensors() */
+  DevicePtrVector _devices;
 };
 
 typedef std::shared_ptr<RobotModule> RobotModulePtr;
 
-/*! \brief Converts limits provided by mc_rbdyn_urdf to bounds
+/*! \brief Converts limits provided by RBDyn parsers to bounds
  *
- * \param limits Limits as provided by mc_rbdyn_urdf
+ * \param limits Limits as provided by RBDyn parsers
  *
  */
-RobotModule::bounds_t MC_RBDYN_DLLAPI urdf_limits_to_bounds(const mc_rbdyn_urdf::Limits & limits);
+RobotModule::bounds_t MC_RBDYN_DLLAPI urdf_limits_to_bounds(const rbd::parsers::Limits & limits);
+
+/** \deprecated{Use rbd::parsers version instead} */
+RobotModule::bounds_t MC_RTC_DEPRECATED MC_RBDYN_DLLAPI urdf_limits_to_bounds(const mc_rbdyn_urdf::Limits & limits);
 
 using RobotModuleVector = std::vector<RobotModule, Eigen::aligned_allocator<RobotModule>>;
 

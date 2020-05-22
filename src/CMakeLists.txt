@@ -90,13 +90,17 @@ set(mc_rtc_utils_HDR
   mc_rtc/internals/yaml.h
   mc_rtc/internals/LogEntry.h
   ../include/mc_rtc/Configuration.h
+  ../include/mc_rtc/ConfigurationHelpers.h
   ../include/mc_rtc/MessagePackBuilder.h
   ../include/mc_rtc/log/FlatLog.h
   ../include/mc_rtc/log/iterate_binary_log.h
   ../include/mc_rtc/log/Logger.h
+  ../include/mc_rtc/io_utils.h
   ../include/mc_rtc/utils.h
   ../include/mc_rtc/utils_api.h
+  ../include/mc_rtc/constants.h
   ../include/mc_rtc/DataStore.h
+  ../include/mc_rtc/type_name.h
 )
 
 add_library(mc_rtc_utils SHARED ${mc_rtc_utils_SRC} ${mc_rtc_utils_HDR})
@@ -127,6 +131,9 @@ mc_rbdyn/ForceSensor.cpp
 mc_rbdyn/RobotModule.cpp
 mc_rbdyn/configuration_io.cpp
 mc_rbdyn/ZMP.cpp
+mc_control/generic_gripper.cpp
+mc_rbdyn/Device.cpp
+mc_rbdyn/BodySensor.cpp
 )
 
 set(mc_rbdyn_HDR
@@ -160,11 +167,13 @@ set(mc_rbdyn_HDR
 ../include/mc_rbdyn/lipm_stabilizer/StabilizerConfiguration.h
 ../include/mc_rbdyn/lipm_stabilizer/ZMPCCConfiguration.h
 ../include/mc_rbdyn/ZMP.h
+../include/mc_control/generic_gripper.h
+../include/mc_rbdyn/Device.h
 )
 
 add_library(mc_rbdyn SHARED ${mc_rbdyn_SRC} ${mc_rbdyn_HDR})
 set_target_properties(mc_rbdyn PROPERTIES COMPILE_FLAGS "-DMC_RBDYN_EXPORTS")
-target_link_libraries(mc_rbdyn PUBLIC mc_rbdyn_urdf::mc_rbdyn_urdf Tasks::Tasks mc_rtc_loader mc_rtc_utils GEOS::geos)
+target_link_libraries(mc_rbdyn PUBLIC mc_rbdyn_urdf::mc_rbdyn_urdf RBDyn::Parsers Tasks::Tasks mc_rtc_loader mc_rtc_utils GEOS::geos)
 # qhull
 target_include_directories(mc_rbdyn SYSTEM PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../3rd-party/qhull/src")
 target_link_libraries(mc_rbdyn PRIVATE qhullcpp qhullstatic_r)
@@ -292,6 +301,7 @@ target_link_libraries(mc_trajectory PUBLIC mc_rtc_3rd_party::hpp-spline mc_rtc::
 install_mc_rtc_lib(mc_trajectory)
 
 set(mc_tasks_SRC
+mc_tasks/MomentumTask.cpp
 mc_tasks/PositionTask.cpp
 mc_tasks/SurfaceTransformTask.cpp
 mc_tasks/OrientationTask.cpp
@@ -324,6 +334,7 @@ set(mc_tasks_HDR
 ../include/mc_tasks/CoMTask.h
 ../include/mc_tasks/EndEffectorTask.h
 ../include/mc_tasks/MetaTaskLoader.h
+../include/mc_tasks/MomentumTask.h
 ../include/mc_tasks/OrientationTask.h
 ../include/mc_tasks/VectorOrientationTask.h
 ../include/mc_tasks/PositionTask.h
@@ -409,7 +420,6 @@ set(mc_control_SRC
 mc_control/CompletionCriteria.cpp
 mc_control/ControllerServer.cpp
 mc_control/SimulationContactPair.cpp
-mc_control/generic_gripper.cpp
 mc_control/MCController.cpp
 mc_control/mc_python_controller.cpp
 mc_control/mc_global_controller.cpp
@@ -426,7 +436,6 @@ set(mc_control_HDR
 ../include/mc_control/GlobalPlugin.h
 ../include/mc_control/GlobalPluginMacros.h
 ../include/mc_control/GlobalPlugin_fwd.h
-../include/mc_control/generic_gripper.h
 ../include/mc_control/MCController.h
 ../include/mc_control/mc_controller.h
 ../include/mc_control/mc_python_controller.h

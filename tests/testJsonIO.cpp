@@ -286,51 +286,64 @@ mc_rbdyn::RobotModule make_ref()
   configureRobotLoader();
   auto rm_ptr = mc_rbdyn::RobotLoader::get_robot_module("JVRC1");
   mc_rbdyn::RobotModule rm = *rm_ptr;
+  mc_rbdyn::RobotModule::Gripper::Safety s{0.5, 1.5, 0.5, 10};
+  std::vector<mc_rbdyn::Mimic> mimics = {{"R_FAKETHUMB", "R_UTHUMB", 12.0, -42.0},
+                                         {"R_FAKETHUMB2", "R_UTHUMB", -2.0, 0.0}};
+  rm._grippers = {{"l_gripper", {"L_UTHUMB"}, true},
+                  {"r_gripper", {"R_UTHUMB"}, false, s, mimics},
+                  {"fake_gripper", {"R_UTHUMB"}, false, s}};
   rm.expand_stance();
   return rm;
 }
 
-namespace mc_rbdyn_urdf
+namespace rbd
 {
 
-bool operator==(const mc_rbdyn_urdf::Geometry::Box & lhs, const mc_rbdyn_urdf::Geometry::Box & rhs)
+namespace parsers
+{
+
+bool operator==(const Geometry::Box & lhs, const Geometry::Box & rhs)
 {
   return lhs.size == rhs.size;
 }
 
-bool operator==(const mc_rbdyn_urdf::Geometry::Cylinder & lhs, const mc_rbdyn_urdf::Geometry::Cylinder & rhs)
+bool operator==(const Geometry::Cylinder & lhs, const Geometry::Cylinder & rhs)
 {
   return lhs.radius == rhs.radius && lhs.length == rhs.length;
 }
 
-bool operator==(const mc_rbdyn_urdf::Geometry::Sphere & lhs, const mc_rbdyn_urdf::Geometry::Sphere & rhs)
+bool operator==(const Geometry::Sphere & lhs, const Geometry::Sphere & rhs)
 {
   return lhs.radius == rhs.radius;
 }
 
-bool operator==(const mc_rbdyn_urdf::Geometry::Mesh & lhs, const mc_rbdyn_urdf::Geometry::Mesh & rhs)
+bool operator==(const Geometry::Mesh & lhs, const Geometry::Mesh & rhs)
 {
   return lhs.filename == rhs.filename && lhs.scale == rhs.scale;
 }
 
-bool operator==(const mc_rbdyn_urdf::Geometry & lhs, const mc_rbdyn_urdf::Geometry & rhs)
+bool operator==(const Geometry::Superellipsoid & lhs, const Geometry::Superellipsoid & rhs)
+{
+  return lhs.size == rhs.size && lhs.epsilon1 == rhs.epsilon1 && lhs.epsilon2 == rhs.epsilon2;
+}
+
+bool operator==(const Geometry & lhs, const Geometry & rhs)
 {
   bool ret = lhs.type == rhs.type;
   if(ret)
   {
     switch(lhs.type)
     {
-      case mc_rbdyn_urdf::Geometry::Type::BOX:
-        return boost::get<mc_rbdyn_urdf::Geometry::Box>(lhs.data) == boost::get<mc_rbdyn_urdf::Geometry::Box>(rhs.data);
-      case mc_rbdyn_urdf::Geometry::Type::CYLINDER:
-        return boost::get<mc_rbdyn_urdf::Geometry::Cylinder>(lhs.data)
-               == boost::get<mc_rbdyn_urdf::Geometry::Cylinder>(rhs.data);
-      case mc_rbdyn_urdf::Geometry::Type::SPHERE:
-        return boost::get<mc_rbdyn_urdf::Geometry::Sphere>(lhs.data)
-               == boost::get<mc_rbdyn_urdf::Geometry::Sphere>(rhs.data);
-      case mc_rbdyn_urdf::Geometry::Type::MESH:
-        return boost::get<mc_rbdyn_urdf::Geometry::Mesh>(lhs.data)
-               == boost::get<mc_rbdyn_urdf::Geometry::Mesh>(rhs.data);
+      case Geometry::Type::BOX:
+        return boost::get<Geometry::Box>(lhs.data) == boost::get<Geometry::Box>(rhs.data);
+      case Geometry::Type::CYLINDER:
+        return boost::get<Geometry::Cylinder>(lhs.data) == boost::get<Geometry::Cylinder>(rhs.data);
+      case Geometry::Type::SPHERE:
+        return boost::get<Geometry::Sphere>(lhs.data) == boost::get<Geometry::Sphere>(rhs.data);
+      case Geometry::Type::MESH:
+        return boost::get<Geometry::Mesh>(lhs.data) == boost::get<Geometry::Mesh>(rhs.data);
+      case Geometry::Type::SUPERELLIPSOID:
+        return boost::get<Geometry::Superellipsoid>(lhs.data) == boost::get<Geometry::Superellipsoid>(rhs.data);
       default:
         break;
     }
@@ -338,19 +351,60 @@ bool operator==(const mc_rbdyn_urdf::Geometry & lhs, const mc_rbdyn_urdf::Geomet
   return ret;
 }
 
-bool operator==(const mc_rbdyn_urdf::Visual & lhs, const mc_rbdyn_urdf::Visual & rhs)
+bool operator==(const Visual & lhs, const Visual & rhs)
 {
   return lhs.name == rhs.name && lhs.origin == rhs.origin && lhs.geometry == rhs.geometry;
 }
 
-} // namespace mc_rbdyn_urdf
+} // namespace parsers
+
+} // namespace rbd
 
 namespace mc_rbdyn
 {
 
-bool operator==(const mc_rbdyn::RobotModule::Gripper & lhs, const mc_rbdyn::RobotModule::Gripper & rhs)
+bool operator==(const Mimic & lhs, const Mimic & rhs)
 {
-  return lhs.name == rhs.name && lhs.joints == rhs.joints && lhs.reverse_limits == rhs.reverse_limits;
+  return lhs.name == rhs.name && lhs.joint == rhs.joint && lhs.multiplier == rhs.multiplier && lhs.offset == rhs.offset;
+}
+
+bool operator==(const RobotModule::Gripper::Safety & lhs, const RobotModule::Gripper::Safety & rhs)
+{
+  return lhs.percentVMax == rhs.percentVMax && lhs.actualCommandDiffTrigger == rhs.actualCommandDiffTrigger
+         && lhs.releaseSafetyOffset == rhs.releaseSafetyOffset
+         && lhs.overCommandLimitIterN == rhs.overCommandLimitIterN;
+}
+
+bool operator==(const RobotModule::Gripper & lhs, const RobotModule::Gripper & rhs)
+{
+  auto compareMimics = [&]() {
+    auto lmimics = lhs.mimics();
+    auto rmimics = rhs.mimics();
+    if(lmimics == nullptr && rmimics == nullptr)
+    {
+      return true;
+    }
+    if(lmimics == nullptr || rmimics == nullptr)
+    {
+      return false;
+    }
+    return *lmimics == *rmimics;
+  };
+  auto compareSafety = [&]() {
+    auto lsafety = lhs.safety();
+    auto rsafety = rhs.safety();
+    if(lsafety == nullptr && rsafety == nullptr)
+    {
+      return true;
+    }
+    if(lsafety == nullptr || rsafety == nullptr)
+    {
+      return false;
+    }
+    return *lsafety == *rsafety;
+  };
+  return lhs.name == rhs.name && lhs.joints == rhs.joints && lhs.reverse_limits == rhs.reverse_limits && compareSafety()
+         && compareMimics();
 }
 
 } // namespace mc_rbdyn
@@ -389,7 +443,8 @@ bool operator==(const mc_rbdyn::RobotModule & lhs, const mc_rbdyn::RobotModule &
          && compare_vectors(lhs._forceSensors, rhs._forceSensors) && compare_vectors(lhs._bodySensors, rhs._bodySensors)
          && lhs._springs == rhs._springs && lhs._minimalSelfCollisions == rhs._minimalSelfCollisions
          && lhs._commonSelfCollisions == rhs._commonSelfCollisions && compare_vectors(lhs._grippers, rhs._grippers)
-         && lhs._ref_joint_order == rhs._ref_joint_order && lhs._default_attitude == rhs._default_attitude;
+         && lhs._ref_joint_order == rhs._ref_joint_order && lhs._default_attitude == rhs._default_attitude
+         && lhs._gripperSafety == rhs._gripperSafety;
 }
 
 typedef boost::mpl::list<mc_rbdyn::Base,

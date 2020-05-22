@@ -3,10 +3,10 @@
   "type": "object",
   "properties":
   {
-    "type": { "enum": ["lipm_stabilizer"], "type": "string" },
+    "type": { "enum": ["lipm_stabilizer"] },
     "name": { "type": "string" },
 
-    "robotIndex": { "type": "integer", "minimum": 0 },
+    "robot": { "$ref": "/../../common/MetaTask_robot.json" },
     "leftFootSurface": { "type": "string" },
     "rightFootSurface": { "type": "string" },
     "torsoBodyName": { "type": "string" },
@@ -71,5 +71,5 @@
       }
     }
   },
-  "required": ["type", "robotIndex", "contacts"]
+  "required": ["type", "contacts"]
 }
