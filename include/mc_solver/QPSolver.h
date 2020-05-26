@@ -162,10 +162,9 @@ public:
   template<typename ... Fun>
   void addConstraint(tasks::qp::ConstraintFunction<Fun...> * constraint)
   {
-    // constraint->addToSolver(robots().mbs(), *solver);  // Rafa had it like this before
-    constraint->addToSolver(robots().mbs(), solver);
-    solver.updateConstrSize();
-    solver.updateNrVars(robots().mbs());
+    constraint->addToSolver(robots().mbs(), *solver);
+    solver->updateConstrSize();
+    solver->updateNrVars(robots().mbs());
   }
 
   /** Remove a constraint function from the solver
@@ -174,10 +173,9 @@ public:
   template<typename ... Fun>
   void removeConstraint(tasks::qp::ConstraintFunction<Fun...> * constraint)
   {
-    // constraint->removeFromSolver(*solver);  // Rafa had it like this before
-    constraint->removeFromSolver(solver);
-    solver.updateConstrSize();
-    solver.updateNrVars(robots().mbs());
+    constraint->removeFromSolver(*solver);
+    solver->updateConstrSize();
+    solver->updateNrVars(robots().mbs());
   }
 
   bool hasConstraint(const tasks::qp::Constraint* constraint);
@@ -204,6 +202,13 @@ public:
 
   /** Returns the MetaTasks currently in the solver */
   const std::vector<mc_tasks::MetaTask *> & tasks() const;
+
+  /** Desired resultant of contact force in robot surface frame
+   * \param contact Contact for which the force is desired.
+   * This contact must be one of the active contacts in the solver.
+   * \return Contact force in robot surface frame
+   */
+  const sva::ForceVecd desiredContactForce(const mc_rbdyn::Contact & id) const;
   
   /** Run one iteration of the QP.
    *

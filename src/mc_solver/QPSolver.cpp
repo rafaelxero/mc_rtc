@@ -101,18 +101,16 @@ QPSolver::QPSolver(double timeStep)
 
 void QPSolver::addConstraintSet(ConstraintSet & cs)
 {
-  // cs.addToSolver(robots().mbs(), *solver);  // Rafa had it like this before
-  cs.addToSolver(robots().mbs(), solver);
-  solver.updateConstrSize();
-  solver.updateNrVars(robots().mbs());
+  cs.addToSolver(robots().mbs(), *solver);
+  solver->updateConstrSize();
+  solver->updateNrVars(robots().mbs());
 }
 
 void QPSolver::removeConstraintSet(ConstraintSet & cs)
 {
-  // cs.removeFromSolver(*solver);  // Rafa had it like this before
-  cs.removeFromSolver(solver);
-  solver.updateConstrSize();
-  solver.updateNrVars(robots().mbs());
+  cs.removeFromSolver(*solver);
+  solver->updateConstrSize();
+  solver->updateNrVars(robots().mbs());
 }
 
 void QPSolver::addTask(tasks::qp::Task * task)
@@ -249,8 +247,8 @@ void QPSolver::setContacts(const std::vector<mc_rbdyn::Contact> & contacts)
     }
   }
 
-  solver.nrVars(robots_p->mbs(), uniContacts, biContacts);
-  const tasks::qp::SolverData & data = solver.data();
+  solver->nrVars(robots_p->mbs(), uniContacts, biContacts);
+  const tasks::qp::SolverData & data = solver->data();
   qpRes.contacts = contactsMsgFromContacts(*robots_p, contacts_);
   qpRes.contacts_lambda_begin.clear();
   for(int i = 0; i < data.nrContacts(); ++i)
@@ -258,6 +256,42 @@ void QPSolver::setContacts(const std::vector<mc_rbdyn::Contact> & contacts)
     qpRes.contacts_lambda_begin.push_back(data.lambdaBegin(i) - data.lambdaBegin());
   }
   updateConstrSize();
+}
+
+const std::vector<mc_rbdyn::Contact> & QPSolver::contacts() const
+{
+  return contacts_;
+}
+
+const std::vector<mc_tasks::MetaTask *> & QPSolver::tasks() const
+{
+  return metaTasks_;
+}
+
+const sva::ForceVecd QPSolver::desiredContactForce(const mc_rbdyn::Contact & contact) const
+{
+  const auto & cId = contact.contactId(robots());
+  auto qp_contact = contactById(cId);
+  if(qp_contact.first != -1)
+  {
+    const auto & qp_c = qp_contact.second;
+    const auto & lambdaV = lambdaVec(qp_contact.first);
+    if(lambdaV.size() > 0)
+    {
+      const auto & qpWrenchInBodyFrame = qp_c.force(lambdaV, qp_c.r1Points, qp_c.r1Cones);
+      const auto & qpWrenchInSurfaceFrame = contact.r1Surface()->X_b_s().dualMul(qpWrenchInBodyFrame);
+      return qpWrenchInSurfaceFrame;
+    }
+    else
+    {
+      LOG_ERROR_AND_THROW(std::runtime_error, "QPSolver - cannot compute desired contact force for surface "
+                                                  << contact.r1Surface()->name());
+    }
+  }
+  else
+  {
+    LOG_ERROR_AND_THROW(std::runtime_error, "QPSolver - cannot handle cases where qp_contact.first != -1");
+  }
 }
 
 bool QPSolver::run(FeedbackType fType)
