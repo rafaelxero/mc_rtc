@@ -498,10 +498,12 @@ void QPSolver::updateCurrentState()
   if(feedback_)
   {
     // std::cout << "Rafa, in QPSolver::updateCurrentState, closing the loop with measured values" << std::endl;
-    
-    robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
-    robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
-    
+
+    if(robot().mb().joint(robot().jointIndexByName("Root")).dof() != 0) {
+      robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
+      robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
+    }
+      
     for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
     {
       const auto & jn = robot().refJointOrder()[i];
