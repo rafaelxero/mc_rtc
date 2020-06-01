@@ -482,7 +482,8 @@ void QPSolver::updateCurrentState()
 
   const std::vector<double> & encoder = robot().encoderValues();
   const Eigen::Vector3d & pIn = robot().bodySensor().position();
-  const Eigen::Quaterniond & qtIn = robot().bodySensor().orientation();
+  const Eigen::Matrix3d & RIn = robot().bodySensor().orientation().toRotationMatrix();
+  // const Eigen::Quaterniond & qtIn = robot().bodySensor().orientation();
   const Eigen::Vector3d & velIn = robot().bodySensor().linearVelocity();
   const Eigen::Vector3d & rateIn = robot().bodySensor().angularVelocity();
 
@@ -497,12 +498,10 @@ void QPSolver::updateCurrentState()
 
   if(feedback_)
   {
-    // std::cout << "Rafa, in QPSolver::updateCurrentState, closing the loop with measured values" << std::endl;
-
-    if(robot().mb().joint(robot().jointIndexByName("Root")).dof() != 0) {
-      robot().mbc().q[0] = {qtIn.w(), qtIn.x(), qtIn.y(), qtIn.z(), pIn.x(), pIn.y(), pIn.z()};
+    robot().posW({RIn.transpose(), pIn});
+    
+    if(robot().mb().joint(robot().jointIndexByName("Root")).dof() != 0)
       robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
-    }
       
     for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
     {
@@ -511,11 +510,13 @@ void QPSolver::updateCurrentState()
       if(robot().hasJoint(jn))
       {
         size_t j = robot().jointIndexByName(jn);
+
+        robot().mbc().q[j][0] = encoder[i];
         
         if(robot().mb().joint(j).dof() == 0)
           continue;
         
-        robot().mbc().q[j][0] = encoder[i];
+        // robot().mbc().q[j][0] = encoder[i];
         robot().mbc().alpha[j][0] = encoderVel[i];
       }
     }
