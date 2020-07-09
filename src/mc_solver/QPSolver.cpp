@@ -498,11 +498,33 @@ void QPSolver::updateCurrentState()
 
   if(feedback_)
   {
+    // std::cout << "Rafa, in QPSolver::updateCurrentState, feedback_ = true" << std::endl;
+
+    //std::cout << "Rafa, in QPSolver::updateCurrentState, pIn = " << pIn.transpose() <<  std::endl;
+    //std::cout << "Rafa, in QPSolver::updateCurrentState, RIn = " << std::endl << RIn << std::endl;
+    
     robot().posW({RIn.transpose(), pIn});
+
+    //std::cout << "Rafa, in QPSolver::updateCurrentState, velIn = " << velIn.transpose() <<  std::endl;
+    //std::cout << "Rafa, in QPSolver::updateCurrentState, rateIn = " << rateIn.transpose() <<  std::endl;
     
     if(robot().mb().joint(robot().jointIndexByName("Root")).dof() != 0)
       robot().mbc().alpha[0] = {rateIn.x(), rateIn.y(), rateIn.z(), velIn.x(), velIn.y(), velIn.z()};
-      
+
+    /*
+    std::cout << "Rafa, in QPSolver::updateCurrentState, encoder = ";
+    for (size_t i = 0; i < encoder.size(); i++) { // Rafa, for debugging code
+      std::cout << encoder[i] << " "; // Rafa, don't forget
+    }
+    std::cout << std::endl; // Rafa, don't forget
+
+    std::cout << "Rafa, in QPSolver::updateCurrentState, encoderVel = ";
+    for (size_t i = 0; i < encoderVel.size(); i++) { // Rafa, for debugging code
+      std::cout << encoderVel[i] << " "; // Rafa, don't forget
+    }
+    std::cout << std::endl; // Rafa, don't forget
+    */
+    
     for(size_t i = 0; i < robot().refJointOrder().size(); ++i)
     {
       const auto & jn = robot().refJointOrder()[i];
@@ -927,11 +949,17 @@ bool IntglTerm_QPSolver::run(bool dummy)
 
   Eigen::VectorXd diff_torques = Eigen::VectorXd::Zero(ref_torques.size());
 
+  std::cout << "Rafa, in IntglTerm_QPSolver::run, sent_torques = " << sent_torques.transpose() << std::endl;
+  std::cout << "Rafa, in IntglTerm_QPSolver::run, ref_torques = " << ref_torques.transpose() << std::endl;
+  
   if (switch_trigger)
   {
-    // std::cout << "Rafa, in IntglTerm_QPSolver::run, switch_trigger happened !!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+    std::cout << "Rafa, in IntglTerm_QPSolver::run, switch_trigger happened !!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
     
     diff_torques = sent_torques - ref_torques;
+
+    std::cout << "Rafa, in IntglTerm_QPSolver::run, diff_torques = " << diff_torques.transpose() << std::endl;
+    
     fbTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()], diff_torques);
     switch_trigger = false;
   }
@@ -946,10 +974,6 @@ bool IntglTerm_QPSolver::run(bool dummy)
   }
 
   feedback_old_ = feedback_;
-
-  // std::cout << "Rafa, in IntglTerm_QPSolver::run, sent_torques = " << sent_torques.transpose() << std::endl;
-  // std::cout << "Rafa, in IntglTerm_QPSolver::run, ref_torques = " << ref_torques.transpose() << std::endl;
-  // std::cout << "Rafa, in IntglTerm_QPSolver::run, diff_torques = " << diff_torques.transpose() << std::endl;
   
   // fbTerm_->computeTerm(robot().mb(), robot().mbc(), (*mbcs_calc_)[robots().robotIndex()]);
   elapsed_.at("computeFbTerm") = (int) (clock() - time);
