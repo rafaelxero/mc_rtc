@@ -472,21 +472,9 @@ bool QPSolver::runClosedLoop()
   {
     t->update(*this);
   }
-  
-  bool success = solver->solveNoMbcUpdate(robots().mbs(), robots().mbcs());
-  solver->updateMbc(robot().mbc(), static_cast<int>(robots().robotIndex()));
-
-  // Apply computed acceleration to integrator state
-  robot().mbc().q = oldQ;
-  robot().mbc().alpha = oldQd;
-
-  // Integrate Qdd on top of integrator state q, qd
-  rbd::eulerIntegration(robot().mb(), robot().mbc(), timeStep);
-  rbd::forwardKinematics(robot().mb(), robot().mbc());
-  rbd::forwardVelocity(robot().mb(), robot().mbc());
 
   // Solve QP and integrate
-  if(solver.solveNoMbcUpdate(robots_p->mbs(), robots_p->mbcs()))
+  if(solver->solveNoMbcUpdate(robots_p->mbs(), robots_p->mbcs()))
   {
     for(size_t i = 0; i < robots_p->mbs().size(); ++i)
     {
@@ -495,7 +483,7 @@ bool QPSolver::runClosedLoop()
       robot.mbc().alpha = control_alpha_[i];
       if(robot.mb().nrDof() > 0)
       {
-        solver.updateMbc(robot.mbc(), static_cast<int>(i));
+        solver->updateMbc(robot.mbc(), static_cast<int>(i));
         robot.eulerIntegration(timeStep);
         robot.forwardKinematics();
         robot.forwardVelocity();
