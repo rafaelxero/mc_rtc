@@ -168,7 +168,7 @@ void PostureTask::target(const std::map<std::string, std::vector<double>> & join
       }
       else
       {
-        LOG_ERROR("PostureTask::target dof missmatch for " << j.first)
+        mc_rtc::log::error("PostureTask::target dof missmatch for {}", j.first);
       }
     }
   }
@@ -241,7 +241,8 @@ static auto registered = mc_tasks::MetaTaskLoader::register_load_function(
     "posture",
     [](mc_solver::QPSolver & solver, const mc_rtc::Configuration & config) {
       const auto robotIndex = robotIndexFromConfig(config, solver.robots(), "posture");
-      auto t = std::make_shared<mc_tasks::PostureTask>(solver, robotIndex, config("stiffness"), config("weight"));
+      auto t =
+          std::make_shared<mc_tasks::PostureTask>(solver, robotIndex, config("stiffness", 1.), config("weight", 10.));
       t->load(solver, config);
       if(config.has("posture"))
       {

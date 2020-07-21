@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2020-06-11
+
 ### Changes
 
 - [FSM] Deprecates the use of `robotIndex` in favor of robot name `robot`
@@ -10,12 +12,22 @@
 - Benchmarks can now be compiled and run with the `build_and_install.sh` script
 - Use RBDyn::Parsers instead of mc\_rbdyn\_urdf
 - Functions that use mc\_rbdyn\_urdf were kept for backwards compatibility, they will be removed in a later release
+- Improve error reporting when some tasks parameters are not set correctly
+- `mc_rtc::log::info`, `mc_rtc::log::success`, `mc_rtc::log::warning` and `mc_rtc::log::error` replace the respective `LOG_*` macros, they use the spdlog library for asynchronous logging and modern formatting support
+- `LOG_*` macros are now deprecated, they will be removed in a later release
 
 ### Added
+
 - New benchmark for task allocation performance
+- Support for `std::unordered_set` in `mc_rtc::Configuration`
+- Added performance measurements to the FSM
 
 ### Fixes
+
 - Fix and upgrade benchmarks compilation
+- Correctly teardown the last FSM state
+- Computed contact forces are logged with a unique identifier
+- Improve Python 3 compatibility for mc\_log\_ui
 
 ## [1.3.0] - 2020-05-07
 
@@ -128,7 +140,8 @@
 
 Initial release
 
-[Unreleased]: https://github.com/jrl-umi3218/mc_rtc/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/jrl-umi3218/mc_rtc/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/jrl-umi3218/mc_rtc/releases/tag/v1.4.0
 [1.3.0]: https://github.com/jrl-umi3218/mc_rtc/releases/tag/v1.3.0
 [1.2.1]: https://github.com/jrl-umi3218/mc_rtc/releases/tag/v1.2.1
 [1.2.0]: https://github.com/jrl-umi3218/mc_rtc/releases/tag/v1.2.0

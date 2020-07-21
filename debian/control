@@ -40,6 +40,7 @@ Build-Depends: debhelper (>= 9),
                libnanomsg-dev,
                libhpp-spline-dev,
                libyaml-cpp-dev,
+               libspdlog-dev,
 # ros-@ROS_DISTRO@-ros-base,
 # ros-@ROS_DISTRO@-roscpp,
 # ros-@ROS_DISTRO@-sensor-msgs,
@@ -64,6 +65,8 @@ Depends: cmake,
          libnanomsg-dev,
          libhpp-spline-dev,
          libyaml-cpp-dev,
+         libspdlog-dev,
+         libltdl-dev,
          libmc-rtc1 (= ${binary:Version}),
          ${misc:Depends}
 Suggests: libmc-rtc-doc
@@ -95,10 +98,11 @@ Package: mc-rtc-utils
 Section: science
 Architecture: any
 Depends: libmc-rtc1 (= ${binary:Version}),
-         python-git,
+         python-git | python3-git,
          python-mc-rtc,
-         python-matplotlib,
-         python-pyqt5,
+         python3-mc-rtc,
+         python-matplotlib | python3-matplotlib,
+         python-pyqt5 | python3-pyqt5,
          ${shlibs:Depends},
          ${misc:Depends}
 Description: mc-rtc - Utilities

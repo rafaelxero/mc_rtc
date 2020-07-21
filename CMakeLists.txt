@@ -12,7 +12,7 @@ endif()
 
 set(PROJECT_NAME mc_rtc)
 set(PROJECT_DESCRIPTION mc_rtc)
-set(PROJECT_VERSION 1.3.0)
+set(PROJECT_VERSION 1.4.0)
 set(PROJECT_URL https://gite.lirmm.fr/multi-contact/mc_rtc)
 set(PROJECT_DEBUG_POSTFIX "_d")
 set(PROJECT_USE_KEYWORD_LINK_LIBRARIES TRUE)
@@ -46,6 +46,7 @@ option(TREAT_WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
 option(BUILD_CONTROLLER_SAMPLES "Build sample controllers in the project" ON)
 option(DISABLE_CONTROLLER_TESTS "Disable controller unit tests" OFF)
 option(DISABLE_ROBOT_TESTS "Disable RobotModule unit tests" OFF)
+option(ENABLE_FAST_TESTS "Run controllers tests for a few iterations" OFF)
 
 option(BUILD_BENCHMARKS "Build benchmarks" OFF)
 
@@ -91,6 +92,9 @@ set_target_properties(mc_rtc_3rd_party::RapidJSON PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/3rd-party/RapidJSON
 )
 
+# spdlog
+add_project_dependency(spdlog 1.6.1 REQUIRED)
+
 macro(find_description_package PACKAGE)
   set(PACKAGE_PATH_VAR "${PACKAGE}_PATH")
   string(TOUPPER "${PACKAGE_PATH_VAR}" PACKAGE_PATH_VAR)
@@ -104,6 +108,8 @@ macro(find_description_package PACKAGE)
   else()
     set(${PACKAGE_PATH_VAR} "${${PACKAGE}_INSTALL_PREFIX}")
   endif()
+  # Cleanup the path provided by CMake
+  get_filename_component(${PACKAGE_PATH_VAR} "${${PACKAGE_PATH_VAR}}" REALPATH)
   message("-- Found ${PACKAGE}: ${${PACKAGE_PATH_VAR}}")
 endmacro()
 

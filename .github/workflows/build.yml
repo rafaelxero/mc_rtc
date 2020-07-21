@@ -7,6 +7,9 @@ on:
       - ".gitlab-ci.yml"
       - ".jrl-ci"
       - ".github/workflows/package.yml"
+      - ".github/workflows/sources/*"
+      - ".github/workflows/build-others.yml"
+      - ".github/workflows/docker/*"
       - "debian/**"
     branches:
       - '**'
@@ -30,7 +33,7 @@ jobs:
       run: |
         ./.clang-format-check.sh
   build:
-    #    needs: clang-format
+    needs: clang-format
     strategy:
       fail-fast: false
       matrix:
@@ -84,7 +87,7 @@ jobs:
         then
           ./build_and_install.sh --user-input false --with-python-support false --build-testing false --build-benchmarks true
         else
-          ./build_and_install.sh --user-input false --build-benchmarks true
+          ./build_and_install.sh --user-input false --build-benchmarks true --allow-root true
         fi
     - name: Install dependencies
       uses: jrl-umi3218/github-actions/install-dependencies@master
@@ -112,6 +115,9 @@ jobs:
             - path: jbeder/yaml-cpp
               ref: 29dcf92f870ee51cce8d68f8fcfe228942e8dfe1
         github: |
+          - path: gabime/spdlog
+            ref: v1.6.1
+            options: -DSPDLOG_BUILD_EXAMPLE:BOOL=OFF -DSPDLOG_BUILD_SHARED:BOOL=ON
           - path: humanoid-path-planner/hpp-spline
             ref: v4.7.0
             options: -DBUILD_PYTHON_INTERFACE:BOOL=OFF
@@ -126,11 +132,18 @@ jobs:
           - path: jrl-umi3218/mc_rtc_data
           - path: jrl-umi3218/eigen-quadprog
     - name: Build and test
-      if: matrix.build-type != 'script'
+      if: matrix.build-type == 'RelWithDebInfo' || (matrix.build-type == 'Debug' && github.ref == 'refs/heads/master')
       uses: jrl-umi3218/github-actions/build-cmake-project@master
       with:
         compiler: ${{ matrix.compiler }}
         build-type: ${{ matrix.build-type }}
+    - name: Build and test (Debug/Fast tests)
+      if: matrix.build-type == 'Debug' && github.ref != 'refs/heads/master'
+      uses: jrl-umi3218/github-actions/build-cmake-project@master
+      with:
+        compiler: ${{ matrix.compiler }}
+        build-type: ${{ matrix.build-type }}
+        options: '-DENABLE_FAST_TESTS:BOOL=ON'
     - name: Build with ROS
       if: (matrix.os == 'ubuntu-16.04' || matrix.os == 'ubuntu-18.04') && matrix.build-type != 'script'
       run: |
@@ -140,8 +153,11 @@ jobs:
         if [ "${{ matrix.os }}" = "ubuntu-16.04" ]
         then
           export ROS_DISTRO="kinetic"
-        else
+        elif [ "${{ matrix.os }}" = "ubuntu-18.04" ]
+        then
           export ROS_DISTRO="melodic"
+        else
+          export ROS_DISTRO="noetic"
         fi
         sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
         wget http://packages.ros.org/ros.key -O - | sudo apt-key add -

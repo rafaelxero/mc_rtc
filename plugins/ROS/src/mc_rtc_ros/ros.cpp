@@ -101,6 +101,7 @@ private:
   {
     sensor_msgs::JointState js;
     std::vector<geometry_msgs::TransformStamped> tfs;
+    std::vector<geometry_msgs::TransformStamped> surface_tfs;
     sensor_msgs::Imu imu;
     nav_msgs::Odometry odom;
     std::vector<geometry_msgs::WrenchStamped> wrenches;
@@ -192,7 +193,8 @@ void RobotPublisherImpl::init(const mc_rbdyn::Robot & robot, bool use_real)
   for(const auto & s : robot.surfaces())
   {
     const auto & surf = s.second;
-    data.tfs.push_back(PT2TF(surf->X_b_s(), tm, prefix + surf->bodyName(), prefix + "surfaces/" + surf->name(), 0));
+    data.surface_tfs.push_back(
+        PT2TF(surf->X_b_s(), tm, prefix + surf->bodyName(), prefix + "surfaces/" + surf->name(), 0));
   }
 
   nh.setParam(prefix + "/robot_module", robot.module().parameters());
@@ -200,7 +202,7 @@ void RobotPublisherImpl::init(const mc_rbdyn::Robot & robot, bool use_real)
   std::ifstream ifs(urdf_path);
   if(!ifs.is_open())
   {
-    LOG_ERROR(robot.name() << " URDF: " << urdf_path << " is not readable")
+    mc_rtc::log::error("{} URDF: {} is not readable", robot.name(), urdf_path);
     return;
   }
   std::stringstream urdf;
@@ -308,6 +310,20 @@ void RobotPublisherImpl::update(double, const mc_rbdyn::Robot & robot)
     update_tf(data.tfs[tfs_i++], X_succp_succ * mbc.parentToSon[static_cast<size_t>(j)] * X_predp_pred.inv());
   }
 
+  {
+    data.surface_tfs.resize(robot.surfaces().size());
+    size_t surf_i = 0;
+    for(const auto & s : robot.surfaces())
+    {
+      const auto & surf = s.second;
+      data.surface_tfs[surf_i] =
+          PT2TF(surf->X_b_s(), tm, prefix + surf->bodyName(), prefix + "surfaces/" + surf->name(), 0);
+      data.surface_tfs[surf_i].header.stamp = data.js.header.stamp;
+      data.surface_tfs[surf_i].header.seq = data.js.header.seq;
+      ++surf_i;
+    }
+  }
+
   for(auto & tf : data.tfs)
   {
     tf.header.stamp = data.js.header.stamp;
@@ -316,7 +332,7 @@ void RobotPublisherImpl::update(double, const mc_rbdyn::Robot & robot)
 
   if(!msgs.push(data))
   {
-    LOG_ERROR("Full ROS message publishing queue")
+    mc_rtc::log::error("Full ROS message publishing queue");
   }
 }
 
@@ -361,6 +377,7 @@ void RobotPublisherImpl::publishThread()
         imu_pub.publish(msg.imu);
         odom_pub.publish(msg.odom);
         tf_caster.sendTransform(msg.tfs);
+        tf_caster.sendTransform(msg.surface_tfs);
         for(const auto & wrench : msg.wrenches)
         {
           const std::string & sensor_name = wrench.header.frame_id.substr(prefix.length());
@@ -374,8 +391,8 @@ void RobotPublisherImpl::publishThread()
       }
       catch(const ros::serialization::StreamOverrunException & e)
       {
-        LOG_ERROR("EXCEPTION WHILE PUBLISHING STATE")
-        LOG_WARNING(e.what())
+        mc_rtc::log::error("EXCEPTION WHILE PUBLISHING STATE");
+        mc_rtc::log::warning(e.what());
       }
     }
     rt.sleep();
@@ -393,7 +410,7 @@ inline bool ros_init(const std::string & name)
   ros::init(argc, argv, name.c_str(), ros::init_options::NoSigintHandler);
   if(!ros::master::check())
   {
-    LOG_WARNING("ROS master is not available, continue without ROS functionalities")
+    mc_rtc::log::warning("ROS master is not available, continue without ROS functionalities");
     return false;
   }
   return true;

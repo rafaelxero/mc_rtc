@@ -71,7 +71,11 @@ Note: it should also work and compile with Visual Studio 2017. However, only Vis
 1. Clone the [mc\_rtc](https://github.com/jrl-umi3218/mc_rtc) repository;
 2. Go into the mc\_rtc directory and update submodules `git submodule update --init`;
 3. Go into the `utils` directory and locate the file named `build_and_install.sh`;
-4. Edit some of the options to your liking: `INSTALL_PREFIX`, `WITH_ROS_SUPPORT`, `ROS_DISTRO`. On Ubuntu, ROS will be installed if you enable ROS support and it was not already installed. Otherwise, you are required to install ROS by yourself before attempting to install mc\_rtc with ROS support;
+4. [optional] Create a custom configuration file `build_and_install_user_config.sh` (overrides the corresponding variables from the default configuration `build_and_install_default_config.sh`)
+```sh
+cp build_and_install_user_config.sample.sh build_and_install_user_config.sh
+```
+5. [optional] Edit the `build_and_install_user_config.sh` and edit the options to your liking: `INSTALL_PREFIX`, `WITH_ROS_SUPPORT`, `ROS_DISTRO`. On Ubuntu, ROS will be installed if you enable ROS support and it was not already installed. Otherwise, you are required to install ROS by yourself before attempting to install mc\_rtc with ROS support;
 5. Run `./build_and_install.sh`
 
 The script will take care of installing the required dependencies, clone all required source codes, build and install them. This may take a while.
@@ -94,11 +98,13 @@ Building from sources on other platforms is not well documented at the moment. I
 - [LTDL](https://www.gnu.org/software/libtool/manual/html_node/Libltdl-interface.html) (Not required for Windows users)
 - [nanomsg](https://github.com/nanomsg/nanomsg)
 - [yaml-cpp](https://github.com/jbeder/yaml-cpp)
+- [spdlog](https://github.com/gabime/spdlog/) >= 1.6.1
 - [hpp-spline](https://github.com/humanoid-path-planner/hpp-spline)
 - [SpaceVecAlg](https://github.com/jrl-umi3218/SpaceVecAlg)
 - [RBDyn](https://github.com/jrl-umi3218/RBDyn)
 - [eigen-qld](https://github.com/jrl-umi3218/eigen-qld)
-- [eigen-lssol](https://gite.lirmm.fr/multi-contact/eigen-lssol)
+- [eigen-quadprog](https://github.com/jrl-umi3218/eigen-quadprog)
+- [eigen-lssol](https://gite.lirmm.fr/multi-contact/eigen-lssol) (Optional)
 - [sch-core](https://github.com/jrl-umi3218/sch-core)
 - [Tasks](https://github.com/jrl-umi3218/Tasks)
 - [mc_rtc_data](https://github.com/jrl-umi3218/mc_rtc_data)

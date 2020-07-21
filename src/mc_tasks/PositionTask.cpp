@@ -26,7 +26,17 @@ PositionTask::PositionTask(const std::string & bodyName,
                            double weight)
 : TrajectoryTaskGeneric<tasks::qp::PositionTask>(robots, robotIndex, stiffness, weight), bodyName(bodyName), bIndex(0)
 {
-  const mc_rbdyn::Robot & robot = robots.robot(rIndex);
+  if(robotIndex >= robots.size())
+  {
+    mc_rtc::log::error_and_throw<std::runtime_error>(
+        "[mc_tasks::PositionTask] No robot with index {}, robots.size() {}", robotIndex, robots.size());
+  }
+  const auto & robot = robots.robot(robotIndex);
+  if(!robot.hasBody(bodyName))
+  {
+    mc_rtc::log::error_and_throw<std::runtime_error>("[mc_tasks::PositionTask] No body named {} in {}", bodyName,
+                                                     robot.name());
+  }
   bIndex = robot.bodyIndexByName(bodyName);
 
   Eigen::Vector3d curPos = (sva::PTransformd{bodyPoint} * robot.mbc().bodyPosW[bIndex]).translation();

@@ -141,7 +141,7 @@ void SplineTrajectoryTask<Derived>::dimWeight(const Eigen::VectorXd & dimW)
 {
   if(dimW.size() != 6)
   {
-    LOG_ERROR_AND_THROW(std::runtime_error, "SplineTrajectoryTask dimWeight should be a Vector6d!");
+    mc_rtc::log::error_and_throw<std::runtime_error>("SplineTrajectoryTask dimWeight should be a Vector6d!");
   }
   TrajectoryBase::dimWeight(dimW);
 }
@@ -156,7 +156,7 @@ template<typename Derived>
 void SplineTrajectoryTask<Derived>::target(const sva::PTransformd & target)
 {
   auto & derived = static_cast<Derived &>(*this);
-  derived.target(target.translation());
+  derived.targetPos(target.translation());
   oriSpline_.target(target.rotation());
 }
 
@@ -164,7 +164,7 @@ template<typename Derived>
 const sva::PTransformd SplineTrajectoryTask<Derived>::target() const
 {
   const auto & derived = static_cast<const Derived &>(*this);
-  return sva::PTransformd(oriSpline_.target(), derived.target());
+  return sva::PTransformd(oriSpline_.target(), derived.targetPos());
 }
 
 template<typename Derived>

@@ -17,7 +17,17 @@ OrientationTask::OrientationTask(const std::string & bodyName,
 : TrajectoryTaskGeneric<tasks::qp::OrientationTask>(robots, robotIndex, stiffness, weight), bodyName(bodyName),
   bIndex(0)
 {
-  const mc_rbdyn::Robot & robot = robots.robot(rIndex);
+  if(robotIndex >= robots.size())
+  {
+    mc_rtc::log::error_and_throw<std::runtime_error>(
+        "[mc_tasks::OrientationTask] No robot with index {}, robots.size() {}", robotIndex, robots.size());
+  }
+  const auto & robot = robots.robot(robotIndex);
+  if(!robot.hasBody(bodyName))
+  {
+    mc_rtc::log::error_and_throw<std::runtime_error>("[mc_tasks::OrientationTask] No body named {} in {}", bodyName,
+                                                     robot.name());
+  }
   bIndex = robot.bodyIndexByName(bodyName);
 
   Eigen::Matrix3d curOri = robot.mbc().bodyPosW[bIndex].rotation();

@@ -68,7 +68,7 @@ MCController::MCController(const std::vector<std::shared_ptr<mc_rbdyn::RobotModu
                        }
                        catch(...)
                        {
-                         LOG_ERROR("Failed to load MetaTask from request\n" << config.dump(true))
+                         mc_rtc::log::error("Failed to load MetaTask from request\n{}", config.dump(true));
                        }
                      }));
   }
@@ -81,15 +81,24 @@ MCController::MCController(const std::vector<std::shared_ptr<mc_rbdyn::RobotModu
   selfCollisionConstraint.addCollisions(solver(), robots_modules[0]->minimalSelfCollisions());
   compoundJointConstraint.reset(new mc_solver::CompoundJointConstraint(robots(), 0, timeStep));
   postureTask = std::make_shared<mc_tasks::PostureTask>(solver(), 0, 10.0, 5.0);
-  LOG_INFO("MCController(base) ready")
+  mc_rtc::log::info("MCController(base) ready");
 }
 
 MCController::~MCController() {}
 
 mc_rbdyn::Robot & MCController::loadRobot(mc_rbdyn::RobotModulePtr rm, const std::string & name)
 {
+  loadRobot(rm, name, realRobots(), false);
+  return loadRobot(rm, name, robots(), true);
+}
+
+mc_rbdyn::Robot & MCController::loadRobot(mc_rbdyn::RobotModulePtr rm,
+                                          const std::string & name,
+                                          mc_rbdyn::Robots & robots,
+                                          bool updateNrVars)
+{
   assert(rm);
-  auto & r = robots().load(*rm);
+  auto & r = robots.load(*rm);
   r.name(name);
   r.mbc().gravity = mc_rtc::constants::gravity;
   r.forwardKinematics();
@@ -117,7 +126,10 @@ mc_rbdyn::Robot & MCController::loadRobot(mc_rbdyn::RobotModulePtr rm, const std
     }
     data("surfaces").add(r.name(), r.availableSurfaces());
   }
-  solver().updateNrVars();
+  if(updateNrVars)
+  {
+    solver().updateNrVars();
+  }
   return r;
 }
 
@@ -161,7 +173,7 @@ bool MCController::resetObservers()
   }
   if(!pipelineObservers_.empty())
   {
-    LOG_SUCCESS("Observers: " << pipelineDesc);
+    mc_rtc::log::success("Observers: {}", pipelineDesc);
   }
   return true;
 }
@@ -175,7 +187,7 @@ bool MCController::runObservers()
     bool r = observer->run(*this);
     if(!r)
     {
-      LOG_ERROR("Observer " << observer->name() << " failed to run");
+      mc_rtc::log::error("Observer {} failed to run", observer->name());
       return false;
     }
     if(updateRobots)
@@ -195,18 +207,7 @@ bool MCController::run(mc_solver::FeedbackType fType)
 {
   if(!qpsolver->run(fType))
   {
-    LOG_ERROR("QP failed to run()")
-    return false;
-  }
-  qpsolver->fillTorque(dynamicsConstraint);
-  return true;
-}
-
-bool MCController::runClosedLoop()
-{
-  if(!qpsolver->runClosedLoop(real_robots))
-  {
-    LOG_ERROR("QP failed to run()")
+    mc_rtc::log::error("QP failed to run()");
     return false;
   }
   qpsolver->fillTorque(dynamicsConstraint);
@@ -224,17 +225,16 @@ void MCController::reset(const ControllerResetData & reset_data)
   supported_robots(supported);
   if(supported.size() && std::find(supported.cbegin(), supported.cend(), robot().name()) == supported.end())
   {
-    LOG_ERROR_AND_THROW(std::runtime_error, "[MCController] The main robot "
-                                                << robot().name()
-                                                << " is not supported by this controller. Supported robots are: ["
-                                                << mc_rtc::io::to_string(supported) << "].");
+    mc_rtc::log::error_and_throw<std::runtime_error>(
+        "[MCController] The main robot {} is not supported by this controller. Supported robots are: [{}]",
+        robot().name(), mc_rtc::io::to_string(supported));
   }
 
   robot().mbc().zero(robot().mb());
   robot().mbc().q = reset_data.q;
   postureTask->posture(reset_data.q);
-  rbd::forwardKinematics(robot().mb(), robot().mbc());
-  rbd::forwardVelocity(robot().mb(), robot().mbc());
+  robot().forwardKinematics();
+  robot().forwardVelocity();
 }
 
 const mc_rbdyn::Robot & MCController::robot() const
@@ -287,12 +287,6 @@ mc_rtc::Logger & MCController::logger()
 void MCController::supported_robots(std::vector<std::string> & out) const
 {
   out = {};
-}
-
-void MCController::realRobots(std::shared_ptr<mc_rbdyn::Robots> realRobots)
-{
-  solver().realRobots(realRobots);
-  real_robots = realRobots;
 }
 
 const mc_rbdyn::Robots & MCController::realRobots() const

@@ -19,7 +19,7 @@ LookAtSurfaceTask::LookAtSurfaceTask(const mc_rbdyn::Robots & robots,
 : LookAtTask(bodyName, bodyVector, robots, robotIndex, stiffness, weight), sRobotIndex(surfaceRobotIndex),
   sName(surfaceName), offset_(sva::PTransformd::Identity())
 {
-  const mc_rbdyn::Robot & robot = robots.robot(rIndex);
+  const auto & robot = robots.robot(robotIndex);
   bIndex = robot.bodyIndexByName(bodyName);
 
   finalize(robots.mbs(), static_cast<int>(rIndex), bodyName, bodyVector, bodyVector);
@@ -53,7 +53,9 @@ static auto registered_lookat_surface = mc_tasks::MetaTaskLoader::register_load_
     [](mc_solver::QPSolver & solver, const mc_rtc::Configuration & config) {
       auto t = std::make_shared<mc_tasks::LookAtSurfaceTask>(
           solver.robots(), robotIndexFromConfig(config, solver.robots(), "lookAtSurface"), config("body"),
-          config("bodyVector"), config("surfaceRobotIndex"), config("surface"));
+          config("bodyVector"),
+          robotIndexFromConfig(config, solver.robots(), "lookAtSurface", false, "surfaceRobotIndex", "surfaceRobot"),
+          config("surface"));
       if(config.has("weight"))
       {
         t->weight(config("weight"));

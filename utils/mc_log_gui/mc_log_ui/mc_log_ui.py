@@ -19,11 +19,11 @@ from functools import partial
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-import ui
-from mc_log_data import Data
-from mc_log_tab import MCLogTab
-from mc_log_types import LineStyle, TextWithFontSize, GraphLabels, ColorsSchemeConfiguration, PlotType
-from mc_log_utils import InitDialogWithOkCancel
+from . import ui
+from .mc_log_data import Data
+from .mc_log_tab import MCLogTab
+from .mc_log_types import LineStyle, TextWithFontSize, GraphLabels, ColorsSchemeConfiguration, PlotType
+from .mc_log_utils import InitDialogWithOkCancel
 
 try:
   import mc_rbdyn
@@ -1035,11 +1035,12 @@ class MCLogUI(QtWidgets.QMainWindow):
         ("Error", "error_q", None, None, None),
         ("Sensor torques", "tauIn", None, None, None),
         ("Command torques", "tauOut", None, None, None),
+        ("Sensor/Command torques", "tauIn", "tauOut", None, None),
         ("Encoders/Commands", "qIn", "qOut", None, None),
         ("Error/Torque", "error_q", "tauIn", None, None),
         ("Encoders velocity", None, None, "qIn", None),
         ("Command velocity", None, None, "qOut", None),
-        ("Encoders/Commands velocity", None, None, "qIn", "qOut"),
+        ("Encoders velocity/Commands velocity", None, None, "qIn", "qOut"),
         ("Encoders/Encoders velocity", "qIn", None, None, "qIn"),
         ("Command/Command velocity", "qOut", None, None, "qOut"),
         ]
@@ -1048,7 +1049,7 @@ class MCLogUI(QtWidgets.QMainWindow):
     menuEntries = [ (n, y1, y2, y1d, y2d) for n, y1, y2, y1d, y2d in menuEntries if all([validEntry(y) for y in [y1, y2, y1d, y2d]]) ]
     for n, y1, y2, y1d, y2d in menuEntries:
       act = QtWidgets.QAction(n, self.ui.menuCommonPlots)
-      act.triggered.connect(lambda checked, n_=n, y1_=y1, y2_=y2, y1d_=y1d, y2d_=y2: MCLogJointDialog(self, self.rm, n_, y1_, y2_, y1d_, y2d_).exec_())
+      act.triggered.connect(lambda checked, n_=n, y1_=y1, y2_=y2, y1d_=y1d, y2d_=y2d: MCLogJointDialog(self, self.rm, n_, y1_, y2_, y1d_, y2d_).exec_())
       self.ui.menuCommonPlots.addAction(act)
     fSensors = set()
     for k in self.data:

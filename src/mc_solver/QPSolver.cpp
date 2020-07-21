@@ -71,15 +71,13 @@ std::vector<mc_solver::ContactMsg> contactsMsgFromContacts
 
 namespace mc_solver
 {
-
   
 /**
  *  QPSolver
  */
-  
 
 QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
-  : robots_p(robots), timeStep(timeStep), solver(),
+  : robots_p(robots), timeStep(timeStep),
     first_run_(true), feedback_(false), feedback_old_(false), switch_trigger(false)
 {
   solver = std::make_shared<tasks::qp::QPSolver>();
@@ -87,7 +85,12 @@ QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
 
   if(timeStep <= 0)
   {
-    LOG_ERROR_AND_THROW(std::invalid_argument, "timeStep has to be > 0! timeStep = " << timeStep)
+    mc_rtc::log::error_and_throw<std::invalid_argument>("timeStep has to be > 0! timeStep = {}", timeStep);
+  }
+  realRobots_p = std::make_shared<mc_rbdyn::Robots>();
+  for(const auto & robot : robots->robots())
+  {
+    realRobots_p->robotCopy(robot);
   }
 
   elapsed_ = {{"updateCurrentState", 0},
@@ -128,7 +131,11 @@ void QPSolver::addTask(mc_tasks::MetaTask * task)
     {
       task->addToLogger(*logger_);
     }
-    LOG_INFO("Added task " << task->name())
+    if(gui_)
+    {
+      addTaskToGUI(task);
+    }
+    mc_rtc::log::info("Added task {}", task->name());
   }
 }
 
@@ -160,7 +167,11 @@ void QPSolver::removeTask(mc_tasks::MetaTask * task)
     {
       task->removeFromLogger(*logger_);
     }
-    LOG_INFO("Removed task " << task->name())
+    if(gui_)
+    {
+      task->removeFromGUI(*gui_);
+    }
+    mc_rtc::log::info("Removed task {}", task->name());
   }
 }
 
@@ -194,7 +205,11 @@ void QPSolver::setContacts(const std::vector<mc_rbdyn::Contact> & contacts)
   {
     for(const auto & contact : contacts_)
     {
-      logger_->removeLogEntry("contact_" + contact.r1Surface()->name() + "_" + contact.r2Surface()->name());
+      const std::string & r1 = robots().robot(contact.r1Index()).name();
+      const std::string & r1S = contact.r1Surface()->name();
+      const std::string & r2 = robots().robot(contact.r2Index()).name();
+      const std::string & r2S = contact.r2Surface()->name();
+      logger_->removeLogEntry("contact_" + r1 + "::" + r1S + "_" + r2 + "::" + r2S);
     }
   }
   contacts_ = contacts;
@@ -202,7 +217,11 @@ void QPSolver::setContacts(const std::vector<mc_rbdyn::Contact> & contacts)
   {
     for(const auto & contact : contacts_)
     {
-      logger_->addLogEntry("contact_" + contact.r1Surface()->name() + "_" + contact.r2Surface()->name(),
+      const std::string & r1 = robots().robot(contact.r1Index()).name();
+      const std::string & r1S = contact.r1Surface()->name();
+      const std::string & r2 = robots().robot(contact.r2Index()).name();
+      const std::string & r2S = contact.r2Surface()->name();
+      logger_->addLogEntry("contact_" + r1 + "::" + r1S + "_" + r2 + "::" + r2S,
                            [this, &contact]() { return desiredContactForce(contact); });
     }
   }
@@ -284,13 +303,13 @@ const sva::ForceVecd QPSolver::desiredContactForce(const mc_rbdyn::Contact & con
     }
     else
     {
-      LOG_ERROR_AND_THROW(std::runtime_error, "QPSolver - cannot compute desired contact force for surface "
-                                                  << contact.r1Surface()->name());
+      mc_rtc::log::error_and_throw<std::runtime_error>("QPSolver - cannot compute desired contact force for surface {}",
+                                                       contact.r1Surface()->name());
     }
   }
   else
   {
-    LOG_ERROR_AND_THROW(std::runtime_error, "QPSolver - cannot handle cases where qp_contact.first != -1");
+    mc_rtc::log::error_and_throw<std::runtime_error>("QPSolver - cannot handle cases where qp_contact.first != -1");
   }
 }
 
@@ -308,8 +327,11 @@ bool QPSolver::run(FeedbackType fType)
     case FeedbackType::JointsWVelocity:
       success = runJointsFeedback(true);
       break;
+    case FeedbackType::ObservedRobots:
+      success = runClosedLoop();
+      break;
     default:
-      LOG_ERROR("FeedbackType set to unknown value")
+      mc_rtc::log::error("FeedbackType set to unknown value");
       break;
   }
   if(success)
@@ -420,23 +442,37 @@ bool QPSolver::runJointsFeedback(bool wVelocity)
   return false;
 }
 
-bool QPSolver::runClosedLoop(std::shared_ptr<mc_rbdyn::Robots> real_robots)
+bool QPSolver::runClosedLoop()
 {
-  // =============================
-  // 1 - Save old integrator state
-  // =============================
-  std::vector<std::vector<double>> oldQ(robot().mbc().q);
-  std::vector<std::vector<double>> oldQd(robot().mbc().alpha);
+  if(control_q_.size() < robots().size())
+  {
+    control_q_.resize(robots().size());
+    control_alpha_.resize(robots().size());
+  }
 
-  // Set robot state to estimator
-  robot().mbc().q = real_robots->robot().mbc().q;
-  robot().mbc().alpha = real_robots->robot().mbc().alpha;
+  for(size_t i = 0; i < robots().size(); ++i)
+  {
+    auto & robot = robots().robot(i);
+    const auto & realRobot = realRobots().robot(i);
 
-  // COMPUTE QP on estimated robot
+    // Save old integrator state
+    control_q_[i] = robot.mbc().q;
+    control_alpha_[i] = robot.mbc().alpha;
+
+    // Set robot state from estimator
+    robot.mbc().q = realRobot.mbc().q;
+    robot.mbc().alpha = realRobot.mbc().alpha;
+    robot.forwardKinematics();
+    robot.forwardVelocity();
+    robot.forwardAcceleration();
+  }
+
+  // Update tasks from estimated robots
   for(auto & t : metaTasks_)
   {
     t->update(*this);
   }
+  
   bool success = solver->solveNoMbcUpdate(robots().mbs(), robots().mbcs());
   solver->updateMbc(robot().mbc(), static_cast<int>(robots().robotIndex()));
 
@@ -449,8 +485,26 @@ bool QPSolver::runClosedLoop(std::shared_ptr<mc_rbdyn::Robots> real_robots)
   rbd::forwardKinematics(robot().mb(), robot().mbc());
   rbd::forwardVelocity(robot().mb(), robot().mbc());
 
-  __fillResult();
-  return success;
+  // Solve QP and integrate
+  if(solver.solveNoMbcUpdate(robots_p->mbs(), robots_p->mbcs()))
+  {
+    for(size_t i = 0; i < robots_p->mbs().size(); ++i)
+    {
+      auto & robot = robots().robot(i);
+      robot.mbc().q = control_q_[i];
+      robot.mbc().alpha = control_alpha_[i];
+      if(robot.mb().nrDof() > 0)
+      {
+        solver.updateMbc(robot.mbc(), static_cast<int>(i));
+        robot.eulerIntegration(timeStep);
+        robot.forwardKinematics();
+        robot.forwardVelocity();
+        robot.forwardAcceleration();
+      }
+    }
+    return true;
+  }
+  return false;
 }
   
 bool QPSolver::run(bool dummy) // Rafa's version
@@ -692,10 +746,6 @@ const rbd::MultiBodyConfig & QPSolver::mbc_calc() const
   return (*mbcs_calc_)[robots().robotIndex()];
 }
     
-void QPSolver::realRobots(std::shared_ptr<mc_rbdyn::Robots> realRobots)
-{
-  realRobots_p = realRobots;
-}
 const mc_rbdyn::Robots & QPSolver::realRobots() const
 {
   assert(realRobots_p);
@@ -827,8 +877,8 @@ void QPSolver::gui(std::shared_ptr<mc_rtc::gui::StateBuilder> gui)
         {"Contacts", "Add"},
         mc_rtc::gui::Form("Add contact",
                           [this](const mc_rtc::Configuration & data) {
-                            LOG_INFO("Add contact " << data("R0") << "::" << data("R0 surface") << "/" << data("R1")
-                                                    << "::" << data("R1 surface"))
+                            mc_rtc::log::info("Add contact {}::{}/{}::{}", data("R0"), data("R0 surface"), data("R1"),
+                                              data("R1 surface"));
                             auto str2idx = [this](const std::string & rName) {
                               for(const auto & r : robots())
                               {
@@ -837,7 +887,7 @@ void QPSolver::gui(std::shared_ptr<mc_rtc::gui::StateBuilder> gui)
                                   return r.robotIndex();
                                 }
                               }
-                              LOG_ERROR("The robot name you provided does not match any in the solver")
+                              mc_rtc::log::error("The robot name you provided does not match any in the solver");
                               return static_cast<unsigned int>(robots().size());
                             };
                             unsigned int r0Index = str2idx(data("R0"));

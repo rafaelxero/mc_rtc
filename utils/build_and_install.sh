@@ -6,54 +6,20 @@
 
 shopt -s expand_aliases
 
+
 ##########################
 #  --  Configuration --  #
 ##########################
 
 readonly this_dir=`cd $(dirname $0); pwd`
 readonly mc_rtc_dir=`cd $this_dir/..; pwd`
-SOURCE_DIR=`cd $mc_rtc_dir/../; pwd`
-
 readonly PYTHON_VERSION=`python -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor))'`
 
-#default settings
-export INSTALL_PREFIX="/usr/local"
-export WITH_ROS_SUPPORT="true"
-export WITH_PYTHON_SUPPORT="true"
-export PYTHON_USER_INSTALL="false"
-export PYTHON_FORCE_PYTHON2="false"
-export PYTHON_FORCE_PYTHON3="false"
-export PYTHON_BUILD_PYTHON2_AND_PYTHON3="false"
-export WITH_LSSOL="false"
-export WITH_HRP2="false"
-export WITH_HRP4="false"
-export WITH_HRP5="false"
-export BUILD_TYPE="RelWithDebInfo"
-export BUILD_TESTING="true"
-export BUILD_BENCHMARKS="false"
-export INSTALL_SYSTEM_DEPENDENCIES="true"
-export CLONE_ONLY="false"
-export SKIP_UPDATE="false"
-# This configuration option lets the script choose what to do when local git repositories are in
-# an unclean state (have local changes). The default false will stop the script with an error.
-# If true, the repository will be compiled as-is without trying to fetch the remote changes.
-export SKIP_DIRTY_UPDATE="false"
-if command -v nproc > /dev/null
-then
-   BUILD_CORE=`nproc`
-else
-   BUILD_CORE=`sysctl -n hw.ncpu`
-fi
-export CMAKE_BUILD_PARALLEL_LEVEL=${BUILD_CORE}
-LOG_PATH="/tmp"
-BUILD_LOGFILE="$LOG_PATH/build_and_install_warnings-`date +%Y-%m-%d-%H-%M-%S`.log"
-export ASK_USER_INPUT="true"
-
-readonly TEE=`which tee`
+. "$this_dir/build_and_install_default_config.sh"
 
 echo_log()
 {
-  echo $1 | $TEE -a $BUILD_LOGFILE
+  echo "$1" | $TEE -a $BUILD_LOGFILE
 }
 
 exec_log()
@@ -85,18 +51,39 @@ mc_rtc_extra_steps()
   true
 }
 
+echo_log ""
+echo_log "========================================"
+echo_log "== mc_rtc build_and_install.sh script =="
+echo_log "========================================"
+echo_log ""
+
+
+echo_log "-- Loaded default configuration from $this_dir/build_and_install_default_config.sh"
+if [ -f "$this_dir/build_and_install_user_config.sh" ]; then
+  . "$this_dir/build_and_install_user_config.sh"
+  echo_log "-- Loaded user configuration from $this_dir/build_and_install_user_config.sh"
+else
+  echo_log "-- No user configuration file $this_dir/build_and_install_user_config.sh provided, using default configuration from $this_dir/build_and_install_default_config.sh"
+  echo "   If you wish to create a custom user configuration:"
+  echo "     - Copy the sample configuration: cp $this_dir/build_and_install_user_config.sample.sh $this_dir/build_and_install_user_config.sh"
+  echo "     - Edit the options to your liking"
+fi
+
 readonly HELP_STRING="$(basename $0) [OPTIONS] ...
-    --help                     (-h)               : print this help
-    --install-prefix           (-i) PATH          : the directory used to install everything           (default $INSTALL_PREFIX)
-    --source-dir               (-s) PATH          : the directory used to clone everything             (default $SOURCE_DIR)
-    --build-type                    Type          : the build type to use                              (default $BUILD_TYPE)
-    --build-testing                 {true, false} : whether to build and run unit tests                (default $BUILD_TESTING)
-    --build-benchmarks              {true, false} : whether to build and run benchmarks                (default $BUILD_BENCHMARKS)
-    --build-core               (-j) N             : number of cores used for building                  (default $BUILD_CORE)
-    --with-lssol                                  : enable LSSOL (requires multi-contact group access) (default $WITH_LSSOL)
-    --with-hrp2                                   : enable HRP2 (requires mc-hrp2 group access)        (default $WITH_HRP2)
-    --with-hrp4                                   : enable HRP4 (requires mc-hrp4 group access)        (default $WITH_HRP4)
-    --with-hrp5                                   : enable HRP5 (requires mc-hrp5 group access)        (default $WITH_HRP5)
+    --help                (-h)               : print this help
+    --install-prefix      (-i) PATH          : the directory used to install everything                (default $INSTALL_PREFIX)
+    --source-dir          (-s) PATH          : the directory used to clone everything                  (default $SOURCE_DIR)
+    --build-type               Type          : the build type to use                                   (default $BUILD_TYPE)
+    --build-testing            {true, false} : whether to build and run unit tests                     (default $BUILD_TESTING)
+    --build-benchmarks         {true, false} : whether to build and run benchmarks                     (default $BUILD_BENCHMARKS)
+    --build-core          (-j) N             : number of cores used for building                       (default $BUILD_CORE)
+    --with-lssol                             : enable LSSOL (requires multi-contact group access)      (default $WITH_LSSOL)
+    --with-hrp2                              : enable HRP2 (requires mc-hrp2 group access)             (default $WITH_HRP2)
+    --with-hrp4                              : enable HRP4 (requires mc-hrp4 group access)             (default $WITH_HRP4)
+    --with-hrp4j                             : enable HRP4J (requires mc-hrp4 group access)            (default $WITH_HRP4J)
+    --with-hrp5                              : enable HRP5 (requires mc-hrp5 group access)             (default $WITH_HRP5)
+    --with-mc_openrtm                        : enable the mc_openrtm interface (requires hrpsys-base)  (default $WITH_MC_OPENRTM)
+    --with-mc_udp                            : enable the mc_udp interface (requires hrpsys-base)      (default $WITH_MC_UDP)
     --with-python-support           {true, false} : whether to build with Python support               (default $WITH_PYTHON_SUPPORT)
     --python-user-install           {true, false} : whether to install Python bindings with user       (default $PYTHON_USER_INSTALL)
     --python-force-python2          {true, false} : whether to enforce the use of Python 2             (default $PYTHON_FORCE_PYTHON2)
@@ -194,10 +181,28 @@ do
         check_true_false --with-hrp4 "$WITH_HRP4"
         ;;
 
+        --with-hrp4j)
+        i=$(($i+1))
+        WITH_HRP4J="${!i}"
+        check_true_false --with-hrp4j "$WITH_HRP4J"
+        ;;
+
         --with-hrp5)
         i=$(($i+1))
         WITH_HRP5="${!i}"
         check_true_false --with-hrp5 "$WITH_HRP5"
+        ;;
+
+        --with-mc_udp)
+        i=$(($i+1))
+        WITH_MC_UDP="${!i}"
+        check_true_false --with-mc_udp "$WITH_MC_UDP"
+        ;;
+
+        --with-mc_openrtm)
+        i=$(($i+1))
+        WITH_MC_OPENRTM="${!i}"
+        check_true_false --with-mc_openrtm "$WITH_MC_OPENRTM"
         ;;
 
         --build-type)
@@ -257,6 +262,12 @@ do
         ROS_DISTRO="${!i}"
         ;;
 
+        --allow-root)
+        i=$(($i+1))
+        ALLOW_ROOT="${!i}"
+        check_true_false --allow-root "$ALLOW_ROOT"
+        ;;
+
         *)
         echo "unknown parameter $i ($key)"
         exit_failure
@@ -265,6 +276,14 @@ do
 
     i=$(($i+1))
 done
+
+if [ "$ALLOW_ROOT" = "false" ] && [ $(id -u) -eq 0 ]
+then
+  echo_log "Please run this script as a non-root user. sudo permission will be asked where necessary."
+  echo_log "You may force installation as root by setting ALLOW_ROOT=true (--allow-root true). Please note that this may have unintended consequences."
+  exit_failure
+fi
+
 if $WITH_PYTHON_SUPPORT
 then
   WITH_PYTHON_SUPPORT=ON
@@ -309,6 +328,94 @@ git_update()
   git pull origin $1 && git submodule sync && git submodule update --init --recursive
 }
 
+install_apt()
+{
+  TO_INSTALL=
+  for pkg in $*
+  do
+    has_package=`dpkg -l ${pkg} 2> /dev/null |grep "^ii" > /dev/null`
+    if [ $? -ne 0 ]
+    then
+      TO_INSTALL="$TO_INSTALL $pkg"
+    fi
+  done
+  if [ "${TO_INSTALL}" != "" ]
+  then
+    exec_log sudo apt-get update
+    exec_log sudo apt-get -y install ${TO_INSTALL}
+  fi
+  exit_if_error "-- [ERROR] Could not install one of the following packages ${TO_INSTALL}."
+}
+
+touch $BUILD_LOGFILE
+exit_if_error "-- [ERROR] Could not create log file $BUILD_LOGFILE"
+ln -sf $BUILD_LOGFILE "$LOG_PATH/build_and_install_warnings-latest.log"
+
+echo_log "-- Log file will be written to $BUILD_LOGFILE "
+echo_log ""
+echo_log "-- Requested installation with the following options:"
+echo_log "   INSTALL_PREFIX=$INSTALL_PREFIX"
+echo_log "   SOURCE_DIR=$SOURCE_DIR"
+echo_log "   WITH_ROS_SUPPORT=$WITH_ROS_SUPPORT"
+echo_log "   WITH_PYTHON_SUPPORT=$WITH_PYTHON_SUPPORT"
+echo_log "   PYTHON_FORCE_PYTHON2=$PYTHON_FORCE_PYTHON2"
+echo_log "   PYTHON_FORCE_PYTHON3=$PYTHON_FORCE_PYTHON3"
+echo_log "   PYTHON_BUILD_PYTHON2_AND_PYTHON3=$PYTHON_BUILD_PYTHON2_AND_PYTHON3"
+echo_log "   BUILD_TYPE=$BUILD_TYPE"
+echo_log "   INSTALL_SYSTEM_DEPENDENCIES=$INSTALL_SYSTEM_DEPENDENCIES"
+echo_log "   BUILD_CORE=$BUILD_CORE"
+echo_log "   BUILD_TESTING=$BUILD_TESTING"
+echo_log "   BUILD_BENCHMARKS=$BUILD_BENCHMARKS"
+echo_log "   CLONE_ONLY=$CLONE_ONLY"
+echo_log "   WITH_LSSOL=$WITH_LSSOL"
+echo_log "   WITH_HRP2=$WITH_HRP2"
+echo_log "   WITH_HRP4=$WITH_HRP4"
+echo_log "   WITH_HRP4J=$WITH_HRP4J"
+echo_log "   WITH_HRP5=$WITH_HRP5"
+echo_log "   WITH_MC_UDP=$WITH_MC_UDP"
+echo_log "   MC_UDP_INSTALL_PREFIX=$MC_UDP_INSTALL_PREFIX"
+echo_log "   WITH_MC_OPENRTM=$WITH_MC_OPENRTM"
+echo_log "   MC_OPENRTM_INSTALL_PREFIX=$MC_OPENRTM_INSTALL_PREFIX"
+echo_log "   SKIP_UPDATE=$SKIP_UPDATE"
+echo_log "   SKIP_DIRTY_UPDATE=$SKIP_DIRTY_UPDATE"
+echo_log "   BUILD_LOGFILE=$BUILD_LOGFILE"
+echo_log "   ASK_USER_INPUT=$ASK_USER_INPUT"
+
+##################################################
+## Extra OS/Distribution specific configuration ##
+##################################################
+echo_log ""
+echo_log "========================"
+echo_log "== System information =="
+echo_log "========================"
+echo_log ""
+if [[ $OSTYPE == "linux-gnu" ]]
+then
+  exec_log lsb_release -a
+fi
+exec_log cmake --version
+exec_log python --version
+
+echo_log "-- Loading extra configuration for $OSTYPE"
+if [[ $OSTYPE == "darwin"* ]]
+then
+  . $this_dir/config_build_and_install.macos.sh
+elif [[ $OSTYPE == "linux-gnu" ]]
+then
+  if [ -f $this_dir/config_build_and_install.`lsb_release -sc`.sh ]
+  then
+    . $this_dir/config_build_and_install.`lsb_release -sc`.sh
+    ROS_APT_DEPENDENCIES="ros-${ROS_DISTRO}-ros-base ros-${ROS_DISTRO}-rosdoc-lite ros-${ROS_DISTRO}-common-msgs ros-${ROS_DISTRO}-tf2-ros ros-${ROS_DISTRO}-xacro ros-${ROS_DISTRO}-rviz"
+  else
+    ROS_DISTRO=""
+    APT_DEPENDENCIES=""
+    ROS_APT_DEPENDENCIES=""
+  fi
+else
+  # Assume Windows
+  . $this_dir/config_build_and_install.windows.sh
+fi
+
 SUDO_CMD='sudo -E'
 if [ ! -d $INSTALL_PREFIX ]
 then
@@ -330,95 +437,6 @@ export DYLD_LIBRARY_PATH=$INSTALL_PREFIX/lib:$DYLD_LIBRARY_PATH
 export PKG_CONFIG_PATH=$INSTALL_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH
 export PYTHONPATH=$INSTALL_PREFIX/lib/python$PYTHON_VERSION/site-packages:$PYTHONPATH
 
-touch $BUILD_LOGFILE
-exit_if_error "-- [ERROR] Could not create log file $BUILD_LOGFILE"
-ln -sf $BUILD_LOGFILE "$LOG_PATH/build_and_install_warnings-latest.log"
-
-echo_log ""
-echo_log "========================================"
-echo_log "== mc_rtc build_and_install.sh script =="
-echo_log "========================================"
-echo_log ""
-echo_log "-- Build and install log for mc_rtc generated on `date +%Y-%m-%d-%H:%M:%S`"
-echo "-- Log file will be written to $BUILD_LOGFILE "
-echo_log "-- Requested installation with the following options:"
-echo_log "   INSTALL_PREFIX=$INSTALL_PREFIX"
-echo_log "   SOURCE_DIR=$SOURCE_DIR"
-echo_log "   WITH_ROS_SUPPORT=$WITH_ROS_SUPPORT"
-echo_log "   WITH_PYTHON_SUPPORT=$WITH_PYTHON_SUPPORT"
-echo_log "   PYTHON_FORCE_PYTHON2=$PYTHON_FORCE_PYTHON2"
-echo_log "   PYTHON_FORCE_PYTHON3=$PYTHON_FORCE_PYTHON3"
-echo_log "   PYTHON_BUILD_PYTHON2_AND_PYTHON3=$PYTHON_BUILD_PYTHON2_AND_PYTHON3"
-echo_log "   BUILD_TYPE=$BUILD_TYPE"
-echo_log "   INSTALL_SYSTEM_DEPENDENCIES=$INSTALL_SYSTEM_DEPENDENCIES"
-echo_log "   BUILD_CORE=$BUILD_CORE"
-echo_log "   BUILD_TESTING=$BUILD_TESTING"
-echo_log "   BUILD_BENCHMARKS=$BUILD_BENCHMARKS"
-echo_log "   CLONE_ONLY=$CLONE_ONLY"
-echo_log "   WITH_LSSOL=$WITH_LSSOL"
-echo_log "   WITH_HRP2=$WITH_HRP2"
-echo_log "   WITH_HRP4=$WITH_HRP4"
-echo_log "   WITH_HRP5=$WITH_HRP5"
-echo_log "   SKIP_UPDATE=$SKIP_UPDATE"
-echo_log "   SKIP_DIRTY_UPDATE=$SKIP_DIRTY_UPDATE"
-echo_log "   BUILD_LOGFILE=$BUILD_LOGFILE"
-echo_log "   ASK_USER_INPUT=$ASK_USER_INPUT"
-
-install_apt()
-{
-  TO_INSTALL=
-  for pkg in $*
-  do
-    has_package=`dpkg -l ${pkg} 2> /dev/null |grep "^ii" > /dev/null`
-    if [ $? -ne 0 ]
-    then
-      TO_INSTALL="$TO_INSTALL $pkg"
-    fi
-  done
-  if [ "${TO_INSTALL}" != "" ]
-  then
-    exec_log sudo apt-get update
-    exec_log sudo apt-get -y install ${TO_INSTALL}
-  fi
-  exit_if_error "-- [ERROR] Could not install one of the following packages ${TO_INSTALL}."
-}
-
-##################################################
-## Extra OS/Distribution specific configuration ##
-##################################################
-echo_log ""
-echo_log "========================"
-echo_log "== System information =="
-echo_log "========================"
-echo_log ""
-if [ $OS = Ubuntu ]
-then
-  exec_log lsb_release -a
-fi
-exec_log cmake --version
-exec_log python --version
-
-echo_log "-- Loading extra configuration for $OSTYPE"
-if [[ $OSTYPE == "darwin"* ]]
-then
-  . $this_dir/config_build_and_install.macos.sh
-elif [[ $OSTYPE == "linux-gnu" ]]
-then
-  if [ -f $this_dir/config_build_and_install.`lsb_release -sc`.sh ]
-  then
-    . $this_dir/config_build_and_install.`lsb_release -sc`.sh
-    ROS_APT_DEPENDENCIES="ros-${ROS_DISTRO}-ros-base ros-${ROS_DISTRO}-rosdoc-lite python-catkin-lint ros-${ROS_DISTRO}-common-msgs ros-${ROS_DISTRO}-tf2-ros ros-${ROS_DISTRO}-xacro ros-${ROS_DISTRO}-rviz"
-  else
-    ROS_DISTRO=""
-    APT_DEPENDENCIES=""
-    ROS_APT_DEPENDENCIES=""
-  fi
-else
-  # Assume Windows
-  . $this_dir/config_build_and_install.windows.sh
-fi
-
-
 #make settings readonly
 readonly INSTALL_PREFIX
 readonly SOURCE_DIR
@@ -436,7 +454,12 @@ readonly CLONE_ONLY
 readonly WITH_LSSOL
 readonly WITH_HRP2
 readonly WITH_HRP4
+readonly WITH_HRP4J
 readonly WITH_HRP5
+readonly WITH_MC_OPENRTM
+readonly MC_OPENRTM_INSTALL_PREFIX
+readonly WITH_MC_UDP
+readonly MC_UDP_INSTALL_PREFIX
 readonly SKIP_UPDATE
 readonly SKIP_DIRTY_UPDATE
 readonly BUILD_LOGFILE
@@ -459,7 +482,12 @@ echo_log "   CLONE_ONLY=$CLONE_ONLY"
 echo_log "   WITH_LSSOL=$WITH_LSSOL"
 echo_log "   WITH_HRP2=$WITH_HRP2"
 echo_log "   WITH_HRP4=$WITH_HRP4"
+echo_log "   WITH_HRP4J=$WITH_HRP4J"
 echo_log "   WITH_HRP5=$WITH_HRP5"
+echo_log "   WITH_MC_UDP=$WITH_MC_UDP"
+echo_log "   MC_UDP_INSTALL_PREFIX=$MC_UDP_INSTALL_PREFIX"
+echo_log "   WITH_MC_OPENRTM=$WITH_MC_OPENRTM"
+echo_log "   MC_OPENRTM_INSTALL_PREFIX=$MC_OPENRTM_INSTALL_PREFIX"
 echo_log "   SKIP_UPDATE=$SKIP_UPDATE"
 echo_log "   SKIP_DIRTY_UPDATE=$SKIP_DIRTY_UPDATE"
 echo_log "   BUILD_LOGFILE=$BUILD_LOGFILE"
@@ -467,8 +495,7 @@ echo_log "   ASK_USER_INPUT=$ASK_USER_INPUT"
 echo_log "   ROS_DISTRO=$ROS_DISTRO"
 echo_log "   APT_DEPENDENCIES=$APT_DEPENDENCIES"
 echo_log "   ROS_APT_DEPENDENCIES=$ROS_APT_DEPENDENCIES"
-
-
+echo_log "   SUDO_CMD=$SUDO_CMD"
 
 ###################################
 #  --  APT/Brew dependencies  --  #
@@ -514,7 +541,7 @@ then
 elif [[ $OSTYPE == "linux-gnu" ]]
 then
   export OS=$(lsb_release -si)
-  if [ $OS = Ubuntu ]
+  if [ $OS = Ubuntu -o $OS = Debian ]
   then
     if $INSTALL_SYSTEM_DEPENDENCIES && $NOT_CLONE_ONLY
     then
@@ -550,7 +577,7 @@ then
   echo_log "================================"
   if [ ! -e /opt/ros/${ROS_DISTRO}/setup.bash ] && $NOT_CLONE_ONLY
   then
-    if [ $OS = Ubuntu ]
+    if [ $OS = Ubuntu -o $OS = Debian ]
     then
       sudo mkdir -p /etc/apt/sources.list.d/
       sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu `lsb_release -c -s` main" > /etc/apt/sources.list.d/ros-latest.list'
@@ -560,7 +587,7 @@ then
       exit_failure
     fi
   fi
-  if [ $OS = Ubuntu ]
+  if [ $OS = Ubuntu -o $OS = Debian ]
   then
     install_apt $ROS_APT_DEPENDENCIES
   fi
@@ -730,6 +757,33 @@ check_and_clone_git_dependency()
     echo_log "-- [OK] Found local repository for ${git_dep} in ${repo_dir}"
 
     if check_clean_work_tree; then
+      # Ensure that the remote is correct
+      echo "-- Checking remote URL"
+      remote="`git remote get-url origin`"
+      if  [[ "$remote" == *"github"* ]] && [[ $git_dep_uri != *"github"* ]] ||  [[ "$remote" == *"gite"* ]] && [[ $git_dep_uri != *"gite"* ]]
+      then
+        echo_log "-- The remote has changed for $repo, previous remote: $remote, desired remote $git_dep_uri."
+
+        if $ASK_USER_INPUT
+        then
+          read -r -p "--> Would you like to update to the new remote (warning this will overwrite the local master branch)? [y/N] " response
+          if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]
+          then
+            echo_log "-- Updating the remote url to $git_dep_uri"
+            git remote set-url origin $git_dep_uri
+            git remote update origin
+            exit_if_error "Failed to update the remote uri to $git_dep_uri"
+            git fetch origin
+            exit_if_error "Failed to fetch the remote uri to $git_dep_uri"
+            git reset --hard origin/master
+            exit_if_error "Failed to update to the the remote's master branch (new remote: $git_dep_uri)"
+          else
+            echo_log "-- Installation stopped because the locate remote $remote does not match the local remote uri ."
+            echo_log "   Please manually update the remote to $git_dep_uri and rerun the script."
+            exit_failure
+          fi
+        fi
+      fi
       prev_commit="`git rev-parse HEAD`"
       echo_log "-- [OK] repository is clean"
       echo_log "-- Attempting to update local repository from remote branch ${git_dep_branch}..."
@@ -759,7 +813,7 @@ check_and_clone_git_dependency()
 }
 
 # If the dependencies have already been cloned, check if the local state of the repository is clean before upgrading
-GIT_DEPENDENCIES="humanoid-path-planner/hpp-spline#v4.7.0 jrl-umi3218/SpaceVecAlg jrl-umi3218/sch-core jrl-umi3218/RBDyn jrl-umi3218/eigen-qld jrl-umi3218/eigen-quadprog jrl-umi3218/Tasks jrl-umi3218/mc_rbdyn_urdf"
+GIT_DEPENDENCIES="gabime/spdlog#v1.6.1 humanoid-path-planner/hpp-spline#v4.7.0 jrl-umi3218/SpaceVecAlg jrl-umi3218/sch-core jrl-umi3218/RBDyn jrl-umi3218/eigen-qld jrl-umi3218/eigen-quadprog jrl-umi3218/Tasks jrl-umi3218/mc_rbdyn_urdf"
 for repo in $GIT_DEPENDENCIES; do
   check_and_clone_git_dependency $repo $SOURCE_DIR
 done
@@ -817,6 +871,20 @@ then
   echo_log "-- [OK] Successfully cloned and updated the robot module $git_dep to $repo_dir"
 fi
 
+if $WITH_HRP4J
+then
+  if $WITH_ROS_SUPPORT
+  then
+    check_and_clone_git_dependency git@gite.lirmm.fr:mc-hrp4/hrp4j_description $CATKIN_DATA_WORKSPACE_SRC
+    echo_log "-- [OK] Successfully cloned and updated the robot description to $git_dep to $repo_dir (catkin)"
+  else
+    check_and_clone_git_dependency git@gite.lirmm.fr:mc-hrp4/hrp4j_description $SOURCE_DIR
+    echo_log "-- [OK] Successfully cloned and updated the robot description $git_dep to $repo_dir (no catkin)"
+  fi
+  check_and_clone_git_dependency git@gite.lirmm.fr:mc-hrp4/mc_hrp4j $SOURCE_DIR
+  echo_log "-- [OK] Successfully cloned and updated the robot module $git_dep to $repo_dir"
+fi
+
 if $WITH_HRP5
 then
   if $WITH_ROS_SUPPORT
@@ -829,6 +897,18 @@ then
   fi
   check_and_clone_git_dependency git@gite.lirmm.fr:mc-hrp5/mc_hrp5_p $SOURCE_DIR
   echo_log "-- [OK] Successfully cloned and updated the robot module $git_dep to $repo_dir"
+fi
+
+if $WITH_MC_UDP
+then
+  check_and_clone_git_dependency jrl-umi3218/mc_udp $SOURCE_DIR
+  echo_log "-- [OK] Successfully cloned and updated the interface $git_dep to $repo_dir"
+fi
+
+if $WITH_MC_OPENRTM
+then
+  check_and_clone_git_dependency jrl-umi3218/mc_openrtm $SOURCE_DIR
+  echo_log "-- [OK] Successfully cloned and updated the interface $git_dep to $repo_dir"
 fi
 
 echo_log "-- [OK] All extra repositiories have been successfully cloned or updated"
@@ -869,8 +949,10 @@ restore_path()
 
 build_project()
 {
+  # Build and install new version
   exec_log cmake --build . --config ${BUILD_TYPE}
   exit_if_error "[ERROR] Build failed for $1"
+  # Uninstall previously installed files
   if [ -f install_manifest.txt ]
   then
     exec_log ${SUDO_CMD} cmake --build . --target uninstall --config ${BUILD_TYPE}
@@ -885,7 +967,7 @@ build_project()
 
 test_project()
 {
-  exec_log ctest -C ${BUILD_TYPE}
+  exec_log ctest -V -C ${BUILD_TYPE}
   if [ $? -ne 0 ]
   then
     if [ ! -z $2 ]
@@ -908,7 +990,7 @@ test_project()
       exec_log ${SUDO_CMD} cmake --build . --target install --config ${BUILD_TYPE}
       exit_if_error "[ERROR] Build failed for $1"
       exit_if_error "-- [ERROR] Installation failed for $1"
-      exec_log ctest -C ${BUILD_TYPE}
+      exec_log ctest -V -C ${BUILD_TYPE}
       exit_if_error "-- [ERROR] Testing is still failing for $1, please investigate deeper"
     else
       echo_log "-- [ERROR] Testing failed for $1"
@@ -927,14 +1009,18 @@ build_git_dependency_configure_and_build()
   then
     hide_sh
   fi
-  exec_log cmake .. -DCMAKE_INSTALL_PREFIX:STRING="$INSTALL_PREFIX" \
+  custom_install_prefix=$INSTALL_PREFIX
+  if [ ! -z "$2" ]
+  then
+    custom_install_prefix="$2"
+  fi
+  exec_log cmake .. -DCMAKE_INSTALL_PREFIX:STRING="$custom_install_prefix" \
                     -DPYTHON_BINDING:BOOL=${WITH_PYTHON_SUPPORT} \
                     -DPYTHON_BINDING_USER_INSTALL:BOOL=${PYTHON_USER_INSTALL} \
                     -DPYTHON_BINDING_FORCE_PYTHON2:BOOL=${PYTHON_FORCE_PYTHON2} \
                     -DPYTHON_BINDING_FORCE_PYTHON3:BOOL=${PYTHON_FORCE_PYTHON3} \
                     -DPYTHON_BINDING_BUILD_PYTHON2_AND_PYTHON3:BOOL=${PYTHON_BUILD_PYTHON2_AND_PYTHON3} \
                     -DCMAKE_BUILD_TYPE:STRING="$BUILD_TYPE" \
-                    -DBUILD_PYTHON_INTERFACE:BOOL=OFF \
                     ${CMAKE_ADDITIONAL_OPTIONS}
   exit_if_error "-- [ERROR] CMake configuration failed for $git_dep"
   build_project $git_dep
@@ -961,7 +1047,7 @@ build_git_dependency_no_test()
   echo_log "-- Building git dependency $1 (no test)"
   OLD_CMAKE_OPTIONS="${CMAKE_ADDITIONAL_OPTIONS}"
   export CMAKE_ADDITIONAL_OPTIONS="${OLD_CMAKE_OPTIONS} -DBUILD_TESTING:BOOL=OFF"
-  build_git_dependency_configure_and_build $1
+  build_git_dependency_configure_and_build $1 $2
   export CMAKE_ADDITIONAL_OPTIONS="${OLD_CMAKE_OPTIONS}"
 }
 
@@ -984,7 +1070,12 @@ build_catkin_workspace()
 ##  --  GIT dependencies  --  #
 ###############################
 
-build_git_dependency_no_test humanoid-path-planner/hpp-spline#v4.7.0
+export OLD_CMAKE_OPTIONS="${CMAKE_ADDITIONAL_OPTIONS}"
+export CMAKE_ADDITIONAL_OPTIONS="-DSPDLOG_BUILD_EXAMPLE:BOOL=OFF -DSPDLOG_BUILD_SHARED:BOOL=ON ${CMAKE_ADDITIONAL_OPTIONS}"
+build_git_dependency_no_test gabime/spdlog
+export CMAKE_ADDITIONAL_OPTIONS="-DBUILD_PYTHON_INTERFACE:BOOL=OFF ${OLD_CMAKE_OPTIONS}"
+build_git_dependency_no_test humanoid-path-planner/hpp-spline
+export CMAKE_ADDITIONAL_OPTIONS="${OLD_CMAKE_OPTIONS}"
 if [ "x$WITH_PYTHON_SUPPORT" == xON ]
 then
   build_git_dependency jrl-umi3218/Eigen3ToPython eigen
@@ -1027,7 +1118,7 @@ echo_log "====================="
 echo_log ""
 
 cd $mc_rtc_dir
-git remote update
+git remote update origin
 current_commit=`git rev-parse HEAD`
 current_branch_name="`git rev-parse --abbrev-ref HEAD`"
 remote_commit=`git rev-parse master@{upstream}`
@@ -1132,6 +1223,18 @@ then
   echo_log "-- [OK] Successfully built the robot module $git_dep"
 fi
 
+if $WITH_HRP4J
+then
+  echo_log "-- Installing with HRP4J robot support"
+  if ! $WITH_ROS_SUPPORT
+  then
+    build_git_dependency git@gite.lirmm.fr:mc-hrp4/hrp4j
+    echo_log "-- [OK] Successfully built the robot description $git_dep (no catkin)"
+  fi
+  build_git_dependency git@gite.lirmm.fr:mc-hrp4/mc_hrp4j
+  echo_log "-- [OK] Successfully built the robot module $git_dep"
+fi
+
 if $WITH_HRP5
 then
   echo_log "-- Installing with HRP5 robot support"
@@ -1142,6 +1245,20 @@ then
   fi
   build_git_dependency git@gite.lirmm.fr:mc-hrp5/mc_hrp5_p
   echo_log "-- [OK] Successfully built the robot module $git_dep"
+fi
+
+if $WITH_MC_UDP
+then
+  echo_log "-- Installing with mc_udp interface support"
+  build_git_dependency_no_test jrl-umi3218/mc_udp $MC_UDP_INSTALL_PREFIX
+  echo_log "-- [OK] Successfully built the interface $git_dep"
+fi
+
+if $WITH_MC_OPENRTM
+then
+  echo_log "-- Installing with mc_udp interface support"
+  build_git_dependency_no_test jrl-umi3218/mc_openrtm $MC_OPENRTM_INSTALL_PREFIX
+  echo_log "-- [OK] Successfully built the interface $git_dep"
 fi
 
 echo_log "-- [SUCCESS] All extra dedencencies have been installed"

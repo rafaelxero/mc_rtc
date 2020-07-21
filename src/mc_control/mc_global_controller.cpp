@@ -13,6 +13,7 @@
 #include <mc_rtc/gui/Form.h>
 #include <mc_rtc/gui/Label.h>
 #include <mc_rtc/gui/NumberInput.h>
+#include <mc_rtc/io_utils.h>
 #include <mc_rtc/logging.h>
 
 #include <RBDyn/EulerIntegration.h>
@@ -37,8 +38,7 @@ MCGlobalController::MCGlobalController(const std::string & conf, std::shared_ptr
 }
 
 MCGlobalController::MCGlobalController(const GlobalConfiguration & conf)
-: config(conf), current_ctrl(""), next_ctrl(""), controller_(nullptr), next_controller_(nullptr),
-  real_robots(std::make_shared<mc_rbdyn::Robots>())
+: config(conf), current_ctrl(""), next_ctrl(""), controller_(nullptr), next_controller_(nullptr)
 {
   // Loading observer modules
   for(const auto & observerName : config.enabled_observers)
@@ -53,12 +53,12 @@ MCGlobalController::MCGlobalController(const GlobalConfiguration & conf)
     }
     else
     {
-      LOG_ERROR("Observer " << observerName << " requested in \"EnabledObservers\" configuration but not available");
-      LOG_INFO("Note common reasons for this error include:\n"
-               "\t- The observer name does not match the name exported by EXPORT_OBSERVER_MODULE\n"
-               "\t- The library is not in a path read by mc_rtc\n"
-               "\t- The constuctor segfaults\n"
-               "\t- The library hasn't been properly linked");
+      mc_rtc::log::error("Observer {} requested in \"EnabledObservers\" configuration but not available", observerName);
+      mc_rtc::log::info("Note common reasons for this error include:\n"
+                        "\t- The observer name does not match the name exported by EXPORT_OBSERVER_MODULE\n"
+                        "\t- The library is not in a path read by mc_rtc\n"
+                        "\t- The constuctor segfaults\n"
+                        "\t- The library hasn't been properly linked");
     }
   }
 
@@ -71,8 +71,7 @@ MCGlobalController::MCGlobalController(const GlobalConfiguration & conf)
   }
   catch(mc_rtc::LoaderException & exc)
   {
-    LOG_ERROR("Failed to initialize plugin loader")
-    LOG_ERROR_AND_THROW(std::runtime_error, "Failed to initialize plugin loader")
+    mc_rtc::log::error_and_throw<std::runtime_error>("Failed to initialize plugin loader");
   }
   for(const auto & plugin : config.global_plugins)
   {
@@ -82,8 +81,8 @@ MCGlobalController::MCGlobalController(const GlobalConfiguration & conf)
     }
     catch(mc_rtc::LoaderException & exc)
     {
-      LOG_ERROR("Global plugin " << plugin
-                                 << " failed to load, functions provided by this plugin will not be available")
+      mc_rtc::log::error("Global plugin {} failed to load, functions provided by this plugin will not be available",
+                         plugin);
     }
   }
 
@@ -96,8 +95,7 @@ MCGlobalController::MCGlobalController(const GlobalConfiguration & conf)
   }
   catch(mc_rtc::LoaderException & exc)
   {
-    LOG_ERROR("Failed to initialize controller loader")
-    LOG_ERROR_AND_THROW(std::runtime_error, "Failed to initialize controller loader")
+    mc_rtc::log::error_and_throw<std::runtime_error>("Failed to initialize controller loader");
   }
   if(std::find(config.enabled_controllers.begin(), config.enabled_controllers.end(), "HalfSitPose")
      == config.enabled_controllers.end())
@@ -117,17 +115,14 @@ MCGlobalController::MCGlobalController(const GlobalConfiguration & conf)
   next_controller_ = nullptr;
   if(current_ctrl == "" || controller_ == nullptr)
   {
-    LOG_ERROR("No controller selected or selected controller is not enabled, please check your configuration file")
-    LOG_INFO("Note common reasons for this error include:\n"
-             "\t- The controller name does not match the name exported by CONTROLLER_CONSTRUCTOR\n"
-             "\t- The controller library is not in a path read by mc_rtc\n"
-             "\t- The controller constuctor segfaults\n"
-             "\t- The controller library hasn't been properly linked");
-    LOG_ERROR_AND_THROW(std::runtime_error, "No controller enabled")
-  }
-  else
-  {
-    real_robots->load(*config.main_robot_module);
+    mc_rtc::log::error(
+        "No controller selected or selected controller is not enabled, please check your configuration file");
+    mc_rtc::log::info("Note common reasons for this error include:\n"
+                      "\t- The controller name does not match the name exported by CONTROLLER_CONSTRUCTOR\n"
+                      "\t- The controller library is not in a path read by mc_rtc\n"
+                      "\t- The controller constuctor segfaults\n"
+                      "\t- The controller library hasn't been properly linked");
+    mc_rtc::log::error_and_throw<std::runtime_error>("No controller enabled");
   }
 
   if(config.enable_log)
@@ -141,7 +136,8 @@ MCGlobalController::MCGlobalController(const GlobalConfiguration & conf)
   {
     if(config.gui_server_pub_uris.size() == 0)
     {
-      LOG_WARNING("GUI server is enabled but not configured to bind to anything, acting as if it was disabled.")
+      mc_rtc::log::warning(
+          "GUI server is enabled but not configured to bind to anything, acting as if it was disabled.");
     }
     else
     {
@@ -183,22 +179,81 @@ std::string MCGlobalController::current_controller() const
   return current_ctrl;
 }
 
-void MCGlobalController::init(const std::vector<double> & initq)
-{
-  init(initq, config.main_robot_module->default_attitude());
-}
-
 void MCGlobalController::init(const std::vector<double> & initq, const std::array<double, 7> & initAttitude)
 {
-  if(config.enable_log)
+  Eigen::Quaterniond q{initAttitude[0], initAttitude[1], initAttitude[2], initAttitude[3]};
+  Eigen::Vector3d t{initAttitude[4], initAttitude[5], initAttitude[6]};
+  init(initq, sva::PTransformd(q.inverse(), t));
+}
+
+void MCGlobalController::init(const std::vector<double> & initq, const sva::PTransformd & initAttitude)
+{
+  initEncoders(initq);
+  robot().posW(initAttitude);
+  initController();
+}
+
+void MCGlobalController::init(const std::vector<double> & initq)
+{
+  initEncoders(initq);
+
+  auto & q = robot().mbc().q;
+  // Configure initial attitude (requires FK to be computed)
+  if(config.init_attitude_from_sensor)
   {
-    start_log();
+    auto initAttitude = [this](const mc_rbdyn::BodySensor & sensor) {
+      mc_rtc::log::info("Initializing attitude from body sensor: {}", sensor.name());
+      // Update free flyer from body sensor takin into account the kinematics
+      // between sensor and body
+      const auto & fb = robot().mb().body(0).name();
+      sva::PTransformd X_0_s(sensor.orientation(), sensor.position());
+      const auto X_s_b = sensor.X_b_s().inv();
+      sva::PTransformd X_b_fb = robot().X_b1_b2(sensor.parentBody(), fb);
+      sva::PTransformd X_s_fb = X_b_fb * X_s_b;
+      robot().posW(X_s_fb * X_0_s);
+    };
+    if(config.init_attitude_sensor.empty())
+    {
+      initAttitude(controller_->robot().bodySensor());
+    }
+    else
+    {
+      if(controller_->robot().hasBodySensor(config.init_attitude_sensor))
+      {
+        initAttitude(controller_->robot().bodySensor(config.init_attitude_sensor));
+      }
+      else
+      {
+        mc_rtc::log::error_and_throw<std::invalid_argument>("No body sensor named {}, could not initialize attitude. "
+                                                            "Please check your InitAttitudeSensor configuration.",
+                                                            config.init_attitude_sensor);
+      }
+    }
   }
-  std::vector<std::vector<double>> q = robot().mbc().q;
-  if(q[0].size() == 7)
+  else
   {
-    q[0] = {std::begin(initAttitude), std::end(initAttitude)};
+    mc_rtc::log::info("Initializing attitude from robot module: q=[{}]",
+                      mc_rtc::io::to_string(robot().module().default_attitude(), ", ", 3));
+    if(q[0].size() == 7)
+    {
+      const auto & initAttitude = robot().module().default_attitude();
+      q[0] = {std::begin(initAttitude), std::end(initAttitude)};
+      robot().forwardKinematics();
+    }
   }
+  initController();
+}
+
+void MCGlobalController::initEncoders(const std::vector<double> & initq)
+{
+  if(initq.size() != controller_->robot().refJointOrder().size())
+  {
+    mc_rtc::log::error_and_throw<std::domain_error>(
+        "Could not initialize the robot state from encoder sensors: got {} encoder values but the robot expects {}",
+        initq.size(), controller_->robot().refJointOrder().size());
+  }
+
+  auto & q = robot().mbc().q;
   const auto & rjo = ref_joint_order();
   for(size_t i = 0; i < rjo.size(); ++i)
   {
@@ -243,6 +298,16 @@ void MCGlobalController::init(const std::vector<double> & initq, const std::arra
       g.get().reset(rinitq);
     }
   }
+  robot().forwardKinematics();
+}
+
+void MCGlobalController::initController()
+{
+  if(config.enable_log)
+  {
+    start_log();
+  }
+  const auto & q = robot().mbc().q;
   controller_->reset({q});
   controller_->resetObservers();
   initGUI();
@@ -388,10 +453,11 @@ void MCGlobalController::setWrenches(const std::map<std::string, sva::ForceVecd>
 void MCGlobalController::setWrenches(unsigned int robotIndex, const std::map<std::string, sva::ForceVecd> & wrenches)
 {
   auto & robot = controller_->robots().robot(robotIndex);
+  auto & realRobot = controller_->realRobots().robot(robotIndex);
   for(const auto & w : wrenches)
   {
     robot.forceSensor(w.first).wrench(w.second);
-    realRobots().robot(robotIndex).forceSensor(w.first).wrench(w.second);
+    realRobot.forceSensor(w.first).wrench(w.second);
   }
 }
 
@@ -415,7 +481,7 @@ bool MCGlobalController::run()
         observer->removeFromGUI(*controller_->gui());
       }
     }
-    LOG_INFO("Switching controllers")
+    mc_rtc::log::info("Switching controllers");
     if(controller_)
     {
       for(auto & bs : next_controller_->robot().bodySensors())
@@ -427,11 +493,21 @@ bool MCGlobalController::run()
         bs.angularVelocity(current.angularVelocity());
         bs.acceleration(current.acceleration());
       }
+      next_controller_->anchorFrame(controller_->anchorFrame());
+      next_controller_->anchorFrameReal(controller_->anchorFrameReal());
       next_controller_->robot().encoderValues(controller_->robot().encoderValues());
+      next_controller_->realRobot().encoderValues(controller_->robot().encoderValues());
+      next_controller_->robot().encoderVelocities(controller_->robot().encoderVelocities());
+      next_controller_->realRobot().encoderVelocities(controller_->robot().encoderVelocities());
       next_controller_->robot().jointTorques(controller_->robot().jointTorques());
+      next_controller_->realRobot().jointTorques(controller_->robot().jointTorques());
       for(auto & fs : next_controller_->robot().forceSensors())
       {
         fs.wrench(controller_->robot().forceSensor(fs.name()).wrench());
+      }
+      for(auto & fs : next_controller_->realRobot().forceSensors())
+      {
+        fs.wrench(controller_->realRobot().forceSensor(fs.name()).wrench());
       }
     }
     if(!running)
@@ -441,14 +517,7 @@ bool MCGlobalController::run()
     else
     {
       controller_->stop();
-      LOG_INFO("Reset with q[0]")
-      std::cout << controller_->robot().mbc().q[0][0] << " ";
-      std::cout << controller_->robot().mbc().q[0][1] << " ";
-      std::cout << controller_->robot().mbc().q[0][2] << " ";
-      std::cout << controller_->robot().mbc().q[0][3] << " ";
-      std::cout << controller_->robot().mbc().q[0][4] << " ";
-      std::cout << controller_->robot().mbc().q[0][5] << " ";
-      std::cout << controller_->robot().mbc().q[0][6] << std::endl;
+      mc_rtc::log::info("Reset with q[0] = {}", mc_rtc::io::to_string(controller_->robot().mbc().q[0], ", ", 5));
       for(const auto & g : controller_->robot().grippersByName())
       {
         next_controller_->robot().gripper(g.first).reset(*g.second);
@@ -469,6 +538,7 @@ bool MCGlobalController::run()
       start_log();
     }
     initGUI();
+    mc_rtc::log::success("Controller {} activated", current_ctrl);
   }
   for(auto & plugin : plugins_)
   {
@@ -563,6 +633,26 @@ const MCController & MCGlobalController::controller() const
   return *controller_;
 }
 
+mc_rbdyn::Robots & MCGlobalController::realRobots()
+{
+  return controller_->realRobots();
+}
+
+const mc_rbdyn::Robots & MCGlobalController::realRobots() const
+{
+  return controller_->realRobots();
+}
+
+mc_rbdyn::Robots & MCGlobalController::robots()
+{
+  return controller_->robots();
+}
+
+const mc_rbdyn::Robots & MCGlobalController::robots() const
+{
+  return controller_->robots();
+}
+
 mc_rbdyn::Robot & MCGlobalController::robot()
 {
   return controller_->robot();
@@ -571,6 +661,16 @@ mc_rbdyn::Robot & MCGlobalController::robot()
 const mc_rbdyn::Robot & MCGlobalController::robot() const
 {
   return controller_->robot();
+}
+
+mc_rbdyn::Robot & MCGlobalController::realRobot()
+{
+  return controller_->realRobot();
+}
+
+const mc_rbdyn::Robot & MCGlobalController::realRobot() const
+{
+  return controller_->realRobot();
 }
 
 void MCGlobalController::setGripperTargetQ(const std::string & robot,
@@ -584,7 +684,7 @@ void MCGlobalController::setGripperTargetQ(const std::string & robot,
   }
   catch(const std::exception &)
   {
-    LOG_ERROR("Cannot set gripper opening for non-existing gripper " << name << " in " << robot)
+    mc_rtc::log::error("Cannot set gripper opening for non-existing gripper {} in {}", name, robot);
   }
 }
 
@@ -606,7 +706,7 @@ void MCGlobalController::setGripperOpenPercent(const std::string & robot, const 
   }
   catch(const std::exception &)
   {
-    LOG_ERROR("Cannot set gripper opening for non-existing gripper " << name << " in " << robot)
+    mc_rtc::log::error("Cannot set gripper opening for non-existing gripper {} in {}", name, robot);
   }
 }
 
@@ -624,7 +724,7 @@ bool MCGlobalController::AddController(const std::string & name)
 {
   if(controllers.count(name))
   {
-    LOG_WARNING("Controller " << name << " already enabled")
+    mc_rtc::log::warning("Controller {} already enabled", name);
     return false;
   }
   std::string controller_name = name;
@@ -637,7 +737,7 @@ bool MCGlobalController::AddController(const std::string & name)
   }
   if(controller_loader->has_object(controller_name))
   {
-    LOG_INFO("Create controller " << controller_name)
+    mc_rtc::log::info("Create controller {}", controller_name);
     if(controller_subname != "")
     {
       controllers[name] =
@@ -649,14 +749,10 @@ bool MCGlobalController::AddController(const std::string & name)
       controllers[name] = controller_loader->create_object(name, config.main_robot_module, config.timestep,
                                                            config.controllers_configs[name]);
     }
-    controllers[name]->realRobots(real_robots);
     if(config.enable_log)
     {
       controllers[name]->logger().setup(config.log_policy, config.log_directory, config.log_template);
     }
-
-    // Give access to real robots to each enabled controller
-    controllers[name]->realRobots(real_robots);
 
     // Give each controller access to all observers
     controllers[name]->observers_ = observers_;
@@ -699,17 +795,17 @@ bool MCGlobalController::AddController(const std::string & name)
       }
       else
       {
-        LOG_ERROR_AND_THROW(std::runtime_error,
-                            "Controller " << controller_name << " requested observer " << observerName
-                                          << " but this observer is not available. Please make sure that it is in your "
-                                             "\"EnabledObservers\" configuration, and that is was properly loaded.");
+        mc_rtc::log::error_and_throw<std::runtime_error>(
+            "Controller {} requested observer {} but this observer is not available. Please make sure that it is in "
+            "your \"EnabledObservers\" configuration, and that is was properly loaded.",
+            controller_name, observerName);
       }
     }
     return true;
   }
   else
   {
-    LOG_WARNING("Controller " << name << " enabled in configuration but not available");
+    mc_rtc::log::warning("Controller {} enabled in configuration but not available", name);
     return false;
   }
 }
@@ -728,11 +824,10 @@ bool MCGlobalController::AddController(const std::string & name, std::shared_ptr
 {
   if(controllers.count(name) || !controller)
   {
-    LOG_WARNING("Controller " << name << " already enabled or invalid pointer passed")
+    mc_rtc::log::warning("Controller {} already enabled or invalid pointer passed", name);
     return false;
   }
   controllers[name] = controller;
-  controllers[name]->realRobots(real_robots);
   if(config.enable_log)
   {
     controllers[name]->logger().setup(config.log_policy, config.log_directory, config.log_template);
@@ -752,11 +847,11 @@ bool MCGlobalController::EnableController(const std::string & name)
   {
     if(name == current_ctrl)
     {
-      LOG_ERROR(name << " controller already enabled.")
+      mc_rtc::log::error("{} controller already enabled.", name);
     }
     else
     {
-      LOG_ERROR(name << " controller not enabled.")
+      mc_rtc::log::error("{} controller not enabled.", name);
     }
     return false;
   }
@@ -900,16 +995,6 @@ void MCGlobalController::setup_log()
     return nanoseconds_since_epoch;
   });
   setup_logger_[current_ctrl] = true;
-}
-
-mc_rbdyn::Robots & MCGlobalController::realRobots()
-{
-  return *real_robots;
-}
-
-mc_rbdyn::Robot & MCGlobalController::realRobot()
-{
-  return real_robots->robot();
 }
 
 } // namespace mc_control

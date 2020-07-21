@@ -1,5 +1,5 @@
 type: lookAtSurface
-body: bodyName
+body: dcamera
 bodyVector: [1.0, 0.0, 0.0]
-surfaceRobotIndex: 0
-surface: targetSurfaceName
+surfaceRobot: ground
+surface: AllGround

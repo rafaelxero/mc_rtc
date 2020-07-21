@@ -38,10 +38,11 @@ void BodySensorObserver::reset(const mc_control::MCController & ctl)
   {
     if(!ctl.robot().hasBodySensor(fbSensorName_))
     {
-      LOG_ERROR_AND_THROW(std::runtime_error, "[BodySensorObserver] Bodysensor "
-                                                  << fbSensorName_ << " is requested but does not exist in robot "
-                                                  << ctl.robot().name());
+      mc_rtc::log::error_and_throw<std::runtime_error>(
+          "[BodySensorObserver] Bodysensor {} is requested but does not exist in robot {}", fbSensorName_,
+          ctl.robot().name());
     }
+    name_ += "_" + fbSensorName_;
   }
   run(ctl);
 }
@@ -68,11 +69,14 @@ bool BodySensorObserver::run(const mc_control::MCController & ctl)
 
     sva::MotionVecd sensorVel(sensor.angularVelocity(), sensor.linearVelocity());
     velW_ = X_s_fb * sensorVel;
+    sva::MotionVecd sensorAcc(Eigen::Vector3d::Zero(), sensor.acceleration());
+    accW_ = X_s_fb * sensorAcc;
   }
   else /* if(updateFrom_ == Update::Control) */
   {
     posW_ = robot.posW();
     velW_ = robot.velW();
+    accW_ = robot.accW();
   }
   return true;
 }
@@ -88,12 +92,14 @@ void BodySensorObserver::addToLogger(const mc_control::MCController & ctl, mc_rt
   Observer::addToLogger(ctl, logger);
   logger.addLogEntry("observer_" + name() + "_posW", [this]() { return posW_; });
   logger.addLogEntry("observer_" + name() + "_velW", [this]() { return velW_; });
+  logger.addLogEntry("observer_" + name() + "_accW", [this]() { return accW_; });
 }
 void BodySensorObserver::removeFromLogger(mc_rtc::Logger & logger)
 {
   Observer::removeFromLogger(logger);
   logger.removeLogEntry("observer_" + name() + "_posW");
   logger.removeLogEntry("observer_" + name() + "_velW");
+  logger.removeLogEntry("observer_" + name() + "_accW");
 }
 
 void BodySensorObserver::addToGUI(const mc_control::MCController &, mc_rtc::gui::StateBuilder & gui)
