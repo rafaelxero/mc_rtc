@@ -106,8 +106,8 @@ QPSolver::QPSolver(double timeStep)
 void QPSolver::addConstraintSet(ConstraintSet & cs)
 {
   cs.addToSolver(robots().mbs(), *solver);
-  solver.updateConstrSize();
-  solver.updateNrVars(robots().mbs());
+  solver->updateConstrSize();
+  solver->updateNrVars(robots().mbs());
   if(dynamic_cast<DynamicsConstraint *>(&cs) != nullptr)
   {
     dynamicsConstraints_.push_back(static_cast<DynamicsConstraint *>(&cs));
@@ -117,8 +117,8 @@ void QPSolver::addConstraintSet(ConstraintSet & cs)
 void QPSolver::removeConstraintSet(ConstraintSet & cs)
 {
   cs.removeFromSolver(*solver);
-  solver.updateConstrSize();
-  solver.updateNrVars(robots().mbs());
+  solver->updateConstrSize();
+  solver->updateNrVars(robots().mbs());
   auto it = std::find(dynamicsConstraints_.begin(), dynamicsConstraints_.end(), static_cast<DynamicsConstraint *>(&cs));
   if(it != dynamicsConstraints_.end())
   {
@@ -699,7 +699,7 @@ void QPSolver::__fillResult()
     qpRes.zmps[i].y = robot.zmpTarget().y();
     qpRes.zmps[i].z = robot.zmpTarget().z();
   }
-  qpRes.lambdaVec = solver.lambdaVec();
+  qpRes.lambdaVec = solver->lambdaVec();
   for(const auto & dynamics : dynamicsConstraints_)
   {
     fillTorque(*dynamics);
