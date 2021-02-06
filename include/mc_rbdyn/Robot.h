@@ -39,15 +39,12 @@ public:
   Robot(Robot &&) = default;
   Robot & operator=(Robot &&) = default;
 
-  /** Returns the name of the robot */
-  const std::string & name() const;
-
-  /** Set the name of the robot
+  /** Returns the name of the robot
    *
-   * \note It is not recommended to call this late in the life cycle of the
-   * Robot object as the change is not communicated in any way.
-   */
-  void name(const std::string & n);
+   * \note To rename a robot, use
+   * Robots::rename(const std::string &, const std::string &)
+   **/
+  const std::string & name() const;
 
   /** Retrieve the associated RobotModule */
   const RobotModule & module() const;
@@ -376,10 +373,18 @@ public:
   const std::vector<std::vector<double>> & vl() const;
   /** Access the robot's angular upper velocity limits (const) */
   const std::vector<std::vector<double>> & vu() const;
+  /** Access the robot's angular lower acceleration limits (const) */
+  const std::vector<std::vector<double>> & al() const;
+  /** Access the robot's angular upper acceleration limits (const) */
+  const std::vector<std::vector<double>> & au() const;
   /** Access the robot's angular lower torque limits (const) */
   const std::vector<std::vector<double>> & tl() const;
   /** Access the robot's angular upper torque limits (const) */
   const std::vector<std::vector<double>> & tu() const;
+  /** Access the robot's angular lower torque-derivative limits (const) */
+  const std::vector<std::vector<double>> & tdl() const;
+  /** Access the robot's angular upper torque-derivative limits (const) */
+  const std::vector<std::vector<double>> & tdu() const;
   /** Access the robot's angular lower limits */
   std::vector<std::vector<double>> & ql();
   /** Access the robot's angular upper limits */
@@ -388,10 +393,18 @@ public:
   std::vector<std::vector<double>> & vl();
   /** Access the robot's angular upper velocity limits */
   std::vector<std::vector<double>> & vu();
+  /** Access the robot's angular lower acceleration limits */
+  std::vector<std::vector<double>> & al();
+  /** Access the robot's angular upper acceleration limits */
+  std::vector<std::vector<double>> & au();
   /** Access the robot's angular lower torque limits */
   std::vector<std::vector<double>> & tl();
   /** Access the robot's angular upper torque limits */
   std::vector<std::vector<double>> & tu();
+  /** Access the robot's angular lower torque-derivative limits */
+  std::vector<std::vector<double>> & tdl();
+  /** Access the robot's angular upper torque-derivative limits */
+  std::vector<std::vector<double>> & tdu();
 
   /** Return the flexibilities of the robot (const) */
   const std::vector<Flexibility> & flexibility() const;
@@ -716,6 +729,12 @@ public:
   /** Access a convex named \p cName (const) */
   const convex_pair_t & convex(const std::string & cName) const;
 
+  /** Access all convexes available in this robot
+   *
+   * \returns a map where keys are the convex name and values are those returned by \ref convex
+   */
+  const std::map<std::string, convex_pair_t> & convexes() const;
+
   /** Add a convex online
    *
    * This has no effect if \p name is already a convex of the robot
@@ -868,8 +887,12 @@ private:
   std::vector<std::vector<double>> qu_;
   std::vector<std::vector<double>> vl_;
   std::vector<std::vector<double>> vu_;
+  std::vector<std::vector<double>> al_;
+  std::vector<std::vector<double>> au_;
   std::vector<std::vector<double>> tl_;
   std::vector<std::vector<double>> tu_;
+  std::vector<std::vector<double>> tdl_;
+  std::vector<std::vector<double>> tdu_;
   std::map<std::string, convex_pair_t> convexes_;
   std::map<std::string, sva::PTransformd> collisionTransforms_;
   std::map<std::string, mc_rbdyn::SurfacePtr> surfaces_;
@@ -920,16 +943,23 @@ protected:
    * loaded. This is used when copying one robot into another.
    *
    */
-  Robot(Robots & robots,
+  Robot(const std::string & name,
+        Robots & robots,
         unsigned int robots_idx,
         bool loadFiles,
         const sva::PTransformd * base = nullptr,
         const std::string & baseName = "");
 
-  /** Copy existing Robot with a new base */
-  void copy(Robots & robots, unsigned int robots_idx, const Base & base) const;
-  /** Copy existing Robot */
-  void copy(Robots & robots, unsigned int robots_idx) const;
+  /** Copy existing Robot with a new base
+   *
+   * \throws std::runtime_error if a robot named <copyName> already exists
+   **/
+  void copy(Robots & robots, const std::string & copyName, unsigned int robots_idx, const Base & base) const;
+  /** Copy existing Robot
+   *
+   * \throws std::runtime_error if a robot named <copyName> already exists
+   **/
+  void copy(Robots & robots, const std::string & copyName, unsigned int robots_idx) const;
 
   /** Used to set the surfaces' X_b_s correctly */
   void fixSurfaces();
@@ -950,6 +980,13 @@ protected:
 private:
   Robot(const Robot &) = delete;
   Robot & operator=(const Robot &) = delete;
+
+  /** Set the name of the robot
+   *
+   * \note It is not recommended to call this late in the life cycle of the
+   * Robot object as the change is not communicated in any way.
+   */
+  void name(const std::string & n);
 };
 
 /** @defgroup robotFromConfig Helpers to obtain robot index/name from configuration

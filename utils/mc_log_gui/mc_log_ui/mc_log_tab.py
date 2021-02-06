@@ -461,15 +461,15 @@ class MCLogTab(QtWidgets.QWidget):
     for c in [self.ui.canvas, self.XYCanvas, self._3DCanvas]:
       c.setPolyColors(colors)
 
-  def setRobotModule(self, rm):
+  def setRobotModule(self, rm, loaded_files):
     self.rm = rm
     if self.rm is None:
       return
     def setQNames(ySelector):
-      qList = ySelector.findItems("q", QtCore.Qt.MatchStartsWith)
-      qList += ySelector.findItems("alpha", QtCore.Qt.MatchStartsWith)
-      qList += ySelector.findItems("error", QtCore.Qt.MatchStartsWith)
-      qList += ySelector.findItems("tau", QtCore.Qt.MatchStartsWith)
+      qList = ySelector.findItems("q", QtCore.Qt.MatchStartsWith | QtCore.Qt.MatchRecursive)
+      qList += ySelector.findItems("alpha", QtCore.Qt.MatchStartsWith | QtCore.Qt.MatchRecursive)
+      qList += ySelector.findItems("error", QtCore.Qt.MatchStartsWith | QtCore.Qt.MatchRecursive)
+      qList += ySelector.findItems("tau", QtCore.Qt.MatchStartsWith | QtCore.Qt.MatchRecursive)
       def update_child_display(items):
         for itm in items:
           cCount = itm.childCount()
@@ -483,28 +483,34 @@ class MCLogTab(QtWidgets.QWidget):
       update_child_display(qList)
     setQNames(self.ui.y1Selector)
     setQNames(self.ui.y2Selector)
-    bounds = self.rm.bounds()
     if self.data is None:
       return
-    for i, jn in enumerate(self.rm.ref_joint_order()):
-      if "qIn_limits_lower_{}".format(i) in self.data:
-        self.data["qIn_limits_lower_{}".format(i)].fill(bounds[0][jn][0])
-        self.data["qIn_limits_upper_{}".format(i)].fill(bounds[1][jn][0])
-        self.data["qOut_limits_lower_{}".format(i)].fill(bounds[0][jn][0])
-        self.data["qOut_limits_upper_{}".format(i)].fill(bounds[1][jn][0])
-      if "tauIn_limits_lower_{}".format(i) in self.data:
-        self.data["tauIn_limits_lower_{}".format(i)].fill(bounds[4][jn][0])
-        self.data["tauIn_limits_upper_{}".format(i)].fill(bounds[5][jn][0])
-      if "tauOut_limits_lower_{}".format(i) in self.data:
-        self.data["tauOut_limits_lower_{}".format(i)].fill(bounds[4][jn][0])
-        self.data["tauOut_limits_upper_{}".format(i)].fill(bounds[5][jn][0])
+    bounds = self.rm.bounds()
+    def setBounds(prefix):
+        for i, jn in enumerate(self.rm.ref_joint_order()):
+          if "{}qIn_limits_lower_{}".format(prefix, i) in self.data:
+            self.data["{}qIn_limits_lower_{}".format(prefix, i)].fill(bounds[0][jn][0])
+            self.data["{}qIn_limits_upper_{}".format(prefix, i)].fill(bounds[1][jn][0])
+            self.data["{}qOut_limits_lower_{}".format(prefix, i)].fill(bounds[0][jn][0])
+            self.data["{}qOut_limits_upper_{}".format(prefix, i)].fill(bounds[1][jn][0])
+          if "{}tauIn_limits_lower_{}".format(prefix, i) in self.data:
+            self.data["{}tauIn_limits_lower_{}".format(prefix, i)].fill(bounds[4][jn][0])
+            self.data["{}tauIn_limits_upper_{}".format(prefix, i)].fill(bounds[5][jn][0])
+          if "{}tauOut_limits_lower_{}".format(prefix, i) in self.data:
+            self.data["{}tauOut_limits_lower_{}".format(prefix, i)].fill(bounds[4][jn][0])
+            self.data["{}tauOut_limits_upper_{}".format(prefix, i)].fill(bounds[5][jn][0])
+    if len(loaded_files) > 1:
+      for f in loaded_files:
+        setBounds("{}_".format(f))
+    else:
+      setBounds("")
 
 
   def on_xSelector_activated(self, canvas, k):
     self.x_data = k
     canvas.x_data = k
     canvas.update_x()
-    for _,s in self.specials.iteritems():
+    for _,s in self.specials.items():
       s.plot()
 
   @QtCore.Slot(QtWidgets.QTreeWidgetItem, int)
@@ -661,7 +667,7 @@ class MCLogTab(QtWidgets.QWidget):
     tab = MCLogTab(parent, type_)
     tab.x_data = x_data
     tab.setData(parent.data)
-    tab.setRobotModule(parent.rm)
+    tab.setRobotModule(parent.rm, parent.loaded_files)
     if type_ is PlotType.TIME:
       for y,yl in zip(y1, y1_label):
         tab.tree_view.select(y, tab.ui.y1Selector, 0)
@@ -715,11 +721,11 @@ class MCLogTab(QtWidgets.QWidget):
         figure._right().grid = LineStyle(**p.grid2)
       else:
         figure._right().grid = p.grid2
-    for y,s in p.style.iteritems():
+    for y,s in p.style.items():
       figure.style_left(y, s)
-    for y,s in p.style2.iteritems():
+    for y,s in p.style2.items():
       figure.style_right(y, s)
-    for param, value in p.extra.iteritems():
+    for param, value in p.extra.items():
       getattr(figure, param)(value)
     return figure
 

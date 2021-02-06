@@ -38,7 +38,7 @@ void SurfaceTransformTask::reset()
 {
   TrajectoryTaskGeneric::reset();
   const auto & robot = robots.robot(rIndex);
-  sva::PTransformd curPos = robot.surface(surfaceName).X_0_s(robot);
+  sva::PTransformd curPos = robot.surfacePose(surfaceName);
   errorT->target(curPos);
 }
 
@@ -100,6 +100,12 @@ void SurfaceTransformTask::load(mc_solver::QPSolver & solver, const mc_rtc::Conf
     X_0_t = move * X_0_t;
   }
 
+  if(config.has("overwriteRPY"))
+  {
+    // Only modify the specified DoF of the rotation
+    mc_rtc::overwriteRotationRPY(config("overwriteRPY"), X_0_t.rotation());
+  }
+
   this->target(X_0_t);
 
   TrajectoryBase::load(solver, config);
@@ -145,6 +151,50 @@ void SurfaceTransformTask::removeFromLogger(mc_rtc::Logger & logger)
   TrajectoryBase::removeFromLogger(logger);
   logger.removeLogEntry(name_ + "_surface_pose");
   logger.removeLogEntry(name_ + "_target_pose");
+}
+
+std::function<bool(const mc_tasks::MetaTask &, std::string &)> SurfaceTransformTask::buildCompletionCriteria(
+    double dt,
+    const mc_rtc::Configuration & config) const
+{
+  if(config.has("wrench"))
+  {
+    if(!robots.robot(rIndex).surfaceHasIndirectForceSensor(surfaceName))
+    {
+      mc_rtc::log::error_and_throw<std::invalid_argument>("[{}] Attempted to use \"wrench\" as completion criteria but "
+                                                          "surface \"{}\" is not attached to a force sensor",
+                                                          name(), surfaceName);
+    }
+    sva::ForceVecd target_w = config("wrench");
+    Eigen::Vector6d target = target_w.vector();
+    Eigen::Vector6d dof = Eigen::Vector6d::Ones();
+    for(int i = 0; i < 6; ++i)
+    {
+      if(std::isnan(target(i)))
+      {
+        dof(i) = 0.;
+        target(i) = 0.;
+      }
+      else if(target(i) < 0)
+      {
+        dof(i) = -1.;
+      }
+    }
+    return [dof, target](const mc_tasks::MetaTask & t, std::string & out) {
+      const auto & self = static_cast<const mc_tasks::SurfaceTransformTask &>(t);
+      Eigen::Vector6d w = self.robots.robot(self.rIndex).surfaceWrench(self.surface()).vector();
+      for(int i = 0; i < 6; ++i)
+      {
+        if(dof(i) * fabs(w(i)) < target(i))
+        {
+          return false;
+        }
+      }
+      out += "wrench";
+      return true;
+    };
+  }
+  return MetaTask::buildCompletionCriteria(dt, config);
 }
 
 void SurfaceTransformTask::addToGUI(mc_rtc::gui::StateBuilder & gui)

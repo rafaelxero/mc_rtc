@@ -8,10 +8,14 @@ set(VERSION_SCRIPT_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/version-script.lds")
 
 macro(install_mc_rtc_lib_common MC_LIB KWD)
   target_include_directories(${MC_LIB} INTERFACE $<INSTALL_INTERFACE:include> $<BUILD_INTERFACE:${MC_RTC_INCLUDE_DIR}>)
-  if(WIN32)
-    target_compile_definitions(${MC_LIB} ${KWD} "-DNOMINMAX"  "-D_ENABLE_EXTENDED_ALIGNED_STORAGE")
+  if(NOT EMSCRIPTEN)
+    if(WIN32)
+      target_compile_definitions(${MC_LIB} ${KWD} "-DNOMINMAX"  "-D_ENABLE_EXTENDED_ALIGNED_STORAGE")
+    else()
+      target_compile_options(${MC_LIB} ${KWD} "-mfpmath=sse" "-msse2")
+    endif()
   else()
-    target_compile_options(${MC_LIB} ${KWD} "-mfpmath=sse" "-msse2")
+    target_compile_options(${MC_LIB} ${KWD} -matomics -s USE_PTHREADS=1)
   endif()
   if(TREAT_WARNINGS_AS_ERRORS)
     if(WIN32)
@@ -19,6 +23,9 @@ macro(install_mc_rtc_lib_common MC_LIB KWD)
     else()
       target_compile_options(${MC_LIB} ${KWD} $<BUILD_INTERFACE:-Werror>)
     endif()
+  endif()
+  if(MC_RTC_BUILD_STATIC)
+    target_compile_definitions(${MC_LIB} ${KWD} MC_RTC_BUILD_STATIC)
   endif()
   add_library(mc_rtc::${MC_LIB} ALIAS ${MC_LIB})
 endmacro()
@@ -38,7 +45,9 @@ macro(install_mc_rtc_lib MC_LIB)
     set_target_properties(${MC_LIB} PROPERTIES LINK_FLAGS "--coverage")
   endif()
   set_target_properties(${MC_LIB} PROPERTIES SOVERSION ${PROJECT_VERSION_MAJOR} VERSION ${PROJECT_VERSION})
-  add_version_script(${MC_LIB} "${VERSION_SCRIPT_LOCATION}")
+  if(NOT MC_RTC_BUILD_STATIC)
+    add_version_script(${MC_LIB} "${VERSION_SCRIPT_LOCATION}")
+  endif()
   add_library(mc_rtc::${MC_LIB} ALIAS ${MC_LIB})
   install(TARGETS ${MC_LIB}
     EXPORT "${TARGETS_EXPORT_NAME}"
@@ -55,9 +64,14 @@ add_custom_command(OUTPUT ${VERSION_HEADER}
   COMMAND ${CMAKE_COMMAND} -DPROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
                            -DPROJECT_BINARY_DIR="${PROJECT_BINARY_DIR}"
                            -DPROJECT_VERSION="${PROJECT_VERSION}"
-                           -P "${PROJECT_SOURCE_DIR}/CMakeModules/MakeVersionHeader.cmake"
+                            -P "${PROJECT_SOURCE_DIR}/CMakeModules/MakeVersionHeader.cmake"
   DEPENDS ${MC_RTC_ALL_FILES}
 )
+
+set(DEBUG_SOURCE "${PROJECT_BINARY_DIR}/src/mc_rtc/$<LOWER_CASE:$<CONFIG>>/debug.cpp")
+# This is not necessary but a work-around for https://gitlab.kitware.com/cmake/cmake/-/issues/21203
+configure_file(mc_rtc/debug.in.cpp "${PROJECT_BINARY_DIR}/src/mc_rtc/debug.cpp")
+file(GENERATE OUTPUT ${DEBUG_SOURCE} INPUT "${CMAKE_CURRENT_SOURCE_DIR}/mc_rtc/debug.in.cpp")
 
 set(mc_rtc_utils_SRC
   mc_rtc/Configuration.cpp
@@ -69,6 +83,7 @@ set(mc_rtc_utils_SRC
   mc_rtc/MessagePackBuilder.cpp
   mc_rtc/logging.cpp
   mc_rtc/version.cpp
+  ${DEBUG_SOURCE}
 )
 
 set(mc_rtc_utils_HDR
@@ -89,13 +104,20 @@ set(mc_rtc_utils_HDR
   ../include/mc_rtc/constants.h
   ../include/mc_rtc/DataStore.h
   ../include/mc_rtc/type_name.h
+  ../include/mc_rtc/debug.h
 )
 
 add_library(mc_rtc_utils SHARED ${mc_rtc_utils_SRC} ${mc_rtc_utils_HDR})
 set_target_properties(mc_rtc_utils PROPERTIES COMPILE_FLAGS "-DMC_RTC_UTILS_EXPORTS")
 target_include_directories(mc_rtc_utils PRIVATE "${PROJECT_BINARY_DIR}/include/mc_rtc")
-target_link_libraries(mc_rtc_utils PUBLIC SpaceVecAlg::SpaceVecAlg Boost::filesystem Boost::disable_autolinking yaml-cpp spdlog::spdlog PRIVATE mc_rtc_3rd_party::RapidJSON mpack)
-if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+target_link_libraries(mc_rtc_utils PUBLIC SpaceVecAlg::SpaceVecAlg Boost::filesystem Boost::disable_autolinking yaml-cpp spdlog::spdlog PRIVATE $<BUILD_INTERFACE:mc_rtc_3rd_party::RapidJSON>)
+if(NOT MC_RTC_BUILD_STATIC)
+  target_link_libraries(mc_rtc_utils PRIVATE mpack)
+else()
+  target_sources(mc_rtc_utils PRIVATE ${PROJECT_SOURCE_DIR}/3rd-party/mpack/mpack.c)
+  target_include_directories(mc_rtc_utils PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/3rd-party/mpack>)
+endif()
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" AND NOT EMSCRIPTEN)
   target_link_libraries(mc_rtc_utils PUBLIC atomic)
 endif()
 install_mc_rtc_lib(mc_rtc_utils)
@@ -111,7 +133,10 @@ set(mc_rtc_loader_HDR
 
 add_library(mc_rtc_loader SHARED ${mc_rtc_loader_SRC} ${mc_rtc_loader_HDR})
 set_target_properties(mc_rtc_loader PROPERTIES COMPILE_FLAGS "-DMC_RTC_LOADER_EXPORTS")
-target_link_libraries(mc_rtc_loader PUBLIC Boost::filesystem Boost::disable_autolinking ${LTDL} mc_rtc_utils)
+target_link_libraries(mc_rtc_loader PUBLIC Boost::filesystem Boost::disable_autolinking mc_rtc_utils)
+if(NOT MC_RTC_BUILD_STATIC)
+  target_link_libraries(mc_rtc_loader PUBLIC ${LTDL})
+endif()
 install_mc_rtc_lib(mc_rtc_loader)
 
 set(mc_rbdyn_SRC
@@ -176,10 +201,14 @@ set(mc_rbdyn_HDR
 
 add_library(mc_rbdyn SHARED ${mc_rbdyn_SRC} ${mc_rbdyn_HDR})
 set_target_properties(mc_rbdyn PROPERTIES COMPILE_FLAGS "-DMC_RBDYN_EXPORTS")
-target_link_libraries(mc_rbdyn PUBLIC mc_rbdyn_urdf::mc_rbdyn_urdf RBDyn::Parsers Tasks::Tasks mc_rtc_loader mc_rtc_utils GEOS::geos)
+target_link_libraries(mc_rbdyn PUBLIC mc_rbdyn_urdf::mc_rbdyn_urdf RBDyn::Parsers Tasks::Tasks mc_rtc_loader mc_rtc_utils mc_filter GEOS::geos)
 # qhull
+if(MC_RTC_BUILD_STATIC)
+  target_link_libraries(mc_rbdyn PRIVATE "-Wl,--no-whole-archive" qhullstatic_r "-Wl,--no-whole-archive" qhullcpp)
+else()
+  target_link_libraries(mc_rbdyn PRIVATE qhullstatic_r qhullcpp)
+endif()
 target_include_directories(mc_rbdyn SYSTEM PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../3rd-party/qhull/src")
-target_link_libraries(mc_rbdyn PRIVATE qhullcpp qhullstatic_r)
 install_mc_rtc_lib(mc_rbdyn)
 
 set(mc_rtc_gui_SRC
@@ -230,7 +259,6 @@ target_link_libraries(mc_rtc_gui PUBLIC mc_rbdyn)
 install_mc_rtc_lib(mc_rtc_gui)
 
 add_subdirectory(mc_robots)
-add_subdirectory(mc_observers)
 
 set(mc_solver_SRC
 mc_solver/BoundedSpeedConstr.cpp
@@ -296,6 +324,8 @@ set(mc_trajectory_HDR
 ../include/mc_trajectory/InterpolatedRotation.h
 ../include/mc_trajectory/spline_utils.h
 ../include/mc_trajectory/ExactCubic.h
+../include/mc_trajectory/SequenceInterpolator.h
+../include/mc_trajectory/LinearInterpolation.h
 )
 
 add_library(mc_trajectory SHARED ${mc_trajectory_SRC} ${mc_trajectory_HDR})
@@ -317,6 +347,7 @@ mc_tasks/BSplineTrajectoryTask.cpp
 mc_tasks/ExactCubicTrajectoryTask.cpp
 mc_tasks/ComplianceTask.cpp
 mc_tasks/AdmittanceTask.cpp
+mc_tasks/ImpedanceTask.cpp
 mc_tasks/DampingTask.cpp
 mc_tasks/CoPTask.cpp
 mc_tasks/GazeTask.cpp
@@ -352,6 +383,8 @@ set(mc_tasks_HDR
 ../include/mc_tasks/TrajectoryTaskGeneric.hpp
 ../include/mc_tasks/ComplianceTask.h
 ../include/mc_tasks/AdmittanceTask.h
+../include/mc_tasks/ImpedanceGains.h
+../include/mc_tasks/ImpedanceTask.h
 ../include/mc_tasks/DampingTask.h
 ../include/mc_tasks/CoPTask.h
 ../include/mc_tasks/GazeTask.h
@@ -366,7 +399,7 @@ set(mc_tasks_HDR
 
 add_library(mc_tasks SHARED ${mc_tasks_SRC} ${mc_tasks_HDR})
 set_target_properties(mc_tasks PROPERTIES COMPILE_FLAGS "-DMC_TASKS_EXPORTS")
-target_link_libraries(mc_tasks PUBLIC mc_solver mc_rbdyn mc_trajectory mc_filter mc_rtc_utils eigen-quadprog::eigen-quadprog)
+target_link_libraries(mc_tasks PUBLIC mc_solver mc_rbdyn mc_trajectory mc_filter mc_rtc_utils eigen-quadprog::eigen-quadprog state-observation::state-observation)
 install_mc_rtc_lib(mc_tasks)
 
 set(mc_planning_SRC
@@ -406,19 +439,24 @@ install_mc_rtc_header_lib(mc_filter)
 set(mc_observers_SRC
 mc_observers/ObserverLoader.cpp
 mc_observers/Observer.cpp
+mc_observers/ObserverPipeline.cpp
 )
 
 set(mc_observers_HDR
 ../include/mc_observers/api.h
 ../include/mc_observers/ObserverLoader.h
 ../include/mc_observers/Observer.h
+../include/mc_observers/ObserverPipeline.h
 ../include/mc_observers/ObserverMacros.h
 )
 
 add_library(mc_observers SHARED ${mc_observers_SRC} ${mc_observers_HDR})
+target_include_directories(mc_observers PUBLIC $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
 set_target_properties(mc_observers PROPERTIES COMPILE_FLAGS "-DMC_OBSERVERS_EXPORTS")
 target_link_libraries(mc_observers PUBLIC mc_filter mc_rbdyn mc_rtc_gui)
 install_mc_rtc_lib(mc_observers)
+
+add_subdirectory(mc_observers)
 
 set(mc_control_SRC
 mc_control/CompletionCriteria.cpp
@@ -431,6 +469,11 @@ mc_control/mc_global_controller_configuration.cpp
 mc_control/mc_global_controller_gui.cpp
 mc_control/mc_global_controller_services.cpp
 )
+
+if(MC_RTC_BUILD_STATIC)
+  list(APPEND mc_control_SRC mc_control/ControllerLoader.cpp)
+  list(APPEND mc_control_SRC mc_control/GlobalPluginLoader.cpp)
+endif()
 
 set(mc_control_HDR
 ../include/mc_control/api.h
@@ -449,7 +492,12 @@ set(mc_control_HDR
 
 add_library(mc_control SHARED ${mc_control_SRC} ${mc_control_HDR})
 set_target_properties(mc_control PROPERTIES COMPILE_FLAGS "-DMC_CONTROL_EXPORTS")
-target_link_libraries(mc_control PUBLIC mc_tasks mc_solver mc_rtc_loader mc_observers mc_rtc_utils mc_rtc_gui nanomsg)
+target_link_libraries(mc_control PUBLIC mc_tasks mc_solver mc_rtc_loader mc_observers mc_rtc_utils mc_rtc_gui)
+if(NOT MC_RTC_DISABLE_NETWORK)
+  target_link_libraries(mc_control PUBLIC nanomsg)
+else()
+  target_compile_definitions(mc_control PUBLIC MC_RTC_DISABLE_NETWORK)
+endif()
 install_mc_rtc_lib(mc_control)
 
 set(mc_control_client_SRC

@@ -354,8 +354,10 @@ public:
   /** Holds MetaTask currently in the solver */
   std::vector<mc_tasks::MetaTask*> metaTasks_;
 
- protected:
-  
+  /** Holds dynamics constraint currently in the solver */
+  std::vector<mc_solver::DynamicsConstraint *> dynamicsConstraints_;
+
+protected:
   /** The actual solver instance */
   std::shared_ptr<tasks::qp::QPSolver> solver;
   /** Latest result */

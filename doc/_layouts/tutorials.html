@@ -54,12 +54,12 @@
     <script src="{{site.baseurl}}/assets/js/bootstrap.min.js"></script>
     <script src="{{site.baseurl}}/assets/js/clipboard.min.js"></script>
     {% else %}
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/octicons/8.0.0/build.css" integrity="sha256-iPUhChwurLRCrDCM1+2a2LDe9pfW6Je29o/oA5VPr28=" crossorigin="anonymous" />
 
-    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js" integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js" integrity="sha384-B4gt1jrGC7Jh4AgTPSdUtOBvfO8shuf57BaghqFfPlYxofvL8/KUEfYiJOMMV+rV" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.4/clipboard.min.js"></script>
 
     {% endif %}
@@ -108,28 +108,44 @@
 
     <div class="container-fluid">
       <div class="row">
-      <div class="col">
-        <ul>
-          {% for cat in site.data.tutorials %}
-          <li>{{cat.title}}</li>
-          <ul>
-            {% for tuto in cat.tutorials %}
-              {% if category.id == cat.id and tuto.id == tutorial.id %}
-              <li><strong>{{tuto.title}}</strong></li>
-                {% if is_sources %}
+      <div class="col col-lg-3">
+        <div class="sticky-top sticky-toc">
+          <div class="accordion" id="accordionTutorials">
+            <div class="card">
+              <div class="card-header" id="headingOtherTutorials">
+                <button class="btn btn-link btn-block text-left" type="button" data-toggle="collapse" data-target="#collapseOtherTutorials" aria-expanded="true" aria-controls="collapseOtherTutorials">
+                  Other tutorials
+                </button>
+              </div>
+              <div id="collapseOtherTutorials" class="collapse" arial-labelledby="headingOtherTutorials" data-parent="#accordionTutorials">
+                <div class="card-body">
                   <ul>
-                    <li><a href="{{site.baseurl}}/tutorials/{{cat.id}}/{{tuto.id}}.html">Back to tutorial</a></li>
+                    {% for cat in site.data.tutorials %}
+                    <li>{{cat.title}}</li>
+                    <ul>
+                      {% for tuto in cat.tutorials %}
+                        {% if category.id == cat.id and tuto.id == tutorial.id %}
+                        <li><strong>{{tuto.title}}</strong></li>
+                          {% if is_sources %}
+                            <ul>
+                              <li><a href="{{site.baseurl}}/tutorials/{{cat.id}}/{{tuto.id}}.html">Back to tutorial</a></li>
+                            </ul>
+                          {% endif %}
+                        {% else %}
+                        <li><a href="{{site.baseurl}}/tutorials/{{cat.id}}/{{tuto.id}}.html">{{tuto.title}}</a></li>
+                        {% endif %}
+                      {% endfor %}
+                    </ul>
+                    {% endfor %}
                   </ul>
-                {% endif %}
-              {% else %}
-              <li><a href="{{site.baseurl}}/tutorials/{{cat.id}}/{{tuto.id}}.html">{{tuto.title}}</a></li>
-              {% endif %}
-            {% endfor %}
-          </ul>
-          {% endfor %}
-        </ul>
+                </div>
+              </div>
+              {{ content | toc_only }}
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="col-9">
+      <div class="col-9" id="tutorial-content">
         <h1>{{tutorial.title}}{% if is_sources %} (sources){% endif %}</h1>
 
         {{content}}

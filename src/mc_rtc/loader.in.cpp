@@ -10,6 +10,8 @@
 
 #include <mc_rtc/loader.h>
 
+#include <mc_rtc/debug.h>
+
 #include <boost/filesystem.hpp>
 #include <boost/range/adaptors.hpp>
 namespace bfs = boost::filesystem;
@@ -71,6 +73,7 @@ LTDLHandle::LTDLHandle(const std::string & class_name,
 
 bool LTDLHandle::open()
 {
+#ifndef MC_RTC_BUILD_STATIC
   if(open_)
   {
     return true;
@@ -78,14 +81,14 @@ bool LTDLHandle::open()
   if(verbose_)
   {
     mc_rtc::log::info("Attempt to open {}", path_);
-#ifdef WIN32
+#  ifdef WIN32
     mc_rtc::log::info("Search path: {}", rpath_);
-#endif
+#  endif
   }
-#ifdef WIN32
+#  ifdef WIN32
   SetEnvironmentVariable("PATH", rpath_.c_str());
-#endif
-#ifndef WIN32
+#  endif
+#  ifndef WIN32
   if(global_)
   {
     if(verbose_)
@@ -102,9 +105,9 @@ bool LTDLHandle::open()
   {
     handle_ = lt_dlopen(path_.c_str());
   }
-#else
+#  else
   handle_ = lt_dlopen(path_.c_str());
-#endif
+#  endif
   open_ = handle_ != nullptr;
   if(!open_)
   {
@@ -115,27 +118,35 @@ bool LTDLHandle::open()
       mc_rtc::log::warning("Failed to load {}\n{}", path_, error);
     }
   }
-#ifdef WIN32
+#  ifdef WIN32
   SetEnvironmentVariable("PATH", getPATH());
-#endif
+#  endif
   return open_;
+#else
+  return true;
+#endif
 }
 
 void LTDLHandle::close()
 {
+#ifndef MC_RTC_BUILD_STATIC
   if(open_)
   {
     open_ = false;
     lt_dlclose(handle_);
   }
+#endif
 }
 
 Loader::callback_t Loader::default_cb = [](const std::string &, LTDLHandle &) {};
+
+std::string Loader::debug_suffix = "/debug";
 
 unsigned int Loader::init_count_ = 0;
 
 bool Loader::init()
 {
+#ifndef MC_RTC_BUILD_STATIC
   if(init_count_ == 0)
   {
     int err = lt_dlinit();
@@ -146,11 +157,13 @@ bool Loader::init()
     }
   }
   ++init_count_;
+#endif
   return true;
 }
 
 bool Loader::close()
 {
+#ifndef MC_RTC_BUILD_STATIC
   --init_count_;
   if(init_count_ == 0)
   {
@@ -161,16 +174,30 @@ bool Loader::close()
       mc_rtc::log::error_and_throw<LoaderException>("Failed to close ltdl\n{}", error);
     }
   }
+#endif
   return true;
 }
 
 void Loader::load_libraries(const std::string & class_name,
-                            const std::vector<std::string> & paths,
+                            const std::vector<std::string> & pathsIn,
                             Loader::handle_map_t & out,
                             bool verbose,
                             Loader::callback_t cb)
 {
-#ifdef WIN32
+#ifndef MC_RTC_BUILD_STATIC
+  std::vector<std::string> debug_paths;
+  auto pathsRef = std::cref(pathsIn);
+  if(mc_rtc::debug())
+  {
+    debug_paths = pathsIn;
+    for(auto & p : debug_paths)
+    {
+      p += debug_suffix;
+    }
+    pathsRef = debug_paths;
+  }
+  const auto & paths = pathsRef.get();
+#  ifdef WIN32
   std::stringstream ss;
   for(const auto & path : paths)
   {
@@ -178,9 +205,9 @@ void Loader::load_libraries(const std::string & class_name,
   }
   ss << getPATH();
   std::string rpath = ss.str();
-#else
+#  else
   std::string rpath = "";
-#endif
+#  endif
   for(const auto & path : paths)
   {
     if(!bfs::exists(path))
@@ -201,7 +228,7 @@ void Loader::load_libraries(const std::string & class_name,
     for(const auto & p : drange)
     {
       /* Attempt to load all dynamics libraries in the directory */
-      if((!bfs::is_directory(p)) && (!bfs::is_symlink(p)) && bfs::extension(p) == "@CMAKE_SHARED_LIBRARY_SUFFIX@")
+      if((!bfs::is_directory(p)) && bfs::extension(p) == "@CMAKE_SHARED_LIBRARY_SUFFIX@")
       {
         auto handle = std::make_shared<LTDLHandle>(class_name, p.string(), rpath, verbose);
         for(const auto & cn : handle->classes())
@@ -228,6 +255,7 @@ void Loader::load_libraries(const std::string & class_name,
       }
     }
   }
+#endif
 }
 
 } // namespace mc_rtc

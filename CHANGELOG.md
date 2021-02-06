@@ -2,6 +2,86 @@
 
 ## [Unreleased]
 
+## [1.6.0] - 2020-10-16
+
+### Changes
+
+- [cmake/loader] When mc_rtc is build in debug mode it will look for loadable libraries (controllers, robots, observers and plugins) in the debug sub-folder of the standard installation location (#78)
+- [cmake/loader] On Windows, mc_rtc will now look for loadable libraries in the `bin/mc_[component]` folder instead of `lib/mc_[component]` and install helper libraries in the `bin` folder (#81)
+- [FSM] `RemovePostureTask` is now `DisablePostureTask`, it disables either all FSM posture tasks for the state's duration if it is set to `true` or disable only the posture tasks for the provided robots (#80)
+- [FSM] `RemovePostureTask` is kept for backward compatibility, it has the same capabilities as `DisablePostureTask` (#80)
+
+### Added
+
+- [FSM] Posture state has been introduced to interact with the global posture (#67)
+- [FSM] HalfSitting can now handle any robot (#67)
+- [mc_robots] Generate env aliases for the objects (#67)
+- [mc_tasks] Add a simple constructor for StabilizerTask (#69)
+- [cmake] Export mc_rtc observers as targets so they can be used as a base class
+- [mc_rtc] Introduce mc_rtc::debug() (#78)
+- [FSM] `constraints` can be used to load extra-constraints in any state (#80)
+- [FSM] `tasks` can be used to load extra-tasks in any state (#80)
+- [mc_trajectory] Introduce `SequenceInterpolator` to do linear interpolation between values over a time-sequence (#64)
+- [mc_tasks] SplineTrajectoryTask can use `SequenceInterpolator` to use varying gains during the task execution (#64)
+
+### Fixes
+
+- [mc_observers] Fix configuration reading for anchor frame configuration (#69)
+- Typo in CMake macros for controller build in catkin workspace (#75)
+- Load libraries from a symlink (#76)
+- [mc_log_ui] The open_log function returns a ditionnary as documented
+- [mc_rtc] Configuration::empty() correctly returns false if the Configuration hold a value
+- [mc_rtc] Configuration::load() does not (wrongly) load the full document under some circumstances
+
+## [1.5.1] - 2020-09-14
+
+### Added
+
+- [mc_tasks] Allow to set the damping on PostureTask
+- [mc_tasks] Log eval and speed in most tasks
+
+### Fixes
+
+- [mc_control] Add missing implementation for some (multi-robot) MCGlobalController functions
+
+## [1.5.0] - 2020-09-09
+
+### Changes
+
+- Output torques are automatically computed when a dynamics constraint is added to the solver (#52)
+- mc\_rtc::Configuration error reporting now reports the source of error (#60)
+- Real robots instance are now created for all robots loaded by a controller
+- Observer pipelines have been overhauled (#61); see the [refreshed tutorial](https://jrl-umi3218.github.io/mc_rtc/tutorials/recipes/observers.html) for details
+- If a RobotModule provides torque derivative or joint acceleration bounds those will be enforced by (resp.) DynamicsConstraint and KinematicsConstraint
+
+### Added
+
+- [GUI] Added Table element with formatting support (#45/#47)
+- [mc\_rbdyn] Add an API to find force sensors indirectly attached to a surface
+- Support for simple collision shapes described in URDF (#53)
+- Suppport for wildcard collision specifications (#53)
+- GUI monitoring for collisions (#53)
+- User configuration for the build and install script (#48)
+- Support for specifying torque derivative and joint acceleration bounds in RobotModule
+- [mc\_naoqi](https://github.com/jrl-umi3218/mc_naoqi) public release, an interface for SoftBank Robotics robots
+- Support for logging `std::array<double, N>` (#62)
+- Wrench completion criteria for SurfaceTransformTask (#63)
+- Admittance sample controller (!215)
+
+### Fixes
+
+- Support for Ubuntu Focal/ROS noetic in utils script/CI
+- Support for Debian Buster/ROS noetic in utils script/CI
+- Fix several issues with special plots in mc\_log\_ui
+- Publish up-to-date surfaces in ROS TF (#44)
+- Improve documentation for completion criteria (#50)
+- C-string overload for GenericLoader (fixes possibly ambiguous calls)
+- Fix initialization issues
+- Simplified device interface (#51)
+- Fix an issue with collision transforms initialization
+- Fix an issue with FSM executor perf entry logging
+- Improved StabilizerTask/StabilizerState configurability (#23)
+
 ## [1.4.0] - 2020-06-11
 
 ### Changes
@@ -140,7 +220,10 @@
 
 Initial release
 
-[Unreleased]: https://github.com/jrl-umi3218/mc_rtc/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/jrl-umi3218/mc_rtc/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/jrl-umi3218/mc_rtc/releases/tag/v1.6.0
+[1.5.1]: https://github.com/jrl-umi3218/mc_rtc/releases/tag/v1.5.1
+[1.5.0]: https://github.com/jrl-umi3218/mc_rtc/releases/tag/v1.5.0
 [1.4.0]: https://github.com/jrl-umi3218/mc_rtc/releases/tag/v1.4.0
 [1.3.0]: https://github.com/jrl-umi3218/mc_rtc/releases/tag/v1.3.0
 [1.2.1]: https://github.com/jrl-umi3218/mc_rtc/releases/tag/v1.2.1

@@ -89,7 +89,7 @@
       title: "DataStore: Sharing Objects"
     -
       id: observers
-      title: Using the observers pipeline
+      title: State Observation Pipelines
     -
       id: lipm-stabilizer
       title: Using the LIPM Stabilizer
@@ -120,6 +120,9 @@
   desc: This section explains the sample controllers
   tutorials:
     -
+      id: list-of-samples 
+      title: Available sample controllers 
+    -
       id: sample-admittance
       title: Admittance sample controller
 -
@@ -136,6 +139,9 @@
     -
       id: new-robot
       title: Integrate a new robot in mc_rtc
+    -
+      id: support-mc-rtc-build-static
+      title: Supporting MC_RTC_BUILD_STATIC in your code
     -
       id: debug-lssol-output-6
       title: Debugging LSSOL output 6

@@ -19,6 +19,8 @@
 #include <mc_tasks/lipm_stabilizer/Contact.h>
 #include <mc_tasks/lipm_stabilizer/ZMPCC.h>
 
+#include <state-observation/dynamics-estimators/lipm-dcm-estimator.hpp>
+
 #include <Eigen/QR>
 #include <eigen-quadprog/QuadProg.h>
 
@@ -27,6 +29,13 @@ namespace mc_tasks
 
 namespace lipm_stabilizer
 {
+
+using ::mc_filter::utils::clamp;
+using ZMPCCConfiguration = mc_rbdyn::lipm_stabilizer::ZMPCCConfiguration;
+using StabilizerConfiguration = mc_rbdyn::lipm_stabilizer::StabilizerConfiguration;
+using FDQPWeights = mc_rbdyn::lipm_stabilizer::FDQPWeights;
+using SafetyThresholds = mc_rbdyn::lipm_stabilizer::SafetyThresholds;
+using DCMBiasEstimatorConfiguration = mc_rbdyn::lipm_stabilizer::DCMBiasEstimatorConfiguration;
 
 /** Walking stabilization based on linear inverted pendulum tracking.
  *
@@ -44,26 +53,6 @@ namespace lipm_stabilizer
 struct MC_TASKS_DLLAPI StabilizerTask : public MetaTask
 {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
-  static constexpr double MAX_AVERAGE_DCM_ERROR = 0.05; /**< Maximum average (integral) DCM error in [m] */
-  static constexpr double MAX_COP_ADMITTANCE = 0.1; /**< Maximum CoP admittance for foot damping control */
-  static constexpr double MAX_DCM_D_GAIN = 2.; /**< Maximum DCM derivative gain (no unit) */
-  static constexpr double MAX_DCM_I_GAIN = 100.; /**< Maximum DCM average integral gain in [Hz] */
-  static constexpr double MAX_DCM_P_GAIN = 20.; /**< Maximum DCM proportional gain in [Hz] */
-  static constexpr double MAX_DFZ_ADMITTANCE =
-      5e-4; /**< Maximum admittance in [s] / [kg] for foot force difference control */
-  static constexpr double MAX_DFZ_DAMPING =
-      10.; /**< Maximum normalized damping in [Hz] for foot force difference control */
-  static constexpr double MAX_FDC_RX_VEL =
-      0.2; /**< Maximum x-axis angular velocity in [rad] / [s] for foot damping control. */
-  static constexpr double MAX_FDC_RY_VEL =
-      0.2; /**< Maximum y-axis angular velocity in [rad] / [s] for foot damping control. */
-  static constexpr double MAX_FDC_RZ_VEL =
-      0.2; /**< Maximum z-axis angular velocity in [rad] / [s] for foot damping control. */
-  static constexpr double MIN_DS_PRESSURE = 15.; /**< Minimum normal contact force in DSP, used to avoid low-pressure
-                                                    targets when close to contact switches. */
-  /**< Minimum force for valid ZMP computation (throws otherwise) */
-  static constexpr double MIN_NET_TOTAL_FORCE_ZMP = 1.;
 
   /**
    * @brief Creates a stabilizer meta task
@@ -86,6 +75,25 @@ struct MC_TASKS_DLLAPI StabilizerTask : public MetaTask
                  double dt);
 
   /**
+   * @brief Creates a stabilizer meta task
+   *
+   * This constructor uses the stabilizer configuration in the robot module associated to the controlled robot. The
+   * stabilizer is started with two feet contacts.
+   *
+   * @param robots Robots on which the task acts
+   *
+   * @param realRobots Corresponding real robots instance
+   *
+   * @param robotIndex Index of the robot
+   *
+   * @param dt Controller's timestep
+   */
+  StabilizerTask(const mc_rbdyn::Robots & robots,
+                 const mc_rbdyn::Robots & realRobots,
+                 unsigned int robotIndex,
+                 double dt);
+
+  /**
    * @brief Resets the stabilizer tasks and parameters to their default configuration.
    *
    * Resets all tasks and errors/integrator/derivators to their initial
@@ -93,12 +101,12 @@ struct MC_TASKS_DLLAPI StabilizerTask : public MetaTask
    * module.
    *
    * You can configure the stabilizer parameters (DCM tacking gains, task gains, etc) by calling
-   * configure(const mc_rbdyn::lipm_stabilizer::StabilizerConfiguration & config)
+   * configure(const StabilizerConfiguration & config)
    *
    * \note If you wish to reset the stabilizer from it's current configuration,
    * you can do so by storing its current configuration as accessed by config()
    * or commitedConfig() and set it explitely after calling reset by calling
-   * configure(const mc_rbdyn::lipm_stabilizer::StabilizerConfiguration &);
+   * configure(const StabilizerConfiguration &);
    */
   void reset() override;
 
@@ -137,7 +145,7 @@ struct MC_TASKS_DLLAPI StabilizerTask : public MetaTask
    * \see load(mc_solver::QPSolver &, const mc_rtc::Configuration &) to set
    * stabilizer targets and contacts from configuration
    */
-  void configure(const mc_rbdyn::lipm_stabilizer::StabilizerConfiguration & config);
+  void configure(const StabilizerConfiguration & config);
 
   /**
    * @brief Use the current configuration as the new default
@@ -153,7 +161,7 @@ struct MC_TASKS_DLLAPI StabilizerTask : public MetaTask
    *
    * \see commitedConfig()
    */
-  const mc_rbdyn::lipm_stabilizer::StabilizerConfiguration & config() const;
+  const StabilizerConfiguration & config() const;
 
   /**
    * @brief Get last commited configuration
@@ -163,7 +171,7 @@ struct MC_TASKS_DLLAPI StabilizerTask : public MetaTask
    *
    * \see config()
    */
-  const mc_rbdyn::lipm_stabilizer::StabilizerConfiguration & commitedConfig() const;
+  const StabilizerConfiguration & commitedConfig() const;
 
   /**
    * Reset stabilizer configuration from last configuration set by configure()
@@ -238,15 +246,13 @@ struct MC_TASKS_DLLAPI StabilizerTask : public MetaTask
 
   /**
    * @brief computes the anchorFrame compatible with the state observers
-   * (KinematicInertial)
+   * (e.g KinematicInertial)
+   *
+   * @param robot Robot from which the frame will be computed
    *
    * @return Anchor frame in-between the feet according to leftFootRatio()
    */
-  sva::PTransformd anchorFrame() const;
-  /**
-   * @brief Returns the anchor frame computed from real robot
-   */
-  sva::PTransformd anchorFrameReal() const;
+  sva::PTransformd anchorFrame(const mc_rbdyn::Robot & robot) const;
 
   /** Provides a static target to the stabilizer.
    * - CoM target : user-provided
@@ -315,6 +321,215 @@ struct MC_TASKS_DLLAPI StabilizerTask : public MetaTask
     return contacts_.size() == 2;
   }
 
+  const mc_rbdyn::Robot & robot() const
+  {
+    return robots_.robot(robotIndex_);
+  }
+
+  const mc_rbdyn::Robot & realRobot() const
+  {
+    return realRobots_.robot(robotIndex_);
+  }
+
+  /**
+   * @name Setters to reconfigure the stabilizer online
+   *
+   * Setters for the main parameters of the stabilizer.
+   * For safety purposes, values are clamped against the maximum values defined
+   * by the stabilizer configuration.
+   *
+   * \see StabilizerConfiguration for details on each
+   * of these parameters.
+   *
+   * \see config() Access the current stabilizer configuration values
+   * \see commitConfig() Make the current configuration the new default
+   * @{
+   */
+  void torsoPitch(double pitch)
+  {
+    c_.torsoPitch = pitch;
+  }
+
+  void torsoWeight(double weight)
+  {
+    c_.torsoWeight = weight;
+    torsoTask->weight(c_.torsoWeight);
+  }
+
+  void torsoStiffness(double stiffness)
+  {
+    c_.torsoStiffness = stiffness;
+    torsoTask->stiffness(stiffness);
+  }
+
+  void pelvisWeight(double weight)
+  {
+    c_.pelvisWeight = weight;
+    pelvisTask->weight(c_.pelvisWeight);
+  }
+
+  void pelvisStiffness(double stiffness)
+  {
+    c_.pelvisStiffness = stiffness;
+    pelvisTask->stiffness(stiffness);
+  }
+
+  void dcmGains(double p, double i, double d)
+  {
+    c_.dcmPropGain = clamp(p, 0., c_.safetyThresholds.MAX_DCM_P_GAIN);
+    c_.dcmIntegralGain = clamp(i, 0., c_.safetyThresholds.MAX_DCM_I_GAIN);
+    c_.dcmDerivGain = clamp(d, 0., c_.safetyThresholds.MAX_DCM_D_GAIN);
+  }
+
+  void dcmIntegratorTimeConstant(double dcmIntegratorTimeConstant)
+  {
+    c_.dcmIntegratorTimeConstant = dcmIntegratorTimeConstant;
+    dcmIntegrator_.timeConstant(dcmIntegratorTimeConstant);
+  }
+
+  void dcmDerivatorTimeConstant(double dcmDerivatorTimeConstant)
+  {
+    c_.dcmDerivatorTimeConstant = dcmDerivatorTimeConstant;
+    dcmDerivator_.timeConstant(dcmDerivatorTimeConstant);
+  }
+
+  void comWeight(double weight)
+  {
+    c_.comWeight = weight;
+    comTask->weight(weight);
+  }
+
+  void comStiffness(const Eigen::Vector3d & stiffness)
+  {
+    c_.comStiffness = stiffness;
+    comTask->stiffness(stiffness);
+  }
+
+  void contactWeight(double weight)
+  {
+    c_.contactWeight = weight;
+    for(auto footT : contactTasks)
+    {
+      footT->weight(c_.contactWeight);
+    }
+  }
+
+  void contactStiffness(const sva::MotionVecd & stiffness)
+  {
+    c_.contactStiffness = stiffness;
+    for(auto contactT : contactTasks)
+    {
+      contactT->stiffness(stiffness);
+    }
+  }
+
+  void contactDamping(const sva::MotionVecd & damping)
+  {
+    c_.contactDamping = damping;
+    for(auto contactT : contactTasks)
+    {
+      contactT->damping(damping);
+    }
+  }
+
+  void copAdmittance(const Eigen::Vector2d & copAdmittance)
+  {
+    c_.copAdmittance = clamp(copAdmittance, 0., c_.safetyThresholds.MAX_COP_ADMITTANCE);
+    for(auto contactT : contactTasks)
+    {
+      contactT->admittance(contactAdmittance());
+    }
+  }
+
+  void copMaxVel(const sva::MotionVecd & copMaxVel)
+  {
+    c_.copMaxVel = copMaxVel;
+    for(const auto & footTask : footTasks)
+    {
+      footTask.second->maxLinearVel(copMaxVel.linear());
+      footTask.second->maxAngularVel(copMaxVel.angular());
+    }
+  }
+
+  /* Set the gain of the low-pass velocity filter of the cop tasks */
+  void copVelFilterGain(double gain)
+  {
+    c_.copVelFilterGain = mc_filter::utils::clamp(gain, 0, 1);
+    for(auto & ft : footTasks)
+    {
+      ft.second->velFilterGain(gain);
+    }
+  }
+
+  /* Get the gain of the low-pass velocity filter of the cop tasks */
+  double copVelFilterGain() const noexcept
+  {
+    return c_.copVelFilterGain;
+  }
+
+  void vdcFrequency(double freq)
+  {
+    c_.vdcFrequency = clamp(freq, 0., 10.);
+  }
+
+  void vdcStiffness(double stiffness)
+  {
+    c_.vdcStiffness = clamp(stiffness, 0., 1e4);
+  }
+
+  void dfzAdmittance(double dfzAdmittance)
+  {
+    c_.dfzAdmittance = clamp(dfzAdmittance, 0., c_.safetyThresholds.MAX_DFZ_ADMITTANCE);
+  }
+
+  void dfzDamping(double dfzDamping)
+  {
+    c_.dfzDamping = clamp(dfzDamping, 0., c_.safetyThresholds.MAX_DFZ_DAMPING);
+  }
+
+  void fdqpWeights(const FDQPWeights & fdqp)
+  {
+    c_.fdqpWeights = fdqp;
+  }
+
+  /**
+   * @brief Changes the safety thresholds
+   *
+   * This ensures that all the parameters depending on these safety parameters
+   * are within the new thresholds. If they are out of bounds, they will be
+   * clamped back to the new range, and a warning message will be displayed.
+   *
+   * @param thresholds New safety thresholds
+   */
+  void safetyThresholds(const SafetyThresholds & thresholds)
+  {
+    c_.safetyThresholds = thresholds;
+    c_.clampGains();
+    // only requried because we want to apply the new gains immediately
+    copAdmittance(c_.copAdmittance);
+  }
+
+  /**
+   * @brief Changes the parameters of the DCM bias estimator
+   *
+   * @param biasConfig Configuration parameters for the bias estimation
+   */
+  void dcmBiasEstimatorConfiguration(const DCMBiasEstimatorConfiguration & biasConfig)
+  {
+    auto & bc = c_.dcmBias;
+    bc = biasConfig;
+    dcmEstimator_.setBiasDriftPerSecond(bc.biasDriftPerSecondStd);
+    dcmEstimator_.setDcmMeasureErrorStd(bc.dcmMeasureErrorStd);
+    dcmEstimator_.setZmpMeasureErrorStd(bc.zmpMeasureErrorStd);
+    dcmEstimator_.setBiasLimit(bc.biasLimit);
+  }
+
+  /// Get parameters of the DCM bias estimator
+  const DCMBiasEstimatorConfiguration & dcmBiasEstimatorConfiguration() const noexcept
+  {
+    return c_.dcmBias;
+  }
+
 private:
   void dimWeight(const Eigen::VectorXd & dimW) override;
   Eigen::VectorXd dimWeight() const override;
@@ -336,9 +551,6 @@ private:
    * will be done by update() when the task is added to the solver.
    */
   void addContact(ContactState contactState, const internal::Contact & contact);
-
-  /** Check that all gains are within boundaries. */
-  void checkGains();
 
   /** Check whether the robot is in the air. */
   void checkInTheAir();
@@ -416,6 +628,12 @@ private:
     return {{c_.copAdmittance.y(), c_.copAdmittance.x(), 0.}, {0., 0., 0.}};
   }
 
+  void zmpcc(const ZMPCCConfiguration & zmpccConfig)
+  {
+    c_.zmpcc = zmpccConfig;
+    zmpcc_.configure(zmpccConfig);
+  }
+
   /* Task-related properties */
 protected:
   void addToSolver(mc_solver::QPSolver & solver) override;
@@ -431,16 +649,6 @@ protected:
   void removeFromLogger(mc_rtc::Logger &) override;
   void addToGUI(mc_rtc::gui::StateBuilder &) override;
 
-  const mc_rbdyn::Robot & robot() const
-  {
-    return robots_.robot(robotIndex_);
-  }
-
-  const mc_rbdyn::Robot & realRobot() const
-  {
-    return realRobots_.robot(robotIndex_);
-  }
-
   /**
    * @brief Actual configuration of the stabilizer.
    * Called when reconfigure_ is true
@@ -448,6 +656,9 @@ protected:
    * @param solver Solver to which this task has been added
    */
   void configure_(mc_solver::QPSolver & solver);
+
+  /** Ensures that the configuration is valid */
+  void checkConfiguration(const StabilizerConfiguration & config);
 
 protected:
   /**
@@ -473,7 +684,8 @@ protected:
       contacts_;
   std::vector<ContactState> addContacts_; /**< Contacts to add to the QPSolver when the task is inserted */
   std::unordered_map<ContactState, std::shared_ptr<mc_tasks::force::CoPTask>, EnumClassHash> footTasks;
-  std::vector<std::shared_ptr<mc_tasks::force::CoPTask>> contactTasks;
+  std::vector<std::shared_ptr<mc_tasks::force::CoPTask>> contactTasks; /** Foot tasks for the established contacts */
+  std::vector<std::string> contactSensors; /** Force sensors corresponding to established contacts */
 
   std::vector<std::vector<Eigen::Vector3d>> supportPolygons_; /**< For GUI display */
   Eigen::Vector2d supportMin_ = Eigen::Vector2d::Zero();
@@ -498,11 +710,11 @@ protected:
 protected:
   /**< Default (user-provided) configuration for the stabilizer. This configuration is superseeded by the parameters set
    * in the GUI */
-  mc_rbdyn::lipm_stabilizer::StabilizerConfiguration defaultConfig_;
+  StabilizerConfiguration defaultConfig_;
   /**< Last valid stabilizer configuration. */
-  mc_rbdyn::lipm_stabilizer::StabilizerConfiguration lastConfig_;
+  StabilizerConfiguration lastConfig_;
   /**< Online stabilizer configuration, can be set from the GUI. Defaults to defaultConfig_ */
-  mc_rbdyn::lipm_stabilizer::StabilizerConfiguration c_;
+  StabilizerConfiguration c_;
   /**< Whether the stabilizer needs to be reconfigured at the next
    * update(solver) call */
   bool reconfigure_ = true;
@@ -515,11 +727,21 @@ protected:
   Eigen::Vector3d measuredCoM_ = Eigen::Vector3d::Zero();
   Eigen::Vector3d measuredCoMd_ = Eigen::Vector3d::Zero();
   Eigen::Vector3d measuredZMP_ = Eigen::Vector3d::Zero();
-  Eigen::Vector3d measuredDCM_ = Eigen::Vector3d::Zero();
+  Eigen::Vector3d measuredDCM_ = Eigen::Vector3d::Zero(); /// Measured DCM (only used for logging)
+  Eigen::Vector3d measuredDCMUnbiased_ = Eigen::Vector3d::Zero(); /// DCM unbiased (only used for logging)
   sva::ForceVecd measuredNetWrench_ = sva::ForceVecd::Zero();
 
   bool zmpccOnlyDS_ = true; /**< Only apply ZMPCC in double support */
   ZMPCC zmpcc_; /**< Compute CoM offset due to ZMPCC compensation */
+
+  /**
+   * Filtering of the divergent component of motion (DCM)
+   * and estimation of a bias betweeen the DCM and the corresponding zero moment point for a linearized inverted
+   * pendulum model.
+   */
+  stateObservation::LipmDcmEstimator dcmEstimator_;
+  /**< Whether the estimator needs to be reset (robot in the air, initialization) */
+  bool dcmEstimatorNeedsReset_ = true;
 
   mc_filter::ExponentialMovingAverage<Eigen::Vector3d> dcmIntegrator_;
   mc_filter::StationaryOffset<Eigen::Vector3d> dcmDerivator_;
@@ -531,10 +753,10 @@ protected:
   double mass_ = 38.; /**< Robot mass in [kg] */
   double runTime_ = 0.;
   double vdcHeightError_ = 0.; /**< Average height error used in vertical drift compensation */
-  sva::ForceVecd distribWrench_ = sva::ForceVecd::Zero();
-  std::vector<std::string> sensorNames_ = {
-      "LeftFootForceSensor", "RightFootForceSensor"}; /** Force sensors corresponding to established contacts */
-  sva::PTransformd zmpFrame_;
+  sva::ForceVecd distribWrench_ = sva::ForceVecd::Zero(); /**< Result of the force distribution QP */
+  Eigen::Vector3d distribZMP_ =
+      Eigen::Vector3d::Zero(); /**< ZMP corresponding to force distribution result (desired ZMP) */
+  sva::PTransformd zmpFrame_ = sva::PTransformd::Identity(); /**< Frame in which the ZMP is computed */
 };
 
 } // namespace lipm_stabilizer

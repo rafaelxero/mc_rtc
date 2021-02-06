@@ -84,11 +84,18 @@ IMPL_MAPPING(Eigen::Quaterniond, Quaterniond);
 IMPL_MAPPING(sva::PTransformd, PTransformd);
 IMPL_MAPPING(sva::ForceVecd, ForceVecd);
 IMPL_MAPPING(sva::MotionVecd, MotionVecd);
+IMPL_MAPPING(sva::ImpedanceVecd, MotionVecd);
 
 #undef IMPL_MAPPING
 
 template<typename A>
 struct GetLogType<std::vector<double, A>>
+{
+  static constexpr mc_rtc::log::LogType type = mc_rtc::log::LogType::VectorDouble;
+};
+
+template<std::size_t N>
+struct GetLogType<std::array<double, N>>
 {
   static constexpr mc_rtc::log::LogType type = mc_rtc::log::LogType::VectorDouble;
 };

@@ -1,5 +1,6 @@
 ---
 layout: tutorials
+toc: true
 ---
 
 The GUI feature allows to build a dynamic graphical interface to interact with your controller remotely. In some regards, the feature implementation and the way you will use it in your controller is close to the approach to [logging]({{site.baseurl}}/tutorials/usage/logging.html).
@@ -94,10 +95,10 @@ Button("Push me", []() { std::cout << "Hello!" << std::endl; });
 This element display a checkbox. Its status depends on the value you provide, when you click it that value will be flipped.
 
 ```cpp
-Checkbox("Check me", [this]() { return status_; }, [this](bool b) { status_ = b; });
+Checkbox("Check me", [this]() { return status_; }, [this]() { status_ = !status_; });
 ```
 
-##### `StringInput`/`IntegerInput`/`Number`/`ArrayInput`
+##### `StringInput`/`IntegerInput`/`NumberInput`/`ArrayInput`
 
 These elements provide inputs for the user. You should use the representation that is most relevant to your data.
 

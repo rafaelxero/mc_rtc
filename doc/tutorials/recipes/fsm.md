@@ -1,5 +1,6 @@
 ---
 layout: tutorials
+toc: true
 ---
 
 A finite-state machine (FSM) is an abstract machine that can be in one of a finite set of states. Based on conditions internal or external to the current state, the machine's state can change. Such a state is known as a transition. Such machines are ubiquitous in programming and are particularly well-suited to implement robotic scenarios due to the simplicity and the composability it offers.
@@ -17,7 +18,7 @@ mc\_rtc provides a controller implementation to implement the state chart formal
 We will discuss the state implementation later. For now we will simply describe the four main methods of a state:
 
 - `configure` is used to configure the state; one important feature to consider and understand with the FSM implementation is that new states can be created by specifying a different configuration of an existing state. This function will thus be called multiple times;
-- `init` is used to perform initialization; it is called only once;
+- `start` is used to perform initialization; it is called only once;
 - `run` is the main function implemented by a state; it is called once per iteration loop until the state is over or until the state changes. When the run is completed, the state will set an output to an arbitrary value that must be documented by the state;
 - `teardown` is a cleanup function that is called when the state changes.
 
@@ -93,7 +94,10 @@ The way options are combined depends on the C++ state implementation and should 
 
 ## States already implemented in mc_rtc
 
-This section covers states that are provided as part of mc_rtc.
+
+This section covers the main states that are provided as part of mc_rtc. A complete description of all available states and their configuration can be found in the [States JSON Schema]({{site.baseurl}}/json.html#State-objects).
+
+<div class="no_toc_section">
 
 <ul class="nav nav-tabs" id="statesTab" role="tablist">
   <li class="nav-item">
@@ -263,6 +267,8 @@ This section covers states that are provided as part of mc_rtc.
   </div>
 </div>
 
+</div>
+
 ### Common options
 
 Some options are common to all states:
@@ -274,7 +280,7 @@ Some options are common to all states:
 
 ## New state creation
 
-The minimal interface for a State is the following:
+A state is created by inheriting from {% doxygen mc_control::fsm::State %}. Its minimal interface is the following:
 
 ```cpp
 namespace mc_control::fsm
@@ -294,7 +300,7 @@ namespace mc_control::fsm
 EXPORT_SINGLE_STATE("MyState", mc_control::fsm::MyState);
 ```
 
-In all functions where a `Controller` instance is passed it is an `mc_control::fsm::Controller` instance.
+In all functions where a `Controller` instance is passed it is an {% doxygen mc_control::fsm::Controller %} instance.
 
 ### `void configure(mc_rtc::Configuration &)`
 
@@ -329,7 +335,7 @@ struct Contact
   std::string r2;
   std::string r1Surface;
   std::string r2Surface;
-  Eigen::Vector6d dof; // defauls to Eigen::Vector6d::Ones()
+  Eigen::Vector6d dof; // defaults to Eigen::Vector6d::Ones()
 };
 ```
 
@@ -360,7 +366,7 @@ void removeCollisions(const std::string & r1, const std::string & r2);
 
 The FSM will create and add the necessary collision constraints if necessary.
 
-##### Posture tasks
+#### Posture tasks
 
 The FSM controller creates a posture task for every actuated robot. You can access this task by calling:
 
@@ -377,10 +383,6 @@ The following methods are virtual in the `State` interface and can be optionally
 #### `void stop(Controller &)`
 
 This is called if the state is interrupted.
-
-#### `bool read_msg(std::string &)`/`bool read_write_msg(std::string &, std::string &)`
-
-Can be used to communicate with the state using the same interface as the controller.
 
 ## FSM configuration
 

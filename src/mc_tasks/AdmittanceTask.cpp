@@ -9,8 +9,6 @@
 #include <mc_rbdyn/configuration_io.h>
 #include <mc_rbdyn/rpy_utils.h>
 
-#include <mc_filter/utils/clamp.h>
-
 #include <mc_rtc/gui/ArrayLabel.h>
 #include <mc_rtc/gui/Transform.h>
 
@@ -54,7 +52,7 @@ void AdmittanceTask::update(mc_solver::QPSolver &)
   clampInPlaceAndWarn(angularVel, (-maxAngularVel_).eval(), maxAngularVel_, name_ + " angular velocity");
 
   // Filter
-  refVelB_ = 0.8 * refVelB_ + 0.2 * sva::MotionVecd(angularVel, linearVel);
+  refVelB_ = velFilterGain_ * refVelB_ + (1 - velFilterGain_) * sva::MotionVecd(angularVel, linearVel);
 
   // Compute position and rotation delta
   sva::PTransformd delta(mc_rbdyn::rpyToMat(timestep_ * refVelB_.angular()), timestep_ * refVelB_.linear());
@@ -90,6 +88,7 @@ void AdmittanceTask::load(mc_solver::QPSolver & solver, const mc_rtc::Configurat
   }
   else if(config.has("targetPose"))
   {
+    mc_rtc::log::warning("[{}] property \"targetPose\" is deprecated, use \"target\" instead", name());
     targetPose(config("targetPose"));
   }
   if(config.has("wrench"))
@@ -116,6 +115,7 @@ void AdmittanceTask::addToLogger(mc_rtc::Logger & logger)
   logger.addLogEntry(name_ + "_measured_wrench", [this]() -> sva::ForceVecd { return measuredWrench(); });
   logger.addLogEntry(name_ + "_target_body_vel", [this]() -> const sva::MotionVecd & { return feedforwardVelB_; });
   logger.addLogEntry(name_ + "_target_wrench", [this]() -> const sva::ForceVecd & { return targetWrench_; });
+  logger.addLogEntry(name_ + "_vel_filter_gain", [this]() { return velFilterGain_; });
 }
 
 void AdmittanceTask::removeFromLogger(mc_rtc::Logger & logger)
@@ -125,44 +125,7 @@ void AdmittanceTask::removeFromLogger(mc_rtc::Logger & logger)
   logger.removeLogEntry(name_ + "_measured_wrench");
   logger.removeLogEntry(name_ + "_target_body_vel");
   logger.removeLogEntry(name_ + "_target_wrench");
-}
-
-std::function<bool(const mc_tasks::MetaTask &, std::string &)> AdmittanceTask::buildCompletionCriteria(
-    double dt,
-    const mc_rtc::Configuration & config) const
-{
-  if(config.has("wrench"))
-  {
-    sva::ForceVecd target_w = config("wrench");
-    Eigen::Vector6d target = target_w.vector();
-    Eigen::Vector6d dof = Eigen::Vector6d::Ones();
-    for(int i = 0; i < 6; ++i)
-    {
-      if(std::isnan(target(i)))
-      {
-        dof(i) = 0.;
-        target(i) = 0.;
-      }
-      else if(target(i) < 0)
-      {
-        dof(i) = -1.;
-      }
-    }
-    return [dof, target](const mc_tasks::MetaTask & t, std::string & out) {
-      const auto & self = static_cast<const mc_tasks::force::AdmittanceTask &>(t);
-      Eigen::Vector6d w = self.measuredWrench().vector();
-      for(int i = 0; i < 6; ++i)
-      {
-        if(dof(i) * fabs(w(i)) < target(i))
-        {
-          return false;
-        }
-      }
-      out += "wrench";
-      return true;
-    };
-  }
-  return MetaTask::buildCompletionCriteria(dt, config);
+  logger.removeLogEntry(name_ + "_vel_filter_gain");
 }
 
 void AdmittanceTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
@@ -179,7 +142,9 @@ void AdmittanceTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
                                          [this]() { return this->targetWrench().vector(); },
                                          [this](const Eigen::Vector6d & a) { this->targetWrench(a); }),
                  mc_rtc::gui::ArrayLabel("measured_wrench", {"cx", "cy", "cz", "fx", "fy", "fz"},
-                                         [this]() { return this->measuredWrench().vector(); }));
+                                         [this]() { return this->measuredWrench().vector(); }),
+                 mc_rtc::gui::NumberInput("Velocity filter gain", [this]() { return velFilterGain_; },
+                                          [this](double g) { velFilterGain(g); }));
   // Don't add SurfaceTransformTask as target configuration is different
   TrajectoryTaskGeneric<tasks::qp::SurfaceTransformTask>::addToGUI(gui);
 }
@@ -203,6 +168,7 @@ static auto registered = mc_tasks::MetaTaskLoader::register_load_function(
       auto t = std::make_shared<mc_tasks::force::AdmittanceTask>(
           config("surface"), solver.robots(), robotIndexFromConfig(config, solver.robots(), "admittance"));
 
+      t->reset();
       t->load(solver, config);
       return t;
     });

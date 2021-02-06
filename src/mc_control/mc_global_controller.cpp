@@ -1,10 +1,15 @@
 /*
- * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ * Copyright 2015-2020 CNRS-UM LIRMM, CNRS-AIST JRL
  */
 
 #include <mc_control/mc_global_controller.h>
 
 #include <mc_control/GlobalPlugin.h>
+
+#ifdef MC_RTC_BUILD_STATIC
+#  include <mc_control/ControllerLoader.h>
+#  include <mc_control/GlobalPluginLoader.h>
+#endif
 
 #include <mc_rbdyn/RobotLoader.h>
 
@@ -40,39 +45,24 @@ MCGlobalController::MCGlobalController(const std::string & conf, std::shared_ptr
 MCGlobalController::MCGlobalController(const GlobalConfiguration & conf)
 : config(conf), current_ctrl(""), next_ctrl(""), controller_(nullptr), next_controller_(nullptr)
 {
-  // Loading observer modules
-  for(const auto & observerName : config.enabled_observers)
-  {
-    if(mc_observers::ObserverLoader::has_observer(observerName))
-    {
-      auto observer = mc_observers::ObserverLoader::get_observer(observerName, config.timestep,
-                                                                 config.observer_configs[observerName]);
-
-      observers_.push_back(observer);
-      observersByName_[observerName] = observer;
-    }
-    else
-    {
-      mc_rtc::log::error("Observer {} requested in \"EnabledObservers\" configuration but not available", observerName);
-      mc_rtc::log::info("Note common reasons for this error include:\n"
-                        "\t- The observer name does not match the name exported by EXPORT_OBSERVER_MODULE\n"
-                        "\t- The library is not in a path read by mc_rtc\n"
-                        "\t- The constuctor segfaults\n"
-                        "\t- The library hasn't been properly linked");
-    }
-  }
-
   // Loading plugins
   config.load_plugin_configs();
   try
   {
-    plugin_loader.reset(new mc_rtc::ObjectLoader<mc_control::GlobalPlugin>(
+    plugin_loader_.reset(new mc_rtc::ObjectLoader<mc_control::GlobalPlugin>(
         "MC_RTC_GLOBAL_PLUGIN", config.global_plugin_paths, config.use_sandbox, config.verbose_loader));
   }
   catch(mc_rtc::LoaderException & exc)
   {
     mc_rtc::log::error_and_throw<std::runtime_error>("Failed to initialize plugin loader");
   }
+#ifdef MC_RTC_BUILD_STATIC
+  GlobalPluginLoader::loader().enable_sandboxing(config.use_sandbox);
+  GlobalPluginLoader::loader().set_verbosity(config.verbose_loader);
+  auto * plugin_loader = &GlobalPluginLoader::loader();
+#else
+  auto * plugin_loader = plugin_loader_.get();
+#endif
   for(const auto & plugin : config.global_plugins)
   {
     try
@@ -90,15 +80,20 @@ MCGlobalController::MCGlobalController(const GlobalConfiguration & conf)
   config.load_controllers_configs();
   try
   {
-    controller_loader.reset(new mc_rtc::ObjectLoader<mc_control::MCController>(
+    controller_loader_.reset(new mc_rtc::ObjectLoader<mc_control::MCController>(
         "MC_RTC_CONTROLLER", config.controller_module_paths, config.use_sandbox, config.verbose_loader));
   }
   catch(mc_rtc::LoaderException & exc)
   {
     mc_rtc::log::error_and_throw<std::runtime_error>("Failed to initialize controller loader");
   }
+#ifdef MC_RTC_BUILD_STATIC
+  ControllerLoader::loader().enable_sandboxing(config.use_sandbox);
+  ControllerLoader::loader().set_verbosity(config.verbose_loader);
+#endif
   if(std::find(config.enabled_controllers.begin(), config.enabled_controllers.end(), "HalfSitPose")
-     == config.enabled_controllers.end())
+         == config.enabled_controllers.end()
+     && config.include_halfsit_controller)
   {
     config.enabled_controllers.push_back("HalfSitPose");
   }
@@ -134,16 +129,8 @@ MCGlobalController::MCGlobalController(const GlobalConfiguration & conf)
   }
   if(config.enable_gui_server)
   {
-    if(config.gui_server_pub_uris.size() == 0)
-    {
-      mc_rtc::log::warning(
-          "GUI server is enabled but not configured to bind to anything, acting as if it was disabled.");
-    }
-    else
-    {
-      server_.reset(new mc_control::ControllerServer(config.timestep, config.gui_timestep, config.gui_server_pub_uris,
-                                                     config.gui_server_rep_uris));
-    }
+    server_.reset(new mc_control::ControllerServer(config.timestep, config.gui_timestep, config.gui_server_pub_uris,
+                                                   config.gui_server_rep_uris));
   }
 }
 
@@ -166,7 +153,11 @@ std::vector<std::string> MCGlobalController::enabled_controllers() const
 
 std::vector<std::string> MCGlobalController::loaded_controllers() const
 {
-  return controller_loader->objects();
+#ifndef MC_RTC_BUILD_STATIC
+  return controller_loader_->objects();
+#else
+  return ControllerLoader::loader().objects();
+#endif
 }
 
 std::vector<std::string> MCGlobalController::loaded_robots() const
@@ -190,7 +181,7 @@ void MCGlobalController::init(const std::vector<double> & initq, const sva::PTra
 {
   initEncoders(initq);
   robot().posW(initAttitude);
-  initController();
+  this->initController();
 }
 
 void MCGlobalController::init(const std::vector<double> & initq)
@@ -241,7 +232,7 @@ void MCGlobalController::init(const std::vector<double> & initq)
       robot().forwardKinematics();
     }
   }
-  initController();
+  this->initController();
 }
 
 void MCGlobalController::initEncoders(const std::vector<double> & initq)
@@ -249,8 +240,9 @@ void MCGlobalController::initEncoders(const std::vector<double> & initq)
   if(initq.size() != controller_->robot().refJointOrder().size())
   {
     mc_rtc::log::error_and_throw<std::domain_error>(
-        "Could not initialize the robot state from encoder sensors: got {} encoder values but the robot expects {}",
-        initq.size(), controller_->robot().refJointOrder().size());
+        "Could not initialize the robot state from encoder sensors: got {} encoder values but the robot ({}) expects "
+        "{}.\nMake sure that the MainRobot is compatible with the real/simulated robot used by the interface.",
+        initq.size(), controller_->robot().name(), controller_->robot().refJointOrder().size());
   }
 
   auto & q = robot().mbc().q;
@@ -309,7 +301,7 @@ void MCGlobalController::initController()
   }
   const auto & q = robot().mbc().q;
   controller_->reset({q});
-  controller_->resetObservers();
+  controller_->resetObserverPipelines();
   initGUI();
   for(auto & plugin : plugins_)
   {
@@ -323,10 +315,23 @@ void MCGlobalController::setSensorPosition(const Eigen::Vector3d & pos)
   realRobot().bodySensor().position(pos);
 }
 
+void MCGlobalController::setSensorPosition(const std::string & robotName, const Eigen::Vector3d & pos)
+{
+  robot(robotName).bodySensor().position(pos);
+  realRobot(robotName).bodySensor().position(pos);
+}
+
 void MCGlobalController::setSensorPositions(const std::map<std::string, Eigen::Vector3d> & poses)
 {
   setSensorPositions(robot(), poses);
   setSensorPositions(realRobot(), poses);
+}
+
+void MCGlobalController::setSensorPositions(const std::string & robotName,
+                                            const std::map<std::string, Eigen::Vector3d> & poses)
+{
+  setSensorPositions(robot(robotName), poses);
+  setSensorPositions(realRobot(robotName), poses);
 }
 
 void MCGlobalController::setSensorPositions(mc_rbdyn::Robot & robot,
@@ -344,14 +349,25 @@ void MCGlobalController::setSensorOrientation(const Eigen::Quaterniond & ori)
   realRobot().bodySensor().orientation(ori);
 }
 
-void MCGlobalController::setSensorOrientations(const std::map<std::string, Eigen::Quaterniond> & oris)
+void MCGlobalController::setSensorOrientation(const std::string & robotName, const Eigen::Quaterniond & ori)
+{
+  robot(robotName).bodySensor().orientation(ori);
+  realRobot(robotName).bodySensor().orientation(ori);
+}
+
+void MCGlobalController::setSensorOrientations(const QuaternionMap & oris)
 {
   setSensorOrientations(robot(), oris);
   setSensorOrientations(realRobot(), oris);
 }
 
-void MCGlobalController::setSensorOrientations(mc_rbdyn::Robot & robot,
-                                               const std::map<std::string, Eigen::Quaterniond> & oris)
+void MCGlobalController::setSensorOrientations(const std::string & robotName, const QuaternionMap & oris)
+{
+  setSensorOrientations(robot(robotName), oris);
+  setSensorOrientations(realRobot(robotName), oris);
+}
+
+void MCGlobalController::setSensorOrientations(mc_rbdyn::Robot & robot, const QuaternionMap & oris)
 {
   for(const auto & o : oris)
   {
@@ -365,10 +381,23 @@ void MCGlobalController::setSensorLinearVelocity(const Eigen::Vector3d & vel)
   realRobot().bodySensor().linearVelocity(vel);
 }
 
+void MCGlobalController::setSensorLinearVelocity(const std::string & robotName, const Eigen::Vector3d & vel)
+{
+  robot(robotName).bodySensor().linearVelocity(vel);
+  realRobot(robotName).bodySensor().linearVelocity(vel);
+}
+
 void MCGlobalController::setSensorLinearVelocities(const std::map<std::string, Eigen::Vector3d> & linearVels)
 {
   setSensorLinearVelocities(robot(), linearVels);
   setSensorLinearVelocities(realRobot(), linearVels);
+}
+
+void MCGlobalController::setSensorLinearVelocities(const std::string & robotName,
+                                                   const std::map<std::string, Eigen::Vector3d> & linearVels)
+{
+  setSensorLinearVelocities(robot(robotName), linearVels);
+  setSensorLinearVelocities(realRobot(robotName), linearVels);
 }
 
 void MCGlobalController::setSensorLinearVelocities(mc_rbdyn::Robot & robot,
@@ -386,11 +415,25 @@ void MCGlobalController::setSensorAngularVelocity(const Eigen::Vector3d & vel)
   realRobot().bodySensor().angularVelocity(vel);
 }
 
+void MCGlobalController::setSensorAngularVelocity(const std::string & name, const Eigen::Vector3d & vel)
+{
+  robot(name).bodySensor().angularVelocity(vel);
+  realRobot(name).bodySensor().angularVelocity(vel);
+}
+
 void MCGlobalController::setSensorAngularVelocities(const std::map<std::string, Eigen::Vector3d> & angularVels)
 {
   setSensorAngularVelocities(robot(), angularVels);
   setSensorAngularVelocities(realRobot(), angularVels);
 }
+
+void MCGlobalController::setSensorAngularVelocities(const std::string & name,
+                                                    const std::map<std::string, Eigen::Vector3d> & angularVels)
+{
+  setSensorAngularVelocities(robot(name), angularVels);
+  setSensorAngularVelocities(realRobot(name), angularVels);
+}
+
 void MCGlobalController::setSensorAngularVelocities(mc_rbdyn::Robot & robot,
                                                     const std::map<std::string, Eigen::Vector3d> & angularVels)
 {
@@ -402,22 +445,72 @@ void MCGlobalController::setSensorAngularVelocities(mc_rbdyn::Robot & robot,
 
 void MCGlobalController::setSensorAcceleration(const Eigen::Vector3d & acc)
 {
-  robot().bodySensor().acceleration(acc);
-  realRobot().bodySensor().acceleration(acc);
+  setSensorLinearAcceleration(acc);
 }
 
 void MCGlobalController::setSensorAccelerations(const std::map<std::string, Eigen::Vector3d> & accels)
 {
-  setSensorAccelerations(robot(), accels);
-  setSensorAccelerations(realRobot(), accels);
+  setSensorLinearAccelerations(accels);
 }
 
 void MCGlobalController::setSensorAccelerations(mc_rbdyn::Robot & robot,
                                                 const std::map<std::string, Eigen::Vector3d> & accels)
 {
+  setSensorLinearAccelerations(robot, accels);
+}
+
+void MCGlobalController::setSensorLinearAcceleration(const Eigen::Vector3d & acc)
+{
+  robot().bodySensor().linearAcceleration(acc);
+  realRobot().bodySensor().linearAcceleration(acc);
+}
+
+void MCGlobalController::setSensorLinearAcceleration(const std::string & name, const Eigen::Vector3d & acc)
+{
+  robot(name).bodySensor().linearAcceleration(acc);
+  realRobot(name).bodySensor().linearAcceleration(acc);
+}
+
+void MCGlobalController::setSensorLinearAccelerations(const std::map<std::string, Eigen::Vector3d> & accels)
+{
+  setSensorLinearAccelerations(robot(), accels);
+  setSensorLinearAccelerations(realRobot(), accels);
+}
+
+void MCGlobalController::setSensorLinearAccelerations(const std::string & name,
+                                                      const std::map<std::string, Eigen::Vector3d> & accels)
+{
+  setSensorLinearAccelerations(robot(name), accels);
+  setSensorLinearAccelerations(realRobot(name), accels);
+}
+
+void MCGlobalController::setSensorLinearAccelerations(mc_rbdyn::Robot & robot,
+                                                      const std::map<std::string, Eigen::Vector3d> & accels)
+{
   for(const auto & a : accels)
   {
-    robot.bodySensor(a.first).acceleration(a.second);
+    robot.bodySensor(a.first).linearAcceleration(a.second);
+  }
+}
+
+void MCGlobalController::setSensorAngularAcceleration(const Eigen::Vector3d & acc)
+{
+  robot().bodySensor().angularAcceleration(acc);
+  realRobot().bodySensor().angularAcceleration(acc);
+}
+
+void MCGlobalController::setSensorAngularAccelerations(const std::map<std::string, Eigen::Vector3d> & accels)
+{
+  setSensorAngularAccelerations(robot(), accels);
+  setSensorAngularAccelerations(realRobot(), accels);
+}
+
+void MCGlobalController::setSensorAngularAccelerations(mc_rbdyn::Robot & robot,
+                                                       const std::map<std::string, Eigen::Vector3d> & accels)
+{
+  for(const auto & a : accels)
+  {
+    robot.bodySensor(a.first).angularAcceleration(a.second);
   }
 }
 
@@ -427,10 +520,22 @@ void MCGlobalController::setEncoderValues(const std::vector<double> & eValues)
   realRobot().encoderValues(eValues);
 }
 
+void MCGlobalController::setEncoderValues(const std::string & robotName, const std::vector<double> & eValues)
+{
+  robot(robotName).encoderValues(eValues);
+  realRobot(robotName).encoderValues(eValues);
+}
+
 void MCGlobalController::setEncoderVelocities(const std::vector<double> & eVelocities)
 {
   robot().encoderVelocities(eVelocities);
   realRobot().encoderVelocities(eVelocities);
+}
+
+void MCGlobalController::setEncoderVelocities(const std::string & robotName, const std::vector<double> & eVelocities)
+{
+  robot(robotName).encoderVelocities(eVelocities);
+  realRobot(robotName).encoderVelocities(eVelocities);
 }
 
 void MCGlobalController::setFlexibilityValues(const std::vector<double> & fValues)
@@ -439,17 +544,42 @@ void MCGlobalController::setFlexibilityValues(const std::vector<double> & fValue
   realRobot().flexibilityValues(fValues);
 }
 
+void MCGlobalController::setFlexibilityValues(const std::string & robotName, const std::vector<double> & fValues)
+{
+  robot(robotName).flexibilityValues(fValues);
+  realRobot(robotName).flexibilityValues(fValues);
+}
+
 void MCGlobalController::setJointTorques(const std::vector<double> & tValues)
 {
   robot().jointTorques(tValues);
   realRobot().jointTorques(tValues);
 }
 
-void MCGlobalController::setWrenches(const std::map<std::string, sva::ForceVecd> & wrenches)
+void MCGlobalController::setJointTorques(const std::string & robotName, const std::vector<double> & tValues)
 {
-  setWrenches(controller_->robots().robotIndex(), wrenches);
+  robot(robotName).jointTorques(tValues);
+  realRobot(robotName).jointTorques(tValues);
 }
 
+void MCGlobalController::setWrenches(const std::map<std::string, sva::ForceVecd> & wrenches)
+{
+  setWrenches(controller_->robot().name(), wrenches);
+}
+
+void MCGlobalController::setWrenches(const std::string & robotName,
+                                     const std::map<std::string, sva::ForceVecd> & wrenches)
+{
+  auto & robot = this->robot(robotName);
+  auto & realRobot = this->realRobot(robotName);
+  for(const auto & w : wrenches)
+  {
+    robot.forceSensor(w.first).wrench(w.second);
+    realRobot.forceSensor(w.first).wrench(w.second);
+  }
+}
+
+// deprecated
 void MCGlobalController::setWrenches(unsigned int robotIndex, const std::map<std::string, sva::ForceVecd> & wrenches)
 {
   auto & robot = controller_->robots().robot(robotIndex);
@@ -473,14 +603,6 @@ bool MCGlobalController::run()
   /* Check if we need to change the controller this time */
   if(next_controller_)
   {
-    for(auto & observer : observers_)
-    {
-      observer->removeFromLogger(controller_->logger());
-      if(controller_->gui())
-      {
-        observer->removeFromGUI(*controller_->gui());
-      }
-    }
     mc_rtc::log::info("Switching controllers");
     if(controller_)
     {
@@ -491,10 +613,9 @@ bool MCGlobalController::run()
         bs.orientation(current.orientation());
         bs.linearVelocity(current.linearVelocity());
         bs.angularVelocity(current.angularVelocity());
-        bs.acceleration(current.acceleration());
+        bs.linearAcceleration(current.linearAcceleration());
+        bs.angularAcceleration(current.angularAcceleration());
       }
-      next_controller_->anchorFrame(controller_->anchorFrame());
-      next_controller_->anchorFrameReal(controller_->anchorFrameReal());
       next_controller_->robot().encoderValues(controller_->robot().encoderValues());
       next_controller_->realRobot().encoderValues(controller_->robot().encoderValues());
       next_controller_->robot().encoderVelocities(controller_->robot().encoderVelocities());
@@ -516,6 +637,15 @@ bool MCGlobalController::run()
     }
     else
     {
+      // Remove observer pipelines created by MCController::createObserverPipelines
+      for(auto & pipeline : controller_->observerPipelines())
+      {
+        if(controller_->gui_)
+        {
+          pipeline.removeFromGUI(*controller_->gui());
+        }
+        pipeline.removeFromLogger(controller_->logger());
+      }
       controller_->stop();
       mc_rtc::log::info("Reset with q[0] = {}", mc_rtc::io::to_string(controller_->robot().mbc().q[0], ", ", 5));
       for(const auto & g : controller_->robot().grippersByName())
@@ -523,7 +653,7 @@ bool MCGlobalController::run()
         next_controller_->robot().gripper(g.first).reset(*g.second);
       }
       next_controller_->reset({controller_->robot().mbc().q});
-      next_controller_->resetObservers();
+      next_controller_->resetObserverPipelines();
       controller_ = next_controller_;
       /** Reset plugins */
       for(auto & plugin : plugins_)
@@ -552,16 +682,14 @@ bool MCGlobalController::run()
     {
       controller_->robots().robot(i).mbc() = pre_gripper_mbcs_[i];
     }
+    auto start_observers_run_t = clock::now();
+    controller_->runObserverPipelines();
+    observers_run_dt = clock::now() - start_observers_run_t;
+
     auto start_controller_run_t = clock::now();
-    bool r = controller_->runObservers() && controller_->run();
+    bool r = controller_->run();
     auto end_controller_run_t = clock::now();
-    if(server_)
-    {
-      auto start_gui_t = clock::now();
-      server_->handle_requests(*controller_->gui_);
-      server_->publish(*controller_->gui_);
-      gui_dt = clock::now() - start_gui_t;
-    }
+
     pre_gripper_mbcs_ = controller_->robots().mbcs();
     for(size_t i = 0; i < controller_->robots().size(); ++i)
     {
@@ -582,6 +710,13 @@ bool MCGlobalController::run()
       auto start_log_t = clock::now();
       controller_->logger().log();
       log_dt = clock::now() - start_log_t;
+    }
+    if(server_)
+    {
+      auto start_gui_t = clock::now();
+      server_->handle_requests(*controller_->gui_);
+      server_->publish(*controller_->gui_);
+      gui_dt = clock::now() - start_gui_t;
     }
     controller_run_dt = end_controller_run_t - start_controller_run_t;
     solver_build_and_solve_t = boost_ms(boost_ns(controller_->solver().solveAndBuildTime().wall)).count();
@@ -614,6 +749,12 @@ bool MCGlobalController::run()
   // Percentage of time not spent inside the user code
   framework_cost = 100 * (1 - controller_run_dt.count() / global_run_dt.count());
   return running;
+}
+
+ControllerServer & MCGlobalController::server()
+{
+  assert(server_);
+  return *server_;
 }
 
 const mc_solver::QPResultMsg & MCGlobalController::send(const double & t)
@@ -663,6 +804,16 @@ const mc_rbdyn::Robot & MCGlobalController::robot() const
   return controller_->robot();
 }
 
+mc_rbdyn::Robot & MCGlobalController::robot(const std::string & name)
+{
+  return robots().robot(name);
+}
+
+const mc_rbdyn::Robot & MCGlobalController::robot(const std::string & name) const
+{
+  return robots().robot(name);
+}
+
 mc_rbdyn::Robot & MCGlobalController::realRobot()
 {
   return controller_->realRobot();
@@ -671,6 +822,16 @@ mc_rbdyn::Robot & MCGlobalController::realRobot()
 const mc_rbdyn::Robot & MCGlobalController::realRobot() const
 {
   return controller_->realRobot();
+}
+
+mc_rbdyn::Robot & MCGlobalController::realRobot(const std::string & name)
+{
+  return realRobots().robot(name);
+}
+
+const mc_rbdyn::Robot & MCGlobalController::realRobot(const std::string & name) const
+{
+  return realRobots().robot(name);
 }
 
 void MCGlobalController::setGripperTargetQ(const std::string & robot,
@@ -735,6 +896,11 @@ bool MCGlobalController::AddController(const std::string & name)
     controller_name = name.substr(0, sep_pos);
     controller_subname = name.substr(sep_pos + 1);
   }
+#ifndef MC_RTC_BUILD_STATIC
+  auto * controller_loader = controller_loader_.get();
+#else
+  auto * controller_loader = &ControllerLoader::loader();
+#endif
   if(controller_loader->has_object(controller_name))
   {
     mc_rtc::log::info("Create controller {}", controller_name);
@@ -749,58 +915,12 @@ bool MCGlobalController::AddController(const std::string & name)
       controllers[name] = controller_loader->create_object(name, config.main_robot_module, config.timestep,
                                                            config.controllers_configs[name]);
     }
+    controllers[name]->name_ = name;
     if(config.enable_log)
     {
       controllers[name]->logger().setup(config.log_policy, config.log_directory, config.log_template);
     }
-
-    // Give each controller access to all observers
-    controllers[name]->observers_ = observers_;
-    const auto & cc = config.controllers_configs[name];
-    auto runObservers = cc("RunObservers", std::vector<std::string>{});
-    if(runObservers.empty())
-    {
-      std::string observerName = cc("RunObservers", std::string{""});
-      if(!observerName.empty())
-      {
-        runObservers = {observerName};
-      }
-    }
-
-    auto updateObservers = cc("UpdateObservers", std::vector<std::string>{});
-    if(updateObservers.empty())
-    {
-      std::string observerName = cc("UpdateObservers", std::string{""});
-      if(!observerName.empty())
-      {
-        updateObservers = {observerName};
-      }
-    }
-    // Use controller-specific configuration instead of global configuration
-    for(const auto & observerName : runObservers)
-    {
-      if(observersByName_.count(observerName) > 0)
-      {
-        auto observer = observersByName_[observerName];
-        // If observer is in the "UpdateObserver" configuration, request for
-        // update
-        if(std::find(updateObservers.begin(), updateObservers.end(), observerName) != updateObservers.end())
-        {
-          controllers[name]->pipelineObservers_.push_back(std::make_pair(observer, true));
-        }
-        else
-        {
-          controllers[name]->pipelineObservers_.push_back(std::make_pair(observer, false));
-        }
-      }
-      else
-      {
-        mc_rtc::log::error_and_throw<std::runtime_error>(
-            "Controller {} requested observer {} but this observer is not available. Please make sure that it is in "
-            "your \"EnabledObservers\" configuration, and that is was properly loaded.",
-            controller_name, observerName);
-      }
-    }
+    controllers[name]->createObserverPipelines(config.controllers_configs[name]);
     return true;
   }
   else
@@ -817,7 +937,7 @@ const MCGlobalController::GlobalConfiguration & MCGlobalController::configuratio
 
 void MCGlobalController::add_controller_module_paths(const std::vector<std::string> & paths)
 {
-  controller_loader->load_libraries(paths);
+  controller_loader_->load_libraries(paths);
 }
 
 bool MCGlobalController::AddController(const std::string & name, std::shared_ptr<mc_control::MCController> controller)
@@ -925,37 +1045,29 @@ void MCGlobalController::setup_log()
       return controller->robot().forceSensor(fs_name).wrench();
     });
   }
-  controller->logger().addLogEntry(
-      "pIn", [controller]() -> const Eigen::Vector3d & { return controller->robot().bodySensor().position(); });
-  controller->logger().addLogEntry(
-      "rpyIn", [controller]() -> const Eigen::Quaterniond & { return controller->robot().bodySensor().orientation(); });
-  controller->logger().addLogEntry(
-      "velIn", [controller]() -> const Eigen::Vector3d & { return controller->robot().bodySensor().linearVelocity(); });
-  controller->logger().addLogEntry("rateIn", [controller]() -> const Eigen::Vector3d & {
-    return controller->robot().bodySensor().angularVelocity();
-  });
-  controller->logger().addLogEntry(
-      "accIn", [controller]() -> const Eigen::Vector3d & { return controller->robot().bodySensor().acceleration(); });
 
-  // Log all other body sensors
+  // Log all body sensors
   const auto & bodySensors = controller->robot().bodySensors();
-  for(size_t i = 1; i < bodySensors.size(); ++i)
+  for(size_t i = 0; i < bodySensors.size(); ++i)
   {
     const auto & name = bodySensors[i].name();
-    controller->logger().addLogEntry(name + "_pIn", [controller, name]() -> const Eigen::Vector3d & {
+    controller->logger().addLogEntry(name + "_position", [controller, name]() -> const Eigen::Vector3d & {
       return controller->robot().bodySensor(name).position();
     });
-    controller->logger().addLogEntry(name + "_rpyIn", [controller, name]() -> const Eigen::Quaterniond & {
+    controller->logger().addLogEntry(name + "_orientation", [controller, name]() -> const Eigen::Quaterniond & {
       return controller->robot().bodySensor(name).orientation();
     });
-    controller->logger().addLogEntry(name + "_velIn", [controller, name]() -> const Eigen::Vector3d & {
+    controller->logger().addLogEntry(name + "_linearVelocity", [controller, name]() -> const Eigen::Vector3d & {
       return controller->robot().bodySensor(name).linearVelocity();
     });
-    controller->logger().addLogEntry(name + "_rateIn", [controller, name]() -> const Eigen::Vector3d & {
+    controller->logger().addLogEntry(name + "_angularVelocity", [controller, name]() -> const Eigen::Vector3d & {
       return controller->robot().bodySensor(name).angularVelocity();
     });
-    controller->logger().addLogEntry(name + "_accIn", [controller, name]() -> const Eigen::Vector3d & {
-      return controller->robot().bodySensor(name).acceleration();
+    controller->logger().addLogEntry(name + "_linearAcceleration", [controller, name]() -> const Eigen::Vector3d & {
+      return controller->robot().bodySensor(name).linearAcceleration();
+    });
+    controller->logger().addLogEntry(name + "_angularAcceleration", [controller, name]() -> const Eigen::Vector3d & {
+      return controller->robot().bodySensor(name).angularAcceleration();
     });
   }
 
@@ -974,6 +1086,7 @@ void MCGlobalController::setup_log()
   // Performance measures
   controller->logger().addLogEntry("perf_GlobalRun", [this]() { return global_run_dt.count(); });
   controller->logger().addLogEntry("perf_ControllerRun", [this]() { return controller_run_dt.count(); });
+  controller->logger().addLogEntry("perf_ObserversRun", [this]() { return observers_run_dt.count(); });
   controller->logger().addLogEntry("perf_SolverBuildAndSolve", [this]() { return solver_build_and_solve_t; });
   controller->logger().addLogEntry("perf_SolverSolve", [this]() { return solver_solve_t; });
   controller->logger().addLogEntry("perf_Log", [this]() { return log_dt.count(); });

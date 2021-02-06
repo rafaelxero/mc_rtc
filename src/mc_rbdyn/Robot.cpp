@@ -18,6 +18,9 @@
 #include <RBDyn/FK.h>
 #include <RBDyn/FV.h>
 
+#include <sch/S_Object/S_Cylinder.h>
+#include <sch/S_Object/S_Superellipsoid.h>
+
 #include <boost/filesystem.hpp>
 namespace bfs = boost::filesystem;
 
@@ -29,8 +32,40 @@ namespace
 
 using bound_t = std::vector<std::vector<double>>;
 using bounds_t = std::tuple<bound_t, bound_t, bound_t, bound_t, bound_t, bound_t>;
+using accelerationBounds_t = std::tuple<bound_t, bound_t>;
+using torqueDerivativeBounds_t = std::tuple<bound_t, bound_t>;
 using rm_bounds_t = mc_rbdyn::RobotModule::bounds_t;
 using rm_bound_t = rm_bounds_t::value_type;
+
+using jt_method = int (rbd::Joint::*)() const;
+
+bound_t fill_bound(const rbd::MultiBody & mb,
+                   const std::string & name,
+                   const rm_bound_t & bound_in,
+                   jt_method def_size,
+                   double def_value,
+                   double ff_def_value)
+{
+  bound_t res;
+  res.reserve(static_cast<size_t>(mb.nrJoints()));
+  for(const auto & j : mb.joints())
+  {
+    res.emplace_back(((j).*(def_size))(), j.type() == rbd::Joint::Free ? ff_def_value : def_value);
+    if(bound_in.count(j.name()))
+    {
+      const auto & b_ref = bound_in.at(j.name());
+      auto & b = res.back();
+      if(b_ref.size() != b.size())
+      {
+        mc_rtc::log::error_and_throw<std::runtime_error>(
+            "{} provided bound size ({}) different from expected size ({}) for joint {}", name, b_ref.size(), b.size(),
+            j.name());
+      }
+      res.back() = bound_in.at(j.name());
+    }
+  }
+  return res;
+}
 
 /** Generate bounds compatible with the given MultiBody
  *
@@ -40,42 +75,61 @@ using rm_bound_t = rm_bounds_t::value_type;
  */
 bounds_t bounds(const rbd::MultiBody & mb, const rm_bounds_t & bounds)
 {
-  using jt_method = int (rbd::Joint::*)() const;
-  auto fill_bound = [&mb](const std::string & name, const rm_bound_t & bound_in, jt_method def_size, double def_value,
-                          double ff_def_value) {
-    bound_t res;
-    res.reserve(static_cast<size_t>(mb.nrJoints()));
-    for(const auto & j : mb.joints())
+  return std::make_tuple(fill_bound(mb, "lower position", bounds.at(0), &rbd::Joint::params, -INFINITY, -INFINITY),
+                         fill_bound(mb, "upper position", bounds.at(1), &rbd::Joint::params, INFINITY, INFINITY),
+                         fill_bound(mb, "lower velocity", bounds.at(2), &rbd::Joint::dof, -INFINITY, -INFINITY),
+                         fill_bound(mb, "upper velocity", bounds.at(3), &rbd::Joint::dof, INFINITY, INFINITY),
+                         fill_bound(mb, "lower torque", bounds.at(4), &rbd::Joint::dof, -INFINITY, 0),
+                         fill_bound(mb, "upper torque", bounds.at(5), &rbd::Joint::dof, INFINITY, 0));
+}
+
+/** Generate acceleration bounds compatible with the given MultiBody
+ *
+ * If bounds is provided, use the values provided to build the bounds.
+ *
+ * Otherwise, default bounds are returned.
+ */
+accelerationBounds_t acceleration_bounds(const rbd::MultiBody & mb, const rm_bounds_t & bounds)
+{
+  rm_bound_t default_bound = {};
+  auto safe_bounds = [&bounds, &default_bound](size_t idx) -> const rm_bound_t & {
+    if(idx < bounds.size())
     {
-      res.emplace_back(((j).*(def_size))(), j.type() == rbd::Joint::Free ? ff_def_value : def_value);
-      if(bound_in.count(j.name()))
-      {
-        const auto & b_ref = bound_in.at(j.name());
-        auto & b = res.back();
-        if(b_ref.size() != b.size())
-        {
-          mc_rtc::log::error_and_throw<std::runtime_error>(
-              "{} provided bound size ({}) different from expected size ({}) for joint {}", name, b_ref.size(),
-              b.size(), j.name());
-        }
-        res.back() = bound_in.at(j.name());
-      }
+      return bounds[idx];
     }
-    return res;
+    return default_bound;
   };
-  return std::make_tuple(fill_bound("lower position", bounds.at(0), &rbd::Joint::params, -INFINITY, -INFINITY),
-                         fill_bound("upper position", bounds.at(1), &rbd::Joint::params, INFINITY, INFINITY),
-                         fill_bound("lower velocity", bounds.at(2), &rbd::Joint::dof, -INFINITY, -INFINITY),
-                         fill_bound("upper velocity", bounds.at(3), &rbd::Joint::dof, INFINITY, INFINITY),
-                         fill_bound("lower torque", bounds.at(4), &rbd::Joint::dof, -INFINITY, 0),
-                         fill_bound("upper torque", bounds.at(5), &rbd::Joint::dof, INFINITY, 0));
+  return std::make_tuple(fill_bound(mb, "lower acceleration", safe_bounds(0), &rbd::Joint::dof, -INFINITY, -INFINITY),
+                         fill_bound(mb, "upper acceleration", safe_bounds(1), &rbd::Joint::dof, INFINITY, INFINITY));
+}
+
+/** Generate torque-derivative bounds compatible with the given MultiBody
+ *
+ * If bounds is provided, use the values provided to build the bounds.
+ *
+ * Otherwise, default bounds are returned.
+ */
+torqueDerivativeBounds_t torqueDerivative_bounds(const rbd::MultiBody & mb, const rm_bounds_t & bounds)
+{
+  rm_bound_t default_bound = {};
+  auto safe_bounds = [&bounds, &default_bound](size_t idx) -> const rm_bound_t & {
+    if(idx < bounds.size())
+    {
+      return bounds[idx];
+    }
+    return default_bound;
+  };
+  return std::make_tuple(
+      fill_bound(mb, "lower torque-derivative", safe_bounds(0), &rbd::Joint::dof, -INFINITY, -INFINITY),
+      fill_bound(mb, "upper torque-derivative", safe_bounds(1), &rbd::Joint::dof, INFINITY, INFINITY));
 }
 
 template<typename schT, typename mapT>
 void loadSCH(const mc_rbdyn::Robot & robot,
              const std::map<std::string, std::pair<std::string, std::string>> & urls,
              schT * (*sch_load_fn)(const std::string &),
-             mapT & data_)
+             mapT & data_,
+             std::map<std::string, sva::PTransformd> & cTfs)
 {
   for(const auto & cH : urls)
   {
@@ -87,6 +141,7 @@ void loadSCH(const mc_rbdyn::Robot & robot,
       auto poly = std::shared_ptr<schT>(sch_load_fn(cHURL));
       sch::mc_rbdyn::transform(*poly, robot.bodyPosW()[robot.bodyIndexByName(parent)]);
       data_[cHName] = {parent, poly};
+      cTfs[cHName] = sva::PTransformd::Identity();
     }
   }
 }
@@ -108,6 +163,65 @@ void fixSCH(const mc_rbdyn::Robot & robot, mapT & data_, const std::map<std::str
   }
 }
 
+bool VisualToConvex(const std::string & robot,
+                    const std::string & cName,
+                    const std::string & bName,
+                    const rbd::parsers::Visual & visual,
+                    std::map<std::string, mc_rbdyn::Robot::convex_pair_t> & convexes,
+                    std::map<std::string, sva::PTransformd> & collisionTransforms)
+{
+  // Ignore visual types that we cannot easily map to SCH
+  if(visual.geometry.type == rbd::parsers::Geometry::Type::UNKNOWN
+     || visual.geometry.type == rbd::parsers::Geometry::Type::MESH)
+  {
+    return false;
+  }
+  // If we already have a convex with the same name, discard loading
+  if(convexes.count(cName) != 0)
+  {
+    mc_rtc::log::warning("While loading {}, a convex was already provided for collision geometry specified in URDF",
+                         robot);
+    return false;
+  }
+  auto fromBox = [&]() {
+    const auto & box = boost::get<rbd::parsers::Geometry::Box>(visual.geometry.data);
+    convexes[cName] = {bName, std::make_shared<sch::S_Box>(box.size.x(), box.size.y(), box.size.z())};
+  };
+  auto fromCylinder = [&]() {
+    const auto & cyl = boost::get<rbd::parsers::Geometry::Cylinder>(visual.geometry.data);
+    convexes[cName] = {bName, std::make_shared<sch::S_Cylinder>(sch::Point3(0, 0, -cyl.length / 2),
+                                                                sch::Point3(0, 0, cyl.length / 2), cyl.radius)};
+  };
+  auto fromSphere = [&]() {
+    const auto & sph = boost::get<rbd::parsers::Geometry::Sphere>(visual.geometry.data);
+    convexes[cName] = {bName, std::make_shared<sch::S_Sphere>(sph.radius)};
+  };
+  auto fromSuperEllipsoid = [&]() {
+    const auto & sel = boost::get<rbd::parsers::Geometry::Superellipsoid>(visual.geometry.data);
+    convexes[cName] = {bName, std::make_shared<sch::S_Superellipsoid>(sel.size.x(), sel.size.y(), sel.size.z(),
+                                                                      sel.epsilon1, sel.epsilon2)};
+  };
+  switch(visual.geometry.type)
+  {
+    case rbd::parsers::Geometry::Type::BOX:
+      fromBox();
+      break;
+    case rbd::parsers::Geometry::Type::CYLINDER:
+      fromCylinder();
+      break;
+    case rbd::parsers::Geometry::Type::SPHERE:
+      fromSphere();
+      break;
+    case rbd::parsers::Geometry::Type::SUPERELLIPSOID:
+      fromSuperEllipsoid();
+      break;
+    default:
+      return false;
+  }
+  collisionTransforms[cName] = visual.origin;
+  return true;
+}
+
 } // namespace
 
 namespace mc_rbdyn
@@ -121,12 +235,13 @@ namespace mc_rbdyn
 #  pragma clang diagnostic ignored "-Wshorten-64-to-32"
 #endif
 
-Robot::Robot(Robots & robots,
+Robot::Robot(const std::string & name,
+             Robots & robots,
              unsigned int robots_idx,
              bool loadFiles,
              const sva::PTransformd * base,
              const std::string & bName)
-: robots_(&robots), robots_idx_(robots_idx)
+: robots_(&robots), robots_idx_(robots_idx), name_(name)
 {
   const auto & module_ = module();
 
@@ -166,8 +281,6 @@ Robot::Robot(Robots & robots,
     forwardKinematics();
   }
 
-  name_ = module_.name;
-
   bodyTransforms_.resize(mb().bodies().size());
   const auto & bbts =
       base ? mbg().bodiesBaseTransform(mb().body(0).name(), *base) : mbg().bodiesBaseTransform(mb().body(0).name());
@@ -179,15 +292,51 @@ Robot::Robot(Robots & robots,
 
   if(module_.bounds().size() != 6)
   {
-    mc_rtc::log::error_and_throw<std::invalid_argument>(
-        "The bounds of robotmodule \"{}\" have a size of {} instead of 6 (ql, qu, vl, vu, tl, tu).", module_.name,
-        module_.bounds().size());
+    mc_rtc::log::error_and_throw<std::invalid_argument>("The (urdf)-bounds of RobotModule \"{}\" have a size of {} "
+                                                        "instead of 6 (ql, qu, vl, vu, tl, tu).",
+                                                        module_.name, module_.bounds().size());
   }
   std::tie(ql_, qu_, vl_, vu_, tl_, tu_) = bounds(mb(), module_.bounds());
 
+  if(module_.accelerationBounds().size() != 0 && module_.accelerationBounds().size() != 2)
+  {
+    mc_rtc::log::error_and_throw<std::invalid_argument>(
+        "The additional acceleration bounds of RobotModule \"{}\" have a size of {} "
+        "instead of 2 ([al, au]).",
+        module_.name, module_.accelerationBounds().size());
+  }
+  std::tie(al_, au_) = acceleration_bounds(mb(), module_.accelerationBounds());
+
+  if(module_.torqueDerivativeBounds().size() != 0 && module_.torqueDerivativeBounds().size() != 2)
+  {
+    mc_rtc::log::error_and_throw<std::invalid_argument>(
+        "The additional acceleration bounds of RobotModule \"{}\" have a size of {} "
+        "instead of 2 ([tdl, tdu]).",
+        module_.name, module_.torqueDerivativeBounds().size());
+  }
+  std::tie(tdl_, tdu_) = torqueDerivative_bounds(mb(), module_.torqueDerivativeBounds());
+
   if(loadFiles)
   {
-    loadSCH(*this, module_.convexHull(), &sch::mc_rbdyn::Polyhedron, convexes_);
+    loadSCH(*this, module_.convexHull(), &sch::mc_rbdyn::Polyhedron, convexes_, collisionTransforms_);
+  }
+  for(const auto & c : module_._collision)
+  {
+    const auto & body = c.first;
+    const auto & collisions = c.second;
+    if(collisions.size() == 1)
+    {
+      VisualToConvex(name_, body, body, collisions[0], convexes_, collisionTransforms_);
+      continue;
+    }
+    size_t added = 0;
+    for(const auto & col : collisions)
+    {
+      if(VisualToConvex(name_, body + "_" + std::to_string(added), body, col, convexes_, collisionTransforms_))
+      {
+        added++;
+      }
+    }
   }
 
   for(const auto & b : mb().bodies())
@@ -244,7 +393,11 @@ Robot::Robot(Robots & robots,
   devices_ = module_.devices();
   for(size_t i = 0; i < devices_.size(); ++i)
   {
-    const auto & d = devices_[i];
+    auto & d = devices_[i];
+    if(d->parent() == "")
+    {
+      d->parent(mb().body(0).name());
+    }
     devicesIndex_[d->name()] = i;
   }
 
@@ -640,6 +793,14 @@ const std::vector<std::vector<double>> & Robot::vu() const
 {
   return vu_;
 }
+const std::vector<std::vector<double>> & Robot::al() const
+{
+  return al_;
+}
+const std::vector<std::vector<double>> & Robot::au() const
+{
+  return au_;
+}
 const std::vector<std::vector<double>> & Robot::tl() const
 {
   return tl_;
@@ -647,6 +808,14 @@ const std::vector<std::vector<double>> & Robot::tl() const
 const std::vector<std::vector<double>> & Robot::tu() const
 {
   return tu_;
+}
+const std::vector<std::vector<double>> & Robot::tdl() const
+{
+  return tdl_;
+}
+const std::vector<std::vector<double>> & Robot::tdu() const
+{
+  return tdu_;
 }
 std::vector<std::vector<double>> & Robot::ql()
 {
@@ -664,6 +833,14 @@ std::vector<std::vector<double>> & Robot::vu()
 {
   return vu_;
 }
+std::vector<std::vector<double>> & Robot::al()
+{
+  return al_;
+}
+std::vector<std::vector<double>> & Robot::au()
+{
+  return au_;
+}
 std::vector<std::vector<double>> & Robot::tl()
 {
   return tl_;
@@ -671,6 +848,14 @@ std::vector<std::vector<double>> & Robot::tl()
 std::vector<std::vector<double>> & Robot::tu()
 {
   return tu_;
+}
+std::vector<std::vector<double>> & Robot::tdl()
+{
+  return tdl_;
+}
+std::vector<std::vector<double>> & Robot::tdu()
+{
+  return tdu_;
 }
 
 const std::vector<Flexibility> & Robot::flexibility() const
@@ -892,6 +1077,11 @@ const Robot::convex_pair_t & Robot::convex(const std::string & cName) const
   return convexes_.at(cName);
 }
 
+const std::map<std::string, Robot::convex_pair_t> & Robot::convexes() const
+{
+  return convexes_;
+}
+
 void Robot::addConvex(const std::string & cName,
                       const std::string & body,
                       Robot::S_ObjectPtr convex,
@@ -957,9 +1147,16 @@ void Robot::fixCollisionTransforms()
 {
   for(auto & ct : collisionTransforms_)
   {
-    // assert(bodyTransforms_.size(ct.first));
-    const auto & trans = bodyTransform(ct.first);
-    ct.second = ct.second * trans;
+    if(convexes_.count(ct.first))
+    {
+      const auto & trans = bodyTransform(convexes_.at(ct.first).first);
+      ct.second = ct.second * trans;
+    }
+    else
+    {
+      const auto & trans = bodyTransform(ct.first);
+      ct.second = ct.second * trans;
+    }
   }
 }
 
@@ -1065,7 +1262,7 @@ void Robot::posW(const sva::PTransformd & pt)
 {
   if(mb().joint(0).type() == rbd::Joint::Type::Free)
   {
-    sva::Quaterniond rotation{pt.rotation().transpose()};
+    Eigen::Quaterniond rotation{pt.rotation().transpose()};
     rotation.normalize();
     q()[0] = {rotation.w(),         rotation.x(),         rotation.y(),        rotation.z(),
               pt.translation().x(), pt.translation().y(), pt.translation().z()};
@@ -1133,11 +1330,10 @@ const sva::MotionVecd Robot::accW() const
   return sva::PTransformd{rot} * mbc().bodyAccB[0];
 }
 
-void Robot::copy(Robots & robots, unsigned int robots_idx, const Base & base) const
+void Robot::copy(Robots & robots, const std::string & copyName, unsigned int robots_idx, const Base & base) const
 {
-  robots.robots_.emplace_back(Robot(robots, robots_idx, false, &base.X_0_s, base.baseName));
+  robots.robots_.emplace_back(Robot(copyName, robots, robots_idx, false, &base.X_0_s, base.baseName));
   auto & robot = robots.robots_.back();
-  robot.name_ = name_;
   for(const auto & s : surfaces_)
   {
     robot.surfaces_[s.first] = s.second->copy();
@@ -1161,9 +1357,9 @@ void Robot::copy(Robots & robots, unsigned int robots_idx, const Base & base) co
   fixSCH(robot, robot.convexes_, robot.collisionTransforms_);
 }
 
-void Robot::copy(Robots & robots, unsigned int robots_idx) const
+void Robot::copy(Robots & robots, const std::string & copyName, unsigned int robots_idx) const
 {
-  robots.robots_.emplace_back(Robot(robots, robots_idx, false));
+  robots.robots_.emplace_back(Robot(copyName, robots, robots_idx, false));
   auto & robot = robots.robots_.back();
   for(const auto & s : surfaces_)
   {
@@ -1318,6 +1514,11 @@ void Robot::addDevice(DevicePtr device)
         "You cannot have multiple generic sensor with the same name in a robot");
   }
   devices_.push_back(std::move(device));
+  auto & d = devices_.back();
+  if(d->parent() == "")
+  {
+    d->parent(mb().body(0).name());
+  }
   devicesIndex_[device->name()] = devices_.size() - 1;
 }
 

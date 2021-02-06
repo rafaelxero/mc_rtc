@@ -1,11 +1,17 @@
 /*
- * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ * Copyright 2015-2020 CNRS-UM LIRMM, CNRS-AIST JRL
  */
 
 #pragma once
 
 #include <mc_control/fsm/api.h>
 #include <mc_control/fsm/states/api.h>
+
+#include <mc_solver/ConstraintSet.h>
+
+#include <mc_tasks/MetaTask.h>
+#include <mc_tasks/PostureTask.h>
+
 #include <mc_rtc/Configuration.h>
 
 namespace mc_control
@@ -135,15 +141,35 @@ protected:
   virtual void teardown(Controller & ctl) = 0;
 
 protected:
+  /** AddContacts in the configuration */
   mc_rtc::Configuration add_contacts_config_;
+  /** RemoveContacts in the configuration */
   mc_rtc::Configuration remove_contacts_config_;
+  /** AddContactsAfter in the configuration */
   mc_rtc::Configuration add_contacts_after_config_;
+  /** RemoveContactsAfter in the configuration */
   mc_rtc::Configuration remove_contacts_after_config_;
+  /** AddCollisions in the configuration */
   mc_rtc::Configuration add_collisions_config_;
+  /** RemoveCollisions in the configuration */
   mc_rtc::Configuration remove_collisions_config_;
+  /** AddCollisionsAfter in the configuration */
   mc_rtc::Configuration add_collisions_after_config_;
+  /** RemoveCollisionsAfter in the configuration */
   mc_rtc::Configuration remove_collisions_after_config_;
-  bool remove_posture_task_ = false;
+  /** constraints in the configuration */
+  mc_rtc::Configuration constraints_config_;
+  /** tasks in the configuration */
+  mc_rtc::Configuration tasks_config_;
+  /** RemovePostureTask in the configuration */
+  mc_rtc::Configuration remove_posture_task_;
+
+  /** Constraints managed by the state if any */
+  std::vector<mc_solver::ConstraintSetPtr> constraints_;
+  /** Tasks managed by the state if any */
+  std::vector<std::pair<mc_tasks::MetaTaskPtr, mc_rtc::Configuration>> tasks_;
+  /** Posture tasks that were removed by this state */
+  std::vector<mc_tasks::PostureTaskPtr> postures_;
 
 private:
   std::string name_ = "";
@@ -158,29 +184,45 @@ using StatePtr = std::shared_ptr<State>;
 
 /* The following macros are used to simplify the required symbol exports */
 
-#ifdef WIN32
-#  define FSM_STATE_API __declspec(dllexport)
-#else
-#  if __GNUC__ >= 4
-#    define FSM_STATE_API __attribute__((visibility("default")))
-#  else
-#    define FSM_STATE_API
-#  endif
-#endif
+#ifndef MC_RTC_BUILD_STATIC
 
-#define EXPORT_SINGLE_STATE(NAME, TYPE)                                   \
-  extern "C"                                                              \
-  {                                                                       \
-    FSM_STATE_API void MC_RTC_FSM_STATE(std::vector<std::string> & names) \
-    {                                                                     \
-      names = {NAME};                                                     \
-    }                                                                     \
-    FSM_STATE_API void destroy(mc_control::fsm::State * ptr)              \
-    {                                                                     \
-      delete ptr;                                                         \
-    }                                                                     \
-    FSM_STATE_API mc_control::fsm::State * create(const std::string &)    \
-    {                                                                     \
-      return new TYPE();                                                  \
-    }                                                                     \
-  }
+#  ifdef WIN32
+#    define FSM_STATE_API __declspec(dllexport)
+#  else
+#    if __GNUC__ >= 4
+#      define FSM_STATE_API __attribute__((visibility("default")))
+#    else
+#      define FSM_STATE_API
+#    endif
+#  endif
+
+#  define EXPORT_SINGLE_STATE(NAME, TYPE)                                   \
+    extern "C"                                                              \
+    {                                                                       \
+      FSM_STATE_API void MC_RTC_FSM_STATE(std::vector<std::string> & names) \
+      {                                                                     \
+        names = {NAME};                                                     \
+      }                                                                     \
+      FSM_STATE_API void destroy(mc_control::fsm::State * ptr)              \
+      {                                                                     \
+        delete ptr;                                                         \
+      }                                                                     \
+      FSM_STATE_API mc_control::fsm::State * create(const std::string &)    \
+      {                                                                     \
+        return new TYPE();                                                  \
+      }                                                                     \
+    }
+
+#else
+
+#  define EXPORT_SINGLE_STATE(NAME, TYPE)                                                              \
+    namespace                                                                                          \
+    {                                                                                                  \
+    static auto registered = []() {                                                                    \
+      using fn_t = std::function<TYPE *()>;                                                            \
+      mc_control::fsm::Controller::factory().register_object(NAME, fn_t([]() { return new TYPE(); })); \
+      return true;                                                                                     \
+    }();                                                                                               \
+    }
+
+#endif

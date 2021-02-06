@@ -1,5 +1,6 @@
 ---
 layout: tutorials
+toc: true
 ---
 
 The framework provides by default a few pre-implemented states intended to make it easy to take full advantage of the `JSON/YAML` configuration capabilities of the FSM. Using these, writing FSMs for complex robot behaviours becomes easy, and usually involves little to no handwritten `C++/Python` states: almost everything can be directly described in the FSM configuration. In this tutorial, we'll explore use of the three most useful states:
@@ -12,7 +13,7 @@ In the remainder of this tutorial, we'll see how these may be used. Only `YAML` 
 
 ## MetaTasks state
 
-The `MetaTasks` state ([documentation](json.html#State/MetaTasks)) allows to load a list of tasks from their `JSON/YAML` configuration. The full list of available tasks is available [JSON/YAML documentation]({{site.baseurl}}/json.html#MetaTask).
+The `MetaTasks` state ([documentation]({{site.baseurl}}/json.html#State/MetaTasks)) allows to load a list of tasks from their `JSON/YAML` configuration. The full list of available tasks is available [JSON/YAML documentation]({{site.baseurl}}/json.html#MetaTask).
 
 Let's start with an example, we will add a new `MetaTasks` state in the `states:` section of the `FSM` configuration.
 
@@ -26,7 +27,6 @@ states:
       # create a CoM task
       CoM:
         type: com
-        robotIndex: 0
         move_com: [0, 0, -0.05]
         completion:
           OR:
@@ -39,12 +39,12 @@ states:
       HandTrajectory:
         type: bspline_trajectory
         surface: LeftHand
-        robotIndex: 0
         stiffness: 10000.0
         duration: 15.0
         weight: 100
         targetSurface:
-          robotIndex: 1
+          # assumes that the additional object/box robot was loaded in the global fsm configuration
+          robot: box
           surface: Left
         completion:
           - timeElapsed: true
@@ -131,7 +131,7 @@ You may now define three new states:
 
 ## Parallel state
 
-The parallel state ([documentation](json.html#State/Parallel)) allows to execute multiple states in parallel. Since the FSM execution is actually single-threaded, the states are actually executed sequentially in a single controller iteration.
+The parallel state ([documentation]({{site.baseurl}}/json.html#State/Parallel)) allows to execute multiple states in parallel. Since the FSM execution is actually single-threaded, the states are actually executed sequentially in a single controller iteration.
 
 ```yaml
 # Define an additional MetaTasks state that moves the right hand
@@ -140,12 +140,11 @@ RightHandState:
   HandTrajectory:
     type: bspline_trajectory
     surface: RightHand
-    robotIndex: 0
     stiffness: 10000.0
     duration: 15.0
     weight: 100
     targetSurface:
-      robotIndex: 1
+      robot: box
       surface: Left
     completion:
       - timeElapsed: true
@@ -183,7 +182,7 @@ Sometimes it is useful to be able to interact between states. For instance consi
 
 ## Meta: FSM within an FSM
 
-In complex scenarios, it is often useful to be able to have multiple FSMs in the same controller. That's what the `Meta` state ([documentation](json.html#State/Meta)) is for, it embeds an `FSM` within an `FSM` state.
+In complex scenarios, it is often useful to be able to have multiple FSMs in the same controller. That's what the `Meta` state ([documentation]({{site.baseurl}}/json.html#State/Meta)) is for, it embeds an `FSM` within an `FSM` state.
 
 ```yaml
 ExampleMetaState:

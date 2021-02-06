@@ -24,6 +24,9 @@ macro(controller_test_common NAME)
   endif()
   add_library(${NAME} SHARED ${${NAME}_SRC})
   target_link_libraries(${NAME} PUBLIC mc_control Boost::unit_test_framework)
+  target_include_directories(${NAME} PRIVATE ${CMAKE_SOURCE_DIR}/tests)
+  set(CONFIG_HEADER_INCLUDE_DIR "${CMAKE_BINARY_DIR}/tests/include/$<CONFIGURATION>")
+  target_include_directories(${NAME} PRIVATE ${CONFIG_HEADER_INCLUDE_DIR})
   set_target_properties(${NAME} PROPERTIES
     COMPILE_FLAGS "-DMC_CONTROL_EXPORTS"
     PREFIX ""
@@ -67,12 +70,24 @@ endmacro()
 macro(controller_test_run NAME NRITER)
   controller_test_common(${NAME})
   if(CMAKE_CONFIGURATION_TYPES)
-    set(CONFIG_OUT "${CMAKE_CURRENT_BINARY_DIR}/${NAME}/$<CONFIGURATION>/mc_rtc-${NAME}.conf")
+    set(CONFIG_OUT "${CMAKE_CURRENT_BINARY_DIR}/${NAME}/$<CONFIG>/mc_rtc-${NAME}.conf")
     file(GENERATE
        OUTPUT ${CONFIG_OUT}
        INPUT ${CMAKE_CURRENT_BINARY_DIR}/${NAME}/mc_rtc-${NAME}.conf)
   else()
     set(CONFIG_OUT "${CMAKE_CURRENT_BINARY_DIR}/${NAME}/mc_rtc-${NAME}.conf")
+  endif()
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${NAME}.in.yaml")
+    configure_file(${NAME}.in.yaml "${CMAKE_CURRENT_BINARY_DIR}/${NAME}/etc/${NAME}.cmake.yaml")
+    if(CMAKE_CONFIGURATION_TYPES)
+      file(GENERATE
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${NAME}/$<CONFIG>/etc/${NAME}.yaml"
+        INPUT "${CMAKE_CURRENT_BINARY_DIR}/${NAME}/etc/${NAME}.cmake.yaml")
+    else()
+      file(GENERATE
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${NAME}/etc/${NAME}.yaml"
+        INPUT "${CMAKE_CURRENT_BINARY_DIR}/${NAME}/etc/${NAME}.cmake.yaml")
+    endif()
   endif()
   set_target_properties(${NAME} PROPERTIES FOLDER tests/controllers/run)
   if(ENABLE_FAST_TESTS)
@@ -157,12 +172,23 @@ controller_test_run(TestPositionTaskController 5000)
 controller_test_run(TestOrientationTaskController 6001)
 controller_test_run(TestEndEffectorTaskController 4001)
 
+# Test FSM generic state configuration option
+set(FSM_STATES_INSTALL_PREFIX "${PROJECT_BINARY_DIR}/src/mc_control/fsm/states/")
+if(CMAKE_CONFIGURATION_TYPES)
+  set(FSM_STATES_INSTALL_PREFIX "${FSM_STATES_INSTALL_PREFIX}/$<CONFIGURATION>")
+endif()
+controller_test_run(TestFSMStateOptions 100)
+target_link_libraries(TestFSMStateOptions PUBLIC mc_control_fsm)
+
 set(ENABLED_OBSERVERS "\"Encoder\", \"BodySensor\", \"KinematicInertial\"")
 set(RUN_OBSERVERS "\"Encoder\", \"BodySensor\"")
 set(UPDATE_OBSERVERS "\"Encoder\"")
 
 # mc_observer test controllers
+file(READ "ObserverPipelines.json" OBSERVER_PIPELINES)
 controller_test_run(TestObserverController 2001)
+target_link_libraries(TestObserverController PUBLIC BodySensorObserver)
+unset(OBSERVER_PIPELINES)
 
 # Test run of sample controllers
 macro(controller_sample_test_run NAME PATH_SUFFIX NRITER)
@@ -198,7 +224,7 @@ macro(controller_sample_test_run NAME PATH_SUFFIX NRITER)
 endmacro()
 
 controller_sample_test_run(CoM "" 1000)
-controller_sample_test_run(Body6d "" 1000)
+controller_sample_test_run(EndEffector "" 1000)
 controller_sample_test_run(Posture "" 1000)
 controller_sample_test_run(Text "" 1000)
 file(GENERATE OUTPUT "${TEST_CONTROLLER_PATH}/etc/Text.conf" INPUT "${PROJECT_SOURCE_DIR}/src/mc_control/samples/Text/etc/Text.conf")
@@ -206,11 +232,11 @@ file(GENERATE OUTPUT "${TEST_CONTROLLER_PATH}/etc/Text.conf" INPUT "${PROJECT_SO
 # Test sample FSM controller
 controller_sample_test_run(FSM "/src" 8000)
 set(AROBASE "@")
-set(FSM_STATES_INSTALL_PREFIX "${PROJECT_BINARY_DIR}/src/mc_control/fsm/states/")
+set(MC_FSM_STATES_RUNTIME_INSTALL_PREFIX "${PROJECT_BINARY_DIR}/src/mc_control/fsm/states/")
 if(CMAKE_CONFIGURATION_TYPES)
-  set(FSM_STATES_INSTALL_PREFIX "${FSM_STATES_INSTALL_PREFIX}/$<CONFIGURATION>")
+  set(MC_FSM_STATES_RUNTIME_INSTALL_PREFIX "${MC_FSM_STATES_RUNTIME_INSTALL_PREFIX}/$<CONFIGURATION>")
 endif()
-set(FSM_STATES_DATA_INSTALL_PREFIX "${PROJECT_SOURCE_DIR}/src/mc_control/fsm/states/data/")
+set(MC_FSM_STATES_DATA_INSTALL_PREFIX "${PROJECT_SOURCE_DIR}/src/mc_control/fsm/states/data/")
 configure_file("${PROJECT_SOURCE_DIR}/src/mc_control/samples/FSM/etc/FSM.in.conf" "${CMAKE_CURRENT_BINARY_DIR}/etc/FSM.conf")
 file(GENERATE OUTPUT "${TEST_CONTROLLER_PATH}/etc/FSM.conf" INPUT "${CMAKE_CURRENT_BINARY_DIR}/etc/FSM.conf")
 unset(AROBASE)
@@ -234,7 +260,8 @@ set(RUN_OBSERVERS "")
 set(UPDATE_OBSERVERS "")
 
 # Test Python bindings
-if(${PYTHON_BINDING})
+if(PYTHON_BINDING)
+  file(READ "ObserverPipelinesPython.json" OBSERVER_PIPELINES)
   set(USE_SANDBOX "false")
   get_python_names(python_names)
   foreach(PYTHON ${python_names})
@@ -278,4 +305,5 @@ if(${PYTHON_BINDING})
       add_test(NAME Test${PYTHON}Log COMMAND python "${CMAKE_CURRENT_SOURCE_DIR}/check_log.py" "${TEST_CONTROLLER_NAME}" ${NRITER} "${UTILS_BIN_DIR}")
     endif()
   endforeach()
+  unset(OBSERVER_PIPELINES)
 endif()

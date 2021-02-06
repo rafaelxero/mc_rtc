@@ -153,6 +153,7 @@ void RobotModule::init(const rbd::parsers::ParserResult & res)
   }
   boundsFromURDF(res.limits);
   _visual = res.visual;
+  _collision = res.collision;
   make_default_ref_joint_order();
   expand_stance();
 }
@@ -199,27 +200,13 @@ RobotModule::Gripper::Gripper(const std::string & name,
 
 void RobotModule::boundsFromURDF(const rbd::parsers::Limits & limits)
 {
-  auto neg_bound = [](const std::map<std::string, std::vector<double>> & v) {
-    std::map<std::string, std::vector<double>> res;
-    for(const auto & vi : v)
-    {
-      res[vi.first] = vi.second;
-      for(auto & vj : res[vi.first])
-      {
-        vj = -vj;
-      }
-    }
-    return res;
-  };
-  _bounds = {
-      limits.lower, limits.upper, neg_bound(limits.velocity), limits.velocity, neg_bound(limits.torque), limits.torque,
-  };
+  _bounds = urdf_limits_to_bounds(limits);
 }
 
 void RobotModule::boundsFromURDF(const mc_rbdyn_urdf::Limits & limits)
 {
   mc_rtc::log::warning("This function is deprecated, use rbd::parsers instead of mc_rbdyn_urdf");
-  boundsFromURDF(from_mc_rbdyn_urdf(limits));
+  _bounds = urdf_limits_to_bounds(limits);
 }
 
 void RobotModule::expand_stance()

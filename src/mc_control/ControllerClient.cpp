@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ * Copyright 2015-2020 CNRS-UM LIRMM, CNRS-AIST JRL
  */
 
 #include <mc_control/ControllerClient.h>
@@ -7,9 +7,12 @@
 #include <mc_rtc/gui/StateBuilder.h>
 #include <mc_rtc/logging.h>
 
-#include <nanomsg/nn.h>
-#include <nanomsg/pipeline.h>
-#include <nanomsg/pubsub.h>
+#ifndef MC_RTC_DISABLE_NETWORK
+#  include <nanomsg/nn.h>
+#  include <nanomsg/pipeline.h>
+#  include <nanomsg/pubsub.h>
+#  include <nanomsg/reqrep.h>
+#endif
 
 #include <chrono>
 #include <sstream>
@@ -37,6 +40,8 @@ std::string cat2str(const std::vector<std::string> & cat)
 
 namespace mc_control
 {
+
+#ifndef MC_RTC_DISABLE_NETWORK
 
 namespace
 {
@@ -69,11 +74,35 @@ void init_socket(int & socket, int proto, const std::string & uri, const std::st
 
 } // namespace
 
+#endif
+
+ControllerClient::ControllerClient() = default;
+
 ControllerClient::ControllerClient(const std::string & sub_conn_uri, const std::string & push_conn_uri, double timeout)
 : timeout_(timeout)
 {
+  connect(sub_conn_uri, push_conn_uri);
+}
+
+void ControllerClient::connect(const std::string & sub_conn_uri, const std::string & push_conn_uri)
+{
+#ifndef MC_RTC_DISABLE_NETWORK
   init_socket(sub_socket_, NN_SUB, sub_conn_uri, "SUB socket");
   init_socket(push_socket_, NN_PUSH, push_conn_uri, "PUSH socket");
+  run_ = true;
+#endif
+}
+
+ControllerClient::ControllerClient(ControllerServer & server, mc_rtc::gui::StateBuilder & gui)
+{
+  connect(server, gui);
+}
+
+void ControllerClient::connect(ControllerServer & server, mc_rtc::gui::StateBuilder & gui)
+{
+  server_ = &server;
+  gui_ = &gui;
+  run_ = true;
 }
 
 ControllerClient::~ControllerClient()
@@ -84,82 +113,157 @@ ControllerClient::~ControllerClient()
 void ControllerClient::stop()
 {
   run_ = false;
+#ifndef MC_RTC_DISABLE_NETWORK
   if(sub_th_.joinable())
   {
     sub_th_.join();
   }
   nn_shutdown(sub_socket_, 0);
   nn_shutdown(push_socket_, 0);
+  sub_socket_ = -1;
+  push_socket_ = -1;
+#endif
+  server_ = nullptr;
+  gui_ = nullptr;
 }
 
 void ControllerClient::reconnect(const std::string & sub_conn_uri, const std::string & push_conn_uri)
 {
   stop();
+#ifndef MC_RTC_DISABLE_NETWORK
   init_socket(sub_socket_, NN_SUB, sub_conn_uri, "SUB socket");
   init_socket(push_socket_, NN_PUSH, push_conn_uri, "PUSH socket");
+#endif
   start();
+}
+
+void ControllerClient::run(std::vector<char> & buff, std::chrono::system_clock::time_point & t_last_received)
+{
+  auto resize_to_fit = [&](size_t s) {
+    if(buff.size() >= s)
+    {
+      return;
+    }
+    size_t nsize = buff.size() == 0 ? 65535 : 2 * buff.size();
+    while(nsize < s)
+    {
+      nsize = 2 * nsize;
+    }
+    buff.resize(nsize);
+  };
+  if(sub_socket_ >= 0)
+  {
+#ifndef MC_RTC_DISABLE_NETWORK
+    memset(buff.data(), 0, buff.size() * sizeof(char));
+    auto recv = nn_recv(sub_socket_, buff.data(), buff.size(), NN_DONTWAIT);
+    auto now = std::chrono::system_clock::now();
+    if(recv < 0)
+    {
+      if(timeout_ > 0 && now - t_last_received > std::chrono::duration<double>(timeout_))
+      {
+        t_last_received = now;
+        if(run_)
+        {
+          handle_gui_state(mc_rtc::Configuration{});
+        }
+      }
+      auto err = nn_errno();
+      if(err != EAGAIN)
+      {
+        mc_rtc::log::error("ControllerClient failed to receive with errno: {}", err);
+      }
+    }
+    else if(recv > 0)
+    {
+      auto msg_size = recv;
+      while(recv > 0)
+      {
+        msg_size = recv;
+        recv = nn_recv(sub_socket_, buff.data(), buff.size(), NN_DONTWAIT);
+      }
+      t_last_received = now;
+      if(msg_size > static_cast<int>(buff.size()))
+      {
+        mc_rtc::log::warning(
+            "Receive buffer was too small to receive the latest state message, will resize for next time");
+        resize_to_fit(static_cast<size_t>(msg_size));
+        return;
+      }
+      run(buff.data(), static_cast<size_t>(msg_size));
+    }
+#endif
+  }
+  else if(server_ != nullptr)
+  {
+    auto recv = server_->data();
+    if(recv.second == 0)
+    {
+      return;
+    }
+    resize_to_fit(recv.second);
+    memcpy(buff.data(), recv.first, recv.second * sizeof(char));
+    run(buff.data(), recv.second);
+  }
+  else
+  {
+    handle_gui_state(mc_rtc::Configuration{});
+  }
+}
+
+void ControllerClient::run(const char * buffer, size_t bufferSize)
+{
+  if(run_)
+  {
+    handle_gui_state(mc_rtc::Configuration::fromMessagePack(buffer, bufferSize));
+  }
 }
 
 void ControllerClient::start()
 {
   run_ = true;
+#ifndef MC_RTC_DISABLE_NETWORK
   sub_th_ = std::thread([this]() {
     std::vector<char> buff(65536);
     auto t_last_received = std::chrono::system_clock::now();
     while(run_)
     {
-      memset(buff.data(), 0, buff.size() * sizeof(char));
-      auto recv = nn_recv(sub_socket_, buff.data(), buff.size(), NN_DONTWAIT);
-      auto now = std::chrono::system_clock::now();
-      if(recv < 0)
-      {
-        if(timeout_ > 0 && now - t_last_received > std::chrono::duration<double>(timeout_))
-        {
-          t_last_received = now;
-          if(run_)
-          {
-            handle_gui_state(mc_rtc::Configuration{});
-          }
-        }
-        auto err = nn_errno();
-        if(err != EAGAIN)
-        {
-          mc_rtc::log::error("ControllerClient failed to receive with errno: {}", err);
-        }
-      }
-      else if(recv > 0)
-      {
-        if(recv > static_cast<int>(buff.size()))
-        {
-          mc_rtc::log::warning(
-              "Receive buffer was too small to receive the latest state message, will resize for next time");
-          buff.resize(2 * buff.size());
-          continue;
-        }
-        t_last_received = now;
-        if(run_)
-        {
-          handle_gui_state(mc_rtc::Configuration::fromMessagePack(buff.data(), static_cast<size_t>(recv)));
-        }
-      }
+      run(buff, t_last_received);
       std::this_thread::sleep_for(std::chrono::microseconds(500));
     }
   });
+#endif
 }
 
 void ControllerClient::send_request(const ElementId & id, const mc_rtc::Configuration & data)
 {
-  mc_rtc::Configuration request;
-  request.add("category", id.category);
-  request.add("name", id.name);
-  request.add("data", data);
-  std::string out = request.dump();
+  std::string out;
+  raw_request(id, data, out);
+#ifndef MC_RTC_DISABLE_NETWORK
   nn_send(push_socket_, out.c_str(), out.size() + 1, NN_DONTWAIT);
+#endif
+  if(server_)
+  {
+    server_->handle_requests(*gui_, out.c_str());
+  }
 }
 
 void ControllerClient::send_request(const ElementId & id)
 {
   send_request(id, mc_rtc::Configuration{});
+}
+
+void ControllerClient::raw_request(const ElementId & id, const mc_rtc::Configuration & data, std::string & out)
+{
+  mc_rtc::Configuration request;
+  request.add("category", id.category);
+  request.add("name", id.name);
+  request.add("data", data);
+  out = request.dump();
+}
+
+void ControllerClient::raw_request(const ElementId & id, std::string & out)
+{
+  raw_request(id, mc_rtc::Configuration{}, out);
 }
 
 void ControllerClient::timeout(double t)
@@ -183,9 +287,9 @@ void ControllerClient::handle_gui_state(mc_rtc::Configuration state)
   }
   started();
   int version = state[0];
-  if(version != mc_rtc::gui::StateBuilder::PROTOCOL_VERSION)
+  if(version > mc_rtc::gui::StateBuilder::PROTOCOL_VERSION)
   {
-    mc_rtc::log::error("Receive message, version: {} but I can only handle version: {}", version,
+    mc_rtc::log::error("Receive message, version: {} but I can only handle version {} and lower", version,
                        mc_rtc::gui::StateBuilder::PROTOCOL_VERSION);
     handle_category({}, "", {});
     stopped();
@@ -193,10 +297,13 @@ void ControllerClient::handle_gui_state(mc_rtc::Configuration state)
   }
   data_ = state[1];
   handle_category({}, "", state[2]);
-  auto plots = state[3];
-  for(size_t i = 0; i < plots.size(); ++i)
+  if(3 < state.size())
   {
-    handle_plot(plots[i]);
+    auto plots = state[3];
+    for(size_t i = 0; i < plots.size(); ++i)
+    {
+      handle_plot(plots[i]);
+    }
   }
   stopped();
 }
@@ -310,6 +417,9 @@ void ControllerClient::handle_widget(const ElementId & id, const mc_rtc::Configu
         handle_table(id, data.at(3, std::vector<std::string>{}), data.at(5, std::vector<std::string>{}),
                      data.at(4, std::vector<mc_rtc::Configuration>{}));
         break;
+      case Elements::Robot:
+        robot(id, data[3], data[4], data[5]);
+        break;
       default:
         mc_rtc::log::error("Type {} is not handlded by this ControllerClient", static_cast<int>(type));
         break;
@@ -336,7 +446,7 @@ void ControllerClient::handle_point3d(const ElementId & id, const mc_rtc::Config
   mc_rtc::gui::PointConfig config;
   if(data.size() > 5)
   {
-    config.load(data[5]);
+    config.fromMessagePack(data[5]);
   }
   if(ro)
   {
@@ -355,7 +465,7 @@ void ControllerClient::handle_trajectory(const ElementId & id, const mc_rtc::Con
   mc_rtc::gui::LineConfig config;
   if(data_.size() > 4)
   {
-    config.load(data_[4]);
+    config.fromMessagePack(data_[4]);
   }
   if(data.size())
   {
@@ -375,8 +485,17 @@ void ControllerClient::handle_trajectory(const ElementId & id, const mc_rtc::Con
       catch(mc_rtc::Configuration::Exception & exc)
       {
         exc.silence();
-        Eigen::Vector3d p = data;
-        trajectory(id, p, config);
+        try
+        {
+          Eigen::Vector3d p = data;
+          trajectory(id, p, config);
+        }
+        catch(mc_rtc::Configuration::Exception & exc)
+        {
+          exc.silence();
+          sva::PTransformd pos = data;
+          trajectory(id, pos, config);
+        }
       }
     }
   }
@@ -391,23 +510,31 @@ void ControllerClient::handle_trajectory(const ElementId & id, const mc_rtc::Con
 void ControllerClient::handle_polygon(const ElementId & id, const mc_rtc::Configuration & data_)
 {
   const auto & data = data_[3];
-  mc_rtc::gui::Color color;
+  mc_rtc::gui::LineConfig config;
   if(data_.size() > 4)
   {
-    color.load(data_[4]);
+    if(data_[4].size() == 4)
+    {
+      config.color.fromMessagePack(data_[4]);
+      config.width = 0.005;
+    }
+    else
+    {
+      config.fromMessagePack(data_[4]);
+    }
   }
   try
   {
     const std::vector<std::vector<Eigen::Vector3d>> & points = data;
-    polygon(id, points, color);
+    polygon(id, points, config);
   }
   catch(mc_rtc::Configuration::Exception & exc)
   {
     exc.silence();
     try
     {
-      const std::vector<std::vector<Eigen::Vector3d>> p = {data};
-      polygon(id, p, color);
+      std::vector<Eigen::Vector3d> p = data;
+      polygon(id, {p}, config);
     }
     catch(mc_rtc::Configuration::Exception & exc)
     {
@@ -427,7 +554,7 @@ void ControllerClient::handle_force(const ElementId & id, const mc_rtc::Configur
   mc_rtc::gui::ForceConfig forceConfig;
   if(data.size() > 6)
   {
-    forceConfig.load(data[6]);
+    forceConfig.fromMessagePack(data[6]);
   }
   if(ro)
   {
@@ -448,7 +575,7 @@ void ControllerClient::handle_arrow(const ElementId & id, const mc_rtc::Configur
   mc_rtc::gui::ArrowConfig arrow_config;
   if(data.size() > 6)
   {
-    arrow_config.load(data[6]);
+    arrow_config.fromMessagePack(data[6]);
   }
   Eigen::Vector6d arrow_data;
   arrow_data.head<3>() = arrow_start;
@@ -598,7 +725,7 @@ struct X
 
   X(const mc_rtc::Configuration & data)
   {
-    config.load(data[0]);
+    config.fromMessagePack(data[0]);
     value = data[1];
   }
 };
@@ -615,7 +742,7 @@ struct Y
   {
     legend = static_cast<std::string>(data[1]);
     value = data[2];
-    color.load(data[3]);
+    color.fromMessagePack(data[3]);
     style = static_cast<mc_rtc::gui::plot::Style>(static_cast<uint64_t>(data[4]));
     side = static_cast<mc_rtc::gui::plot::Side>(static_cast<uint64_t>(data[5]));
   }
@@ -635,7 +762,7 @@ struct XY
     legend = static_cast<std::string>(data[1]);
     x = data[2];
     y = data[3];
-    color.load(data[4]);
+    color.fromMessagePack(data[4]);
     style = static_cast<mc_rtc::gui::plot::Style>(static_cast<uint64_t>(data[5]));
     side = static_cast<mc_rtc::gui::plot::Side>(static_cast<uint64_t>(data[6]));
   }
@@ -650,7 +777,7 @@ struct Polygon
   Polygon(const mc_rtc::Configuration & data)
   {
     legend = static_cast<std::string>(data[1]);
-    polygon.load(data[2]);
+    polygon.fromMessagePack(data[2]);
     side = static_cast<mc_rtc::gui::plot::Side>(static_cast<uint64_t>(data[3]));
   }
 };
@@ -667,7 +794,7 @@ struct Polygons
     for(size_t i = 0; i < data[2].size(); ++i)
     {
       polygons.emplace_back();
-      polygons.back().load(data[2][i]);
+      polygons.back().fromMessagePack(data[2][i]);
     }
     side = static_cast<mc_rtc::gui::plot::Side>(static_cast<uint64_t>(data[3]));
   }
@@ -683,10 +810,10 @@ void ControllerClient::handle_standard_plot(const mc_rtc::Configuration & plot)
   X x(plot[3]);
   plot_setup_xaxis(id, x.config.name, x.config.range);
   mc_rtc::gui::plot::AxisConfiguration y1Config;
-  y1Config.load(plot[4]);
+  y1Config.fromMessagePack(plot[4]);
   plot_setup_yaxis_left(id, y1Config.name, y1Config.range);
   mc_rtc::gui::plot::AxisConfiguration y2Config;
-  y2Config.load(plot[5]);
+  y2Config.fromMessagePack(plot[5]);
   plot_setup_yaxis_right(id, y2Config.name, y2Config.range);
   for(size_t i = 6; i < plot.size(); ++i)
   {
@@ -728,13 +855,13 @@ void ControllerClient::handle_xy_plot(const mc_rtc::Configuration & plot)
   std::string title = plot[2];
   start_plot(id, title);
   mc_rtc::gui::plot::AxisConfiguration xConfig;
-  xConfig.load(plot[3]);
+  xConfig.fromMessagePack(plot[3]);
   plot_setup_xaxis(id, xConfig.name, xConfig.range);
   mc_rtc::gui::plot::AxisConfiguration y1Config;
-  y1Config.load(plot[4]);
+  y1Config.fromMessagePack(plot[4]);
   plot_setup_yaxis_left(id, y1Config.name, y1Config.range);
   mc_rtc::gui::plot::AxisConfiguration y2Config;
-  y2Config.load(plot[5]);
+  y2Config.fromMessagePack(plot[5]);
   plot_setup_yaxis_right(id, y2Config.name, y2Config.range);
   for(size_t i = 6; i < plot.size(); ++i)
   {

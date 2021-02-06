@@ -45,13 +45,13 @@ def read_flat(f, tmp = False):
         return ctypes.c_bool.from_buffer_copy(fd.read(ctypes.sizeof(ctypes.c_bool))).value
     def read_string(fd, size):
         if size == 0:
-            return "".decode('ascii')
+            return b"".decode('ascii')
         return fd.read(size).decode('ascii')
     def read_array(fd, size):
         return np.frombuffer(fd.read(size * ctypes.sizeof(ctypes.c_double)), np.double)
     def read_string_array(fd, size):
         return [ read_string(fd, read_size(fd)) for i in range(size) ]
-    data = Data()
+    data = {}
     with open(f, 'rb') as fd:
         nrEntries = read_size(fd)
         for i in range(nrEntries):
@@ -66,7 +66,7 @@ def read_flat(f, tmp = False):
     return data
 
 def read_csv(fpath, tmp = False):
-  data = Data()
+  data = {}
   string_entries = {}
   with open(fpath) as fd:
     reader = csv.DictReader(fd, delimiter=';')
@@ -203,7 +203,7 @@ class LineStyleDialog(CommonStyleDialog):
     super(LineStyleDialog, self).apply()
     self.style.label = self.labelInput.text()
     self.set_style(self.name, self.style)
-    self.setWindowTitle('Edit {} style'.format(style.label))
+    self.setWindowTitle('Edit {} style'.format(self.style.label))
     self.canvas.draw()
 
 class ColorButtonRightClick(QtWidgets.QPushButton):
@@ -437,7 +437,7 @@ class AllLineStyleDialog(QtWidgets.QDialog):
       button.setStyleSheet("background-color: {color}; color: {color}".format(color = color.name()))
 
   def apply(self):
-    for y,widgets in self.plotWidgets.iteritems():
+    for y,widgets in self.plotWidgets.items():
       label = widgets[0].text()
       linestyle = widgets[1].currentText()
       linewidth = float(widgets[2].text())
@@ -515,7 +515,7 @@ class LabelsTitleEditDialog(QtWidgets.QDialog):
   def __init__(self, parent, canvas):
     self.canvas = canvas
 
-    self.setWindowTitle('Edit graph title')
+    self.setWindowTitle('Edit graph title, labels and style')
 
     row = 0
 
@@ -579,8 +579,8 @@ class LabelsTitleEditDialog(QtWidgets.QDialog):
     extraRow += 1
 
     self.extraLayout.addWidget(QtWidgets.QLabel("Legend size"), extraRow, 0)
-    self.extraLayout.addWidget(QtWidgets.QLabel("Legend Y1 columns"), extraRow, 1, 1, 2)
-    self.extraLayout.addWidget(QtWidgets.QLabel("Legend Y2 columns"), extraRow, 3, 1, 2)
+    self.extraLayout.addWidget(QtWidgets.QLabel("Legend Y1 columns"), extraRow, 1)
+    self.extraLayout.addWidget(QtWidgets.QLabel("Legend Y2 columns"), extraRow, 2)
     extraRow += 1
 
     self.legendSizeEdit = QtWidgets.QLineEdit(str(canvas.legend_fontsize()))
@@ -590,8 +590,19 @@ class LabelsTitleEditDialog(QtWidgets.QDialog):
     self.y2LegendNColEdit = QtWidgets.QLineEdit(str(canvas.y2_legend_ncol()))
     self.y2LegendNColEdit.setValidator(QtGui.QIntValidator(1, 100))
     self.extraLayout.addWidget(self.legendSizeEdit, extraRow, 0)
-    self.extraLayout.addWidget(self.y1LegendNColEdit, extraRow, 1, 1, 2)
-    self.extraLayout.addWidget(self.y2LegendNColEdit, extraRow, 3, 1, 2)
+    self.extraLayout.addWidget(self.y1LegendNColEdit, extraRow, 1)
+    self.extraLayout.addWidget(self.y2LegendNColEdit, extraRow, 2)
+    extraRow += 1
+
+    self.extraLayout.addWidget(QtWidgets.QLabel("Labels legend size"), extraRow, 0, 1, 2)
+    self.extraLayout.addWidget(QtWidgets.QLabel("Labels legend top offset"), extraRow, 2, 1, 1)
+    extraRow += 1
+
+    self.labelsLegendSizeEdit = QtWidgets.QLineEdit(str(canvas.labels_legend_fontsize()))
+    self.labelsLegendSizeEdit.setValidator(QtGui.QDoubleValidator(1, 1e6, 1))
+    self.labelsLegendTopOffsetEdit = QtWidgets.QLineEdit(str(canvas.labels_legend_top_offset()))
+    self.extraLayout.addWidget(self.labelsLegendSizeEdit, extraRow, 0, 1, 2)
+    self.extraLayout.addWidget(self.labelsLegendTopOffsetEdit, extraRow, 2, 1, 2)
     extraRow += 1
 
     self.layout.addLayout(self.extraLayout, row, 0, extraRow, 3)
@@ -613,6 +624,8 @@ class LabelsTitleEditDialog(QtWidgets.QDialog):
     self.canvas.bottom_offset(float(self.bottomOffsetEdit.text()))
     self.canvas.y1_legend_ncol(int(self.y1LegendNColEdit.text()))
     self.canvas.y2_legend_ncol(int(self.y2LegendNColEdit.text()))
+    self.canvas.labels_legend_fontsize(int(self.labelsLegendSizeEdit.text()))
+    self.canvas.labels_legend_top_offset(float(self.labelsLegendTopOffsetEdit.text()))
     self.canvas.draw()
 
   def accept(self):
@@ -631,6 +644,8 @@ class MCLogUI(QtWidgets.QMainWindow):
 
     self.data = Data()
     self.data.data_updated.connect(self.update_data)
+
+    self.loaded_files = []
 
     self.gridStyles = {'left': LineStyle(linestyle = '--'), 'right': LineStyle(linestyle = ':') }
     self.gridStyleFile = os.path.expanduser("~") + "/.config/mc_log_ui/grid_style.json"
@@ -902,7 +917,7 @@ class MCLogUI(QtWidgets.QMainWindow):
       for i in range(self.ui.tabWidget.count() - 1):
         tab = self.ui.tabWidget.widget(i)
         assert(isinstance(tab, MCLogTab))
-        tab.setRobotModule(self.rm)
+        tab.setRobotModule(self.rm, self.loaded_files)
       self.saveDefaultRobot(action.actual())
     except RuntimeError:
       #QtWidgets.QMessageBox.warning(self, "Failed to get RobotModule", "Could not retrieve Robot Module: {}{}Check your console for more details".format(action.text(), os.linesep))
@@ -920,6 +935,12 @@ class MCLogUI(QtWidgets.QMainWindow):
       self.load_csv(fpath)
 
   @QtCore.Slot()
+  def on_actionCompare_triggered(self):
+    fpath = QtWidgets.QFileDialog.getOpenFileName(self, "Log file")[0]
+    if len(fpath):
+      self.load_csv(fpath, False)
+
+  @QtCore.Slot()
   def on_actionExit_triggered(self):
     QtWidgets.QApplication.quit()
 
@@ -929,7 +950,7 @@ class MCLogUI(QtWidgets.QMainWindow):
       plotW = MCLogTab(self)
       plotW.setData(self.data)
       plotW.setGridStyles(self.gridStyles)
-      plotW.setRobotModule(self.rm)
+      plotW.setRobotModule(self.rm, self.loaded_files)
       plotW.setColors(self.colorsScheme.colors())
       plotW.setPolyColors(self.polyColorsScheme.colors())
       j = 1
@@ -979,30 +1000,77 @@ class MCLogUI(QtWidgets.QMainWindow):
   def shortcutAxesDialog(self):
     self.ui.tabWidget.currentWidget().activeCanvas.axesDialog()
 
-  def load_csv(self, fpath):
-    self.data = read_log(fpath)
-    self.data.data_updated.connect(self.update_data)
+  def load_csv(self, fpath, clear = True):
+    if clear:
+      self.loaded_files = []
+    data = read_log(fpath)
+    if not 't' in data:
+      print("This GUI assumes a time-entry named t is available in the log, failed loading {}".format(fpath))
+      return
+    if 't' in self.data and not clear:
+      dt = self.data['t'][1] - self.data['t'][0]
+      ndt = data['t'][1] - data['t'][0]
+      if abs(dt - ndt) > 1e-9:
+        print("This GUI assumes you are comparing logs with a similar timestep, already loaded dt = {} but attempted to load dt = {} from {}", dt, ndt, fpath)
+        return
+      pad_left = int(round((self.data['t'][0] - data['t'][0]) / dt))
+      pad_right = int(round((data['t'][-1] - self.data['t'][-1]) / dt))
+      start_t = min(self.data['t'][0], data['t'][0])
+      end_t = max(self.data['t'][-1], data['t'][-1])
+    fpath = os.path.basename(fpath).replace('_', '-')
+    self.loaded_files.append(fpath)
     i = 0
-    while "qIn_{}".format(i) in self.data and "qOut_{}".format(i) in self.data:
-      self.data["error_q_{}".format(i)] = self.data["qOut_{}".format(i)] - self.data["qIn_{}".format(i)]
-      self.data["qIn_limits_lower_{}".format(i)] = np.full_like(self.data["qIn_{}".format(i)], 0)
-      self.data["qIn_limits_upper_{}".format(i)] = np.full_like(self.data["qIn_{}".format(i)], 0)
-      self.data["qOut_limits_lower_{}".format(i)] = self.data["qIn_limits_lower_{}".format(i)]
-      self.data["qOut_limits_upper_{}".format(i)] = self.data["qIn_limits_upper_{}".format(i)]
+    while "qIn_{}".format(i) in data and "qOut_{}".format(i) in data:
+      data["error_q_{}".format(i)] = data["qOut_{}".format(i)] - data["qIn_{}".format(i)]
+      data["qIn_limits_lower_{}".format(i)] = np.full_like(data["qIn_{}".format(i)], 0)
+      data["qIn_limits_upper_{}".format(i)] = np.full_like(data["qIn_{}".format(i)], 0)
+      data["qOut_limits_lower_{}".format(i)] = data["qIn_limits_lower_{}".format(i)]
+      data["qOut_limits_upper_{}".format(i)] = data["qIn_limits_upper_{}".format(i)]
       i += 1
     i = 0
-    while "tauIn_{}".format(i) in self.data:
-      self.data["tauIn_limits_lower_{}".format(i)] = np.full_like(self.data["tauIn_{}".format(i)], 0)
-      self.data["tauIn_limits_upper_{}".format(i)] = np.full_like(self.data["tauIn_{}".format(i)], 0)
+    while "tauIn_{}".format(i) in data:
+      data["tauIn_limits_lower_{}".format(i)] = np.full_like(data["tauIn_{}".format(i)], 0)
+      data["tauIn_limits_upper_{}".format(i)] = np.full_like(data["tauIn_{}".format(i)], 0)
       i += 1
-    while "tauOut_{}".format(i) in self.data:
-      self.data["tauOut_limits_lower_{}".format(i)] = np.full_like(self.data["tauOut_{}".format(i)], 0)
-      self.data["tauOut_limits_upper_{}".format(i)] = np.full_like(self.data["tauOut_{}".format(i)], 0)
+    while "tauOut_{}".format(i) in data:
+      data["tauOut_limits_lower_{}".format(i)] = np.full_like(data["tauOut_{}".format(i)], 0)
+      data["tauOut_limits_upper_{}".format(i)] = np.full_like(data["tauOut_{}".format(i)], 0)
       i += 1
-    if 'perf_SolverBuildAndSolve' in self.data and 'perf_SolverSolve' in self.data:
-      self.data['perf_SolverBuild'] = self.data['perf_SolverBuildAndSolve'] - self.data['perf_SolverSolve']
+    if 'perf_SolverBuildAndSolve' in data and 'perf_SolverSolve' in data:
+      data['perf_SolverBuild'] = data['perf_SolverBuildAndSolve'] - data['perf_SolverSolve']
+    if len(self.loaded_files) > 1:
+      if len(self.loaded_files) == 2:
+        keys = self.data.keys()
+        for k in keys:
+          self.data["{}_{}".format(self.loaded_files[0], k)] = self.data[k]
+          del self.data[k]
+      def pos_or_zero(i):
+        if i > 0:
+          return i
+        else:
+          return 0
+      if pad_left > 0 or pad_right > 0:
+        pleft = pos_or_zero(pad_left)
+        pright = pos_or_zero(pad_right)
+        self.data.data = {k: np.concatenate(([float('nan')]*pleft, v, [float('nan')]*pright)) for k,v in self.data.data.items()}
+      keys = data.keys()
+      for k in keys:
+        def abs_or_zero(i):
+          if i < 0:
+              return -i
+          else:
+              return 0
+        pleft = abs_or_zero(pad_left)
+        pright = abs_or_zero(pad_right)
+        self.data["{}_{}".format(fpath, k)] = np.concatenate(([float('nan')]*pleft, data[k], [float('nan')]*pright))
+      self.data['t'] = np.arange(start_t, end_t, dt)
+      # In some cases rounding errors gives us the wrong size so we use the other log timestep
+      if len(self.data['t']) != len(self.data['{}_{}'.format(fpath, k)]):
+        self.data['t'] = np.arange(start_t, end_t, ndt)
+    else:
+      self.data.data = data
     self.update_data()
-    self.setWindowTitle("MC Log Plotter - {}".format(os.path.basename(fpath)))
+    self.setWindowTitle("MC Log Plotter - {}".format("/".join(self.loaded_files)))
 
   def setColorsScheme(self, scheme):
     self.colorsScheme = scheme
@@ -1023,7 +1091,7 @@ class MCLogUI(QtWidgets.QMainWindow):
       assert(isinstance(tab, MCLogTab))
       tab.setData(self.data)
       tab.setGridStyles(self.gridStyles)
-      tab.setRobotModule(self.rm)
+      tab.setRobotModule(self.rm, self.loaded_files)
       tab.setColors(self.colorsScheme.colors())
       tab.setPolyColors(self.polyColorsScheme.colors())
 

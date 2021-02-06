@@ -1,18 +1,15 @@
 /*
- * Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+ * Copyright 2015-2020 CNRS-UM LIRMM, CNRS-AIST JRL
  */
 
 #pragma once
 
+#include <mc_control/ControllerServer.h>
 #include <mc_control/client_api.h>
 
 #include <mc_rtc/Configuration.h>
 #include <mc_rtc/gui/plot/types.h>
 #include <mc_rtc/gui/types.h>
-
-#include <nanomsg/nn.h>
-#include <nanomsg/pubsub.h>
-#include <nanomsg/reqrep.h>
 
 #include <string>
 #include <thread>
@@ -56,6 +53,12 @@ struct MC_CONTROL_CLIENT_DLLAPI ControllerClient
 
   /** Constructor
    *
+   * Default (disconnected) client
+   */
+  ControllerClient();
+
+  /** Constructor
+   *
    * \param sub_conn_uri URI the SUB socket should connect to
    *
    * \param push_conn_uri URI the PUSH socket should connect to
@@ -68,10 +71,25 @@ struct MC_CONTROL_CLIENT_DLLAPI ControllerClient
    */
   ControllerClient(const std::string & sub_conn_uri, const std::string & push_conn_uri, double timeout = 0);
 
+  /** Constructor
+   *
+   * \param server In-memory ControllerServer instance
+   *
+   * \param gui GUI updated by the server
+   *
+   */
+  ControllerClient(ControllerServer & server, mc_rtc::gui::StateBuilder & gui);
+
   ControllerClient(const ControllerClient &) = delete;
   ControllerClient & operator=(const ControllerClient &) = delete;
 
   ~ControllerClient();
+
+  /** Connect to the provided uris */
+  void connect(const std::string & sub_conn_uri, const std::string & push_conn_uri);
+
+  /** Connect to an in-memory server */
+  void connect(ControllerServer & server, mc_rtc::gui::StateBuilder & gui);
 
   /** Send a request to the given element in the given category using data */
   void send_request(const ElementId & id, const mc_rtc::Configuration & data);
@@ -88,11 +106,52 @@ struct MC_CONTROL_CLIENT_DLLAPI ControllerClient
   /** Helper for the void case */
   void send_request(const ElementId & id);
 
+  /** Get the raw request data
+   *
+   * out.c_str() can be used to send requests to the raw data interface of ControllerServer
+   */
+  void raw_request(const ElementId & id, const mc_rtc::Configuration & data, std::string & out);
+
+  /** Helper for raw request in simple cases */
+  template<typename T>
+  void raw_request(const ElementId & id, const T & data, std::string & out)
+  {
+    mc_rtc::Configuration c;
+    c.add("data", data);
+    raw_request(id, c("data"), out);
+  }
+
+  /** Helper for the void case */
+  void raw_request(const ElementId & id, std::string & out);
+
   /** Set the timeout of the SUB socket */
   void timeout(double t);
 
   /** Get the current timeout */
   double timeout();
+
+  /** Check if there is an available message from the server and process it
+   *
+   * This is the synchronous pendant to \ref start()
+   *
+   * \param buffer Buffer to receive data from the server, if it is too small,
+   * the buffer is resized and the message is discarded
+   *
+   * \param t_last_received Time when the last message was received, it is
+   * updated if the client receives a message. If a message has not been
+   * received since \ref timeout() then act as if we received an empty message
+   * (server offline).
+   *
+   */
+  void run(std::vector<char> & buffer, std::chrono::system_clock::time_point & t_last_received);
+
+  /** Run with raw data received from any possible way
+   *
+   * \param buffer Data to be processed
+   *
+   * \param bufferSize Size of data
+   */
+  void run(const char * buffer, size_t bufferSize);
 
 protected:
   /** Should be called when the client is ready to receive data */
@@ -267,13 +326,37 @@ protected:
 
   /** Should display a list of polygons of 3d points in 3D environment
    *
-   * \p Vector of 3D points
+   * For backward compatibility, this version has the default implementation
+   * and the version that accepts a LineConfig configuration instead of a Color
+   * is implemented in terms of this one. The opposite makes more sense in
+   * actual implementation of ControllerClient.
+   *
+   * \p points Each entry in the vector is a polygon described by its 3D points
+   *
+   * \p color Color of the polygon
    */
   virtual void polygon(const ElementId & id,
                        const std::vector<std::vector<Eigen::Vector3d>> & /* points */,
                        const mc_rtc::gui::Color & /* color */)
   {
     default_impl("PolygonArray", id);
+  }
+
+  /** Should display a list of polygons of 3D points in 3D environment
+   *
+   * For backward compatibility, this version is implemented to forward the
+   * call to the color variant, the concrete implementation makes more sense
+   * the other way around.
+   *
+   * \p points Each entry in the vector is a polygon described by its 3D points
+   *
+   * \p config Describe how to display the polygon
+   */
+  virtual void polygon(const ElementId & id,
+                       const std::vector<std::vector<Eigen::Vector3d>> & points,
+                       const mc_rtc::gui::LineConfig & config)
+  {
+    polygon(id, points, config.color);
   }
 
   /** Should display a force in 3D environment
@@ -354,6 +437,14 @@ protected:
 
   /** Called to close a table identified by \p id */
   virtual void table_end(const ElementId & /*id*/) {}
+
+  virtual void robot(const ElementId & id,
+                     const std::vector<std::string> & /*parameters*/,
+                     const std::vector<std::vector<double>> & /*q*/,
+                     const sva::PTransformd & /*posW*/)
+  {
+    default_impl("Robot", id);
+  }
 
   /** Should display a form to send schema-based request to the server
    *
@@ -593,17 +684,22 @@ protected:
 
   /* Network elements */
   bool run_ = true;
-  int sub_socket_;
+  int sub_socket_ = -1;
   std::thread sub_th_;
-  int push_socket_;
+  int push_socket_ = -1;
   double timeout_;
 
   /* Hold data from the server */
   mc_rtc::Configuration data_;
 
+  /* Pointer to the server if connected in-memory */
+  ControllerServer * server_ = nullptr;
+  /* Pointer to the GUI if connected in-memory */
+  mc_rtc::gui::StateBuilder * gui_ = nullptr;
+
 private:
   /** Default implementations for widgets' creations display a warning message to the user */
-  void default_impl(const std::string & type, const ElementId & id);
+  virtual void default_impl(const std::string & type, const ElementId & id);
 
   /** Handle details of Point3D elements */
   void handle_point3d(const ElementId & id, const mc_rtc::Configuration & data);

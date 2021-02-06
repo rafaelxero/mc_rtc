@@ -9,6 +9,7 @@
 #include <mc_solver/QPSolver.h>
 
 #include <mc_rtc/gui/Button.h>
+#include <mc_rtc/gui/Force.h>
 #include <mc_rtc/gui/Form.h>
 
 #include <Tasks/Bounds.h>
@@ -90,7 +91,7 @@ QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
   realRobots_p = std::make_shared<mc_rbdyn::Robots>();
   for(const auto & robot : robots->robots())
   {
-    realRobots_p->robotCopy(robot);
+    realRobots_p->robotCopy(robot, robot.name());
   }
 
   elapsed_ = {{"updateCurrentState", 0},
@@ -105,15 +106,24 @@ QPSolver::QPSolver(double timeStep)
 void QPSolver::addConstraintSet(ConstraintSet & cs)
 {
   cs.addToSolver(robots().mbs(), *solver);
-  solver->updateConstrSize();
-  solver->updateNrVars(robots().mbs());
+  solver.updateConstrSize();
+  solver.updateNrVars(robots().mbs());
+  if(dynamic_cast<DynamicsConstraint *>(&cs) != nullptr)
+  {
+    dynamicsConstraints_.push_back(static_cast<DynamicsConstraint *>(&cs));
+  }
 }
 
 void QPSolver::removeConstraintSet(ConstraintSet & cs)
 {
   cs.removeFromSolver(*solver);
-  solver->updateConstrSize();
-  solver->updateNrVars(robots().mbs());
+  solver.updateConstrSize();
+  solver.updateNrVars(robots().mbs());
+  auto it = std::find(dynamicsConstraints_.begin(), dynamicsConstraints_.end(), static_cast<DynamicsConstraint *>(&cs));
+  if(it != dynamicsConstraints_.end())
+  {
+    dynamicsConstraints_.erase(it);
+  }
 }
 
 void QPSolver::addTask(tasks::qp::Task * task)
@@ -212,6 +222,17 @@ void QPSolver::setContacts(const std::vector<mc_rbdyn::Contact> & contacts)
       logger_->removeLogEntry("contact_" + r1 + "::" + r1S + "_" + r2 + "::" + r2S);
     }
   }
+  if(gui_)
+  {
+    for(const auto & contact : contacts_)
+    {
+      const std::string & r1 = robots().robot(contact.r1Index()).name();
+      const std::string & r1S = contact.r1Surface()->name();
+      const std::string & r2 = robots().robot(contact.r2Index()).name();
+      const std::string & r2S = contact.r2Surface()->name();
+      gui_->removeElement({"Contacts"}, fmt::format("{}::{}/{}::{}", r1, r1S, r2, r2S));
+    }
+  }
   contacts_ = contacts;
   if(logger_)
   {
@@ -225,7 +246,22 @@ void QPSolver::setContacts(const std::vector<mc_rbdyn::Contact> & contacts)
                            [this, &contact]() { return desiredContactForce(contact); });
     }
   }
-  
+  if(gui_)
+  {
+    for(const auto & contact : contacts_)
+    {
+      const std::string & r1 = robots().robot(contact.r1Index()).name();
+      const std::string & r1S = contact.r1Surface()->name();
+      const std::string & r2 = robots().robot(contact.r2Index()).name();
+      const std::string & r2S = contact.r2Surface()->name();
+      gui_->addElement({"Contacts"}, mc_rtc::gui::Force(fmt::format("{}::{}/{}::{}", r1, r1S, r2, r2S),
+                                                        [this, &contact]() { return desiredContactForce(contact); },
+                                                        [this, &contact]() {
+                                                          return robots().robots()[contact.r1Index()].surfacePose(
+                                                              contact.r1Surface()->name());
+                                                        }));
+    }
+  }
   uniContacts.clear();
   biContacts.clear();
   qpRes.contacts.clear();
@@ -663,11 +699,16 @@ void QPSolver::__fillResult()
     qpRes.zmps[i].y = robot.zmpTarget().y();
     qpRes.zmps[i].z = robot.zmpTarget().z();
   }
-  qpRes.lambdaVec = solver->lambdaVec();
+  qpRes.lambdaVec = solver.lambdaVec();
+  for(const auto & dynamics : dynamicsConstraints_)
+  {
+    fillTorque(*dynamics);
+  }
 }
 
 void QPSolver::__fillResult(const rbd::MultiBodyConfig & mbc)
 {
+  qpRes.zmps.resize(robots().robots().size());
   qpRes.robots_state.resize(robots().robots().size());
   for(unsigned int i = 0; i < robots().robots().size(); ++i)
   {
@@ -682,8 +723,16 @@ void QPSolver::__fillResult(const rbd::MultiBodyConfig & mbc)
       alphaVec[j.name()] = mbc.alpha[jIndex];
       alphaDVec[j.name()] = mbc.alphaD[jIndex];
     }
+
+    qpRes.zmps[i].x = robot.zmpTarget().x();
+    qpRes.zmps[i].y = robot.zmpTarget().y();
+    qpRes.zmps[i].z = robot.zmpTarget().z();
   }
   qpRes.lambdaVec = solver->lambdaVec();
+  for(const auto & dynamics : dynamicsConstraints_)
+  {
+    fillTorque(*dynamics);
+  }
 }
 
 const mc_rbdyn::Robot & QPSolver::robot() const

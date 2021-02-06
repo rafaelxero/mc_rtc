@@ -1,5 +1,6 @@
 ---
 layout: tutorials
+toc: true
 ---
 
 ## A bit of history
@@ -237,7 +238,6 @@ Stabilizer::Standing:
   # StabilizerTask configuration (see previous section)
   StabilizerConfig:
     type: lipm_stabilizer
-    robotIndex: 0
     leftFootSurface: LeftFootCenter
     rightFootSurface: RightFootCenter
     enabled: true
@@ -336,6 +336,36 @@ The stabilizer states provides a number of callbacks for other states to configu
       <td>StabilizerStandingState::setDamping</td>
       <td><pre>void (double)</pre></td>
       <td>Modifies the CoM tracking damping</td>
+    </tr>
+    <tr>
+      <td>StabilizerStandingState::setCoMWeight</td>
+      <td><pre>void (double)</pre></td>
+      <td>Modifies the CoM task weight</td>
+    </tr>
+    <tr>
+      <td>StabilizerStandingState::setCoMStiffness</td>
+      <td><pre>void (const Eigen::Vector3d &)</pre></td>
+      <td>Modifies the CoM task stiffness</td>
+    </tr>
+    <tr>
+      <td>StabilizerStandingState::setPelvisWeight</td>
+      <td><pre>void (double)</pre></td>
+      <td>Modifies the Pelvis task weight</td>
+    </tr>
+    <tr>
+      <td>StabilizerStandingState::setPelvisStiffness</td>
+      <td><pre>void (double)</pre></td>
+      <td>Modifies the Pelvis task stiffness</td>
+    </tr>
+    <tr>
+      <td>StabilizerStandingState::setTorsoWeight</td>
+      <td><pre>void (double)</pre></td>
+      <td>Modifies the Torso task weight</td>
+    </tr>
+    <tr>
+      <td>StabilizerStandingState::setTorsoStiffness</td>
+      <td><pre>void (double)</pre></td>
+      <td>Modifies the Torso task stiffness</td>
     </tr>
     <tr>
       <td>StabilizerStandingState::getConfiguration</td>

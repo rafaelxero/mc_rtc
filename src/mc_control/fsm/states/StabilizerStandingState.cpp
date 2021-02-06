@@ -38,13 +38,16 @@ void StabilizerStandingState::start(Controller & ctl)
   // create stabilizer task from config
   stabilizerTask_ = mc_tasks::MetaTaskLoader::load<mc_tasks::lipm_stabilizer::StabilizerTask>(
       ctl.solver(), config_("StabilizerConfig"));
+  robot_ = stabilizerTask_->robot().name();
+  auto & robot = ctl.robot(robot_);
+  anchorFrameFunction_ = config_("anchorFrameFunction", "KinematicAnchorFrame::" + robot_);
   ctl.solver().addTask(stabilizerTask_);
 
   // Initialize stabilizer targets. Defaults to current CoM/CoP
   config_("comHeight", stabilizerTask_->config().comHeight);
   // Reset linear inverted pendulum model, used here to compute stabilizer references
   double lambda = constants::GRAVITY / stabilizerTask_->config().comHeight;
-  pendulum_.reset(lambda, ctl.robot().com(), ctl.robot().comVelocity(), ctl.robot().comAcceleration());
+  pendulum_.reset(lambda, robot.com(), robot.comVelocity(), robot.comAcceleration());
   if(config_.has("above"))
   {
     const std::string above = config_("above");
@@ -56,21 +59,36 @@ void StabilizerStandingState::start(Controller & ctl)
     {
       targetCoP(stabilizerTask_->contactAnklePose(ContactState::Right).translation());
     }
-    else if(above == "Center")
+    else if(above == "CenterAnkles")
     {
       targetCoP(sva::interpolate(stabilizerTask_->contactAnklePose(ContactState::Left),
                                  stabilizerTask_->contactAnklePose(ContactState::Right), 0.5)
                     .translation());
     }
-    else if(ctl.realRobot().hasSurface(above))
+    else if(above == "LeftSurface")
     {
-      targetCoP(ctl.realRobot().surfacePose(above).translation());
+      targetCoP(robot.surfacePose(stabilizerTask_->footSurface(ContactState::Left)).translation());
+    }
+    else if(above == "RightSurface")
+    {
+      targetCoP(robot.surfacePose(stabilizerTask_->footSurface(ContactState::Right)).translation());
+    }
+    else if(above == "CenterSurfaces")
+    {
+      targetCoP(sva::interpolate(ctl.robot().surfacePose(stabilizerTask_->footSurface(ContactState::Left)),
+                                 ctl.robot().surfacePose(stabilizerTask_->footSurface(ContactState::Right)), 0.5)
+                    .translation());
+    }
+    else if(robot.hasSurface(above))
+    {
+      targetCoP(robot.surfacePose(above).translation());
     }
     else
     {
       mc_rtc::log::error_and_throw<std::runtime_error>(
           "[StabilizerStandingState] Requested standing above {} but this is neither one of the state target "
-          "(LeftAnkle, RightAnkle, Center), nor a valid robot surface",
+          "(LeftAnkle, RightAnkle, CenterAnkles, LeftSurface, RightSurface, CenterSurfaces), nor a valid robot surface "
+          "name",
           above);
     }
   }
@@ -80,12 +98,22 @@ void StabilizerStandingState::start(Controller & ctl)
   }
   else
   {
-    targetCoM(ctl.robot().com());
+    targetCoM(robot.com());
   }
 
-  // Update anchor frame for the KinematicInertial observer
-  ctl.anchorFrame(stabilizerTask_->anchorFrame());
-  ctl.anchorFrameReal(stabilizerTask_->anchorFrameReal());
+  // Fixme: the stabilizer needs the observed state immediatly
+  if(ctl.datastore().has(anchorFrameFunction_))
+  {
+    mc_rtc::log::warning("[{}] a datastore callback for \"{}\" already exist on the datastore, using it instead",
+                         name(), anchorFrameFunction_);
+    ownsAnchorFrameCallback_ = false;
+  }
+  else
+  {
+    ctl.datastore().make_call(anchorFrameFunction_,
+                              [this](const mc_rbdyn::Robot & robot) { return stabilizerTask_->anchorFrame(robot); });
+    ownsAnchorFrameCallback_ = true;
+  }
 
   if(optionalGUI_ && stabilizerTask_->inDoubleSupport())
   {
@@ -140,6 +168,18 @@ void StabilizerStandingState::start(Controller & ctl)
   ctl.datastore().make_call(
       "StabilizerStandingState::setConfiguration",
       [this](const mc_rbdyn::lipm_stabilizer::StabilizerConfiguration & conf) { stabilizerTask_->configure(conf); });
+  ctl.datastore().make_call("StabilizerStandingState::setPelvisWeight",
+                            [this](double w) { stabilizerTask_->pelvisWeight(w); });
+  ctl.datastore().make_call("StabilizerStandingState::setPelvisStiffness",
+                            [this](double s) { stabilizerTask_->pelvisStiffness(s); });
+  ctl.datastore().make_call("StabilizerStandingState::setTorsoWeight",
+                            [this](double w) { stabilizerTask_->torsoWeight(w); });
+  ctl.datastore().make_call("StabilizerStandingState::setTorsoStiffness",
+                            [this](double s) { stabilizerTask_->torsoStiffness(s); });
+  ctl.datastore().make_call("StabilizerStandingState::setCoMWeight",
+                            [this](double w) { stabilizerTask_->comWeight(w); });
+  ctl.datastore().make_call("StabilizerStandingState::setCoMStiffness",
+                            [this](const Eigen::Vector3d & s) { stabilizerTask_->comStiffness(s); });
 }
 
 void StabilizerStandingState::targetCoP(const Eigen::Vector3d & cop)
@@ -184,9 +224,6 @@ bool StabilizerStandingState::run(Controller & ctl)
 
   // Update stabilizer target
   stabilizerTask_->target(pendulum_.com(), pendulum_.comd(), pendulum_.comdd(), pendulum_.zmp());
-  // Update anchor frame for the KinematicInertial observer
-  ctl.anchorFrame(stabilizerTask_->anchorFrame());
-  ctl.anchorFrameReal(stabilizerTask_->anchorFrameReal());
 
   if(!hasCompletion_)
   {
@@ -219,6 +256,16 @@ void StabilizerStandingState::teardown(Controller & ctl)
   ctl.datastore().remove("StabilizerStandingState::setDamping");
   ctl.datastore().remove("StabilizerStandingState::getConfiguration");
   ctl.datastore().remove("StabilizerStandingState::setConfiguration");
+  ctl.datastore().remove("StabilizerStandingState::setPelvisWeight");
+  ctl.datastore().remove("StabilizerStandingState::setPelvisStiffness");
+  ctl.datastore().remove("StabilizerStandingState::setTorsoWeight");
+  ctl.datastore().remove("StabilizerStandingState::setTorsoStiffness");
+  ctl.datastore().remove("StabilizerStandingState::setCoMWeight");
+  ctl.datastore().remove("StabilizerStandingState::setCoMStiffness");
+  if(ownsAnchorFrameCallback_)
+  {
+    ctl.datastore().remove(anchorFrameFunction_);
+  }
 }
 
 } // namespace fsm

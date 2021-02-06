@@ -11,6 +11,8 @@
 
 #include "jvrc1.h"
 
+#include <mc_rbdyn/RobotModuleMacros.h>
+
 #include <mc_rtc/logging.h>
 
 #include <RBDyn/parsers/urdf.h>
@@ -23,9 +25,9 @@ namespace bfs = boost::filesystem;
 namespace mc_robots
 {
 
-JVRC1RobotModule::JVRC1RobotModule() : RobotModule(std::string(JVRC_VAL_VAL(JVRC_DESCRIPTION_PATH)), "jvrc1")
+JVRC1RobotModule::JVRC1RobotModule(bool fixed) : RobotModule(std::string(JVRC_VAL_VAL(JVRC_DESCRIPTION_PATH)), "jvrc1")
 {
-  init(rbd::parsers::from_urdf_file(urdf_path, false));
+  init(rbd::parsers::from_urdf_file(urdf_path, fixed));
 
   std::string convexPath = path + "/convex/" + name + "/";
   bfs::path p(convexPath);
@@ -89,3 +91,50 @@ JVRC1RobotModule::JVRC1RobotModule() : RobotModule(std::string(JVRC_VAL_VAL(JVRC
 }
 
 } // namespace mc_robots
+
+#ifndef MC_RTC_BUILD_STATIC
+
+extern "C"
+{
+  ROBOT_MODULE_API void MC_RTC_ROBOT_MODULE(std::vector<std::string> & names)
+  {
+    names = {"JVRC1", "JVRC1Fixed"};
+  }
+  ROBOT_MODULE_API void destroy(mc_rbdyn::RobotModule * ptr)
+  {
+    delete ptr;
+  }
+  ROBOT_MODULE_API mc_rbdyn::RobotModule * create(const std::string & name)
+  {
+    if(name == "JVRC1")
+    {
+      return new mc_robots::JVRC1RobotModule(false);
+    }
+    else if(name == "JVRC1Fixed")
+    {
+      return new mc_robots::JVRC1RobotModule(true);
+    }
+    else
+    {
+      mc_rtc::log::error("JVRC1 module Cannot create an object of type {}", name);
+      return nullptr;
+    }
+  }
+}
+
+#else
+
+#  include <mc_rbdyn/RobotLoader.h>
+
+namespace
+{
+
+static auto registered = []() {
+  using fn_t = std::function<mc_robots::JVRC1RobotModule *()>;
+  mc_rbdyn::RobotLoader::register_object("JVRC1", fn_t([]() { return new mc_robots::JVRC1RobotModule(false); }));
+  mc_rbdyn::RobotLoader::register_object("JVRC1Fixed", fn_t([]() { return new mc_robots::JVRC1RobotModule(true); }));
+  return true;
+}();
+}
+
+#endif

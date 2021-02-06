@@ -8,6 +8,10 @@
 
 #include <stdlib.h>
 
+#include "utils.h"
+
+static bool initialized = configureRobotLoader();
+
 BOOST_AUTO_TEST_CASE(CONSTRUCTION_FAILURE)
 {
   auto argc = boost::unit_test::framework::master_test_suite().argc;
@@ -51,11 +55,33 @@ BOOST_AUTO_TEST_CASE(RUN)
       initq.push_back(qi);
     }
   }
-  controller.setEncoderValues(initq);
-  controller.init(initq);
+
+  std::vector<double> qEnc(initq.size(), 0);
+  std::vector<double> alphaEnc(initq.size(), 0);
+  auto simulateSensors = [&, qEnc, alphaEnc]() mutable {
+    auto & robot = controller.robot();
+    for(unsigned i = 0; i < robot.refJointOrder().size(); i++)
+    {
+      auto jIdx = robot.jointIndexInMBC(i);
+      if(jIdx != -1)
+      {
+        auto jointIndex = static_cast<unsigned>(jIdx);
+        qEnc[i] = robot.mbc().q[jointIndex][0];
+        alphaEnc[i] = robot.mbc().alpha[jointIndex][0];
+      }
+    }
+    controller.setEncoderValues(qEnc);
+    controller.setEncoderVelocities(alphaEnc);
+    controller.setSensorPositions({{"FloatingBase", robot.posW().translation()}});
+    controller.setSensorOrientations({{"FloatingBase", Eigen::Quaterniond{robot.posW().rotation()}}});
+  };
+
+  controller.setEncoderValues(qEnc);
+  controller.init(initq, controller.robot().module().default_attitude());
   controller.running = true;
   for(size_t i = 0; i < nrIter; ++i)
   {
+    simulateSensors();
     BOOST_REQUIRE(controller.run());
   }
   if(nextController != "")
@@ -63,6 +89,7 @@ BOOST_AUTO_TEST_CASE(RUN)
     controller.EnableController(nextController);
     for(size_t i = 0; i < nrIter; ++i)
     {
+      simulateSensors();
       BOOST_REQUIRE(controller.run());
     }
   }

@@ -6,6 +6,17 @@
 
 shopt -s expand_aliases
 
+# display the list of parameters for autocompletion
+if [[ $1 == --inputlist ]];
+then
+        echo -h --help -i --install-prefix -s --source-dir --with-ros-support --with-python-support \
+              --python-user-install --python-force-python2 --python-force-python3 --python-build-2-and-3 \
+              --with-lssol --with-hrp2 --with-hrp4 --with-hrp4j --with-hrp4cr --with-hrp5 --with-mc_udp --with-mc_openrtm \
+              --build-type --build-testing --build-benchmarks --install-system-dependencies \
+              --install-system-dependencies --clone-only --skip-update --skip-dirty-update --user-input \
+              -j --build-core --ros-distro --allow-root
+        exit
+fi
 
 ##########################
 #  --  Configuration --  #
@@ -69,6 +80,11 @@ else
   echo "     - Edit the options to your liking"
 fi
 
+case $BUILD_SUBDIR in
+  /*) export BUILD_SUBDIR_IS_ABSOLUTE=true;;
+  *) export BUILD_SUBDIR_IS_ABSOLUTE=false;;
+esac
+
 readonly HELP_STRING="$(basename $0) [OPTIONS] ...
     --help                (-h)               : print this help
     --install-prefix      (-i) PATH          : the directory used to install everything                (default $INSTALL_PREFIX)
@@ -81,6 +97,7 @@ readonly HELP_STRING="$(basename $0) [OPTIONS] ...
     --with-hrp2                              : enable HRP2 (requires mc-hrp2 group access)             (default $WITH_HRP2)
     --with-hrp4                              : enable HRP4 (requires mc-hrp4 group access)             (default $WITH_HRP4)
     --with-hrp4j                             : enable HRP4J (requires mc-hrp4 group access)            (default $WITH_HRP4J)
+    --with-hrp4cr                            : enable HRP4CR (requires isri-aist group access)         (default $WITH_HRP4CR)
     --with-hrp5                              : enable HRP5 (requires mc-hrp5 group access)             (default $WITH_HRP5)
     --with-mc_openrtm                        : enable the mc_openrtm interface (requires hrpsys-base)  (default $WITH_MC_OPENRTM)
     --with-mc_udp                            : enable the mc_udp interface (requires hrpsys-base)      (default $WITH_MC_UDP)
@@ -185,6 +202,12 @@ do
         i=$(($i+1))
         WITH_HRP4J="${!i}"
         check_true_false --with-hrp4j "$WITH_HRP4J"
+        ;;
+
+        --with-hrp4cr)
+        i=$(($i+1))
+        WITH_HRP4CR="${!i}"
+        check_true_false --with-hrp4cr "$WITH_HRP4CR"
         ;;
 
         --with-hrp5)
@@ -320,7 +343,7 @@ then
 else
   readonly NOT_CLONE_ONLY=true
 fi
-
+export MC_LOG_UI_PYTHON_EXECUTABLE=python
 
 alias git_clone="git clone --recursive"
 git_update()
@@ -371,6 +394,7 @@ echo_log "   WITH_LSSOL=$WITH_LSSOL"
 echo_log "   WITH_HRP2=$WITH_HRP2"
 echo_log "   WITH_HRP4=$WITH_HRP4"
 echo_log "   WITH_HRP4J=$WITH_HRP4J"
+echo_log "   WITH_HRP4CR=$WITH_HRP4CR"
 echo_log "   WITH_HRP5=$WITH_HRP5"
 echo_log "   WITH_MC_UDP=$WITH_MC_UDP"
 echo_log "   MC_UDP_INSTALL_PREFIX=$MC_UDP_INSTALL_PREFIX"
@@ -455,6 +479,7 @@ readonly WITH_LSSOL
 readonly WITH_HRP2
 readonly WITH_HRP4
 readonly WITH_HRP4J
+readonly WITH_HRP4CR
 readonly WITH_HRP5
 readonly WITH_MC_OPENRTM
 readonly MC_OPENRTM_INSTALL_PREFIX
@@ -483,6 +508,7 @@ echo_log "   WITH_LSSOL=$WITH_LSSOL"
 echo_log "   WITH_HRP2=$WITH_HRP2"
 echo_log "   WITH_HRP4=$WITH_HRP4"
 echo_log "   WITH_HRP4J=$WITH_HRP4J"
+echo_log "   WITH_HRP4CR=$WITH_HRP4CR"
 echo_log "   WITH_HRP5=$WITH_HRP5"
 echo_log "   WITH_MC_UDP=$WITH_MC_UDP"
 echo_log "   MC_UDP_INSTALL_PREFIX=$MC_UDP_INSTALL_PREFIX"
@@ -496,6 +522,37 @@ echo_log "   ROS_DISTRO=$ROS_DISTRO"
 echo_log "   APT_DEPENDENCIES=$APT_DEPENDENCIES"
 echo_log "   ROS_APT_DEPENDENCIES=$ROS_APT_DEPENDENCIES"
 echo_log "   SUDO_CMD=$SUDO_CMD"
+
+###############################################
+#  -- Check python/pip coherency if needed -- #
+###############################################
+
+if [ "x$WITH_PYTHON_SUPPORT" == xON ] && [ "x$PYTHON_FORCE_PYTHON2" == xOFF ] && [ "x$PYTHON_FORCE_PYTHON3" == xOFF ]
+then
+  if ! pip --version | grep -q "`python -c 'import sys; print(\"python {}.{}\".format(sys.version_info.major, sys.version_info.minor));'`"
+  then
+    echo_log "The pip command does not match the corresponding python version, this will lead to errors"
+    echo_log "Either fix your system or use --python-force-python2 true or --python-force-python3 true"
+  fi
+fi
+
+if [ "x$WITH_PYTHON_SUPPORT" == xON ] && ( [ "x$PYTHON_FORCE_PYTHON2" == xON ] || [ "x$PYTHON_BUILD_PYTHON2_AND_PYTHON3" == xON ] )
+then
+  if ! pip2 --version | grep -q "`python2 -c 'import sys; print(\"python {}.{}\".format(sys.version_info.major, sys.version_info.minor));'`"
+  then
+    echo_log "The pip2 command does not match the corresponding python2 version, this will lead to errors"
+    echo_log "Resolve the issue at your system level"
+  fi
+fi
+
+if [ "x$WITH_PYTHON_SUPPORT" == xON ] && ( [ "x$PYTHON_FORCE_PYTHON3" == xON ] || [ "x$PYTHON_BUILD_PYTHON3_AND_PYTHON3" == xON ] )
+then
+  if ! pip3 --version | grep -q "`python3 -c 'import sys; print(\"python {}.{}\".format(sys.version_info.major, sys.version_info.minor));'`"
+  then
+    echo_log "The pip3 command does not match the corresponding python3 version, this will lead to errors"
+    echo_log "Resolve the issue at your system level"
+  fi
+fi
 
 ###################################
 #  --  APT/Brew dependencies  --  #
@@ -516,8 +573,8 @@ then
       /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
     fi
     brew update
-    brew cask install $CASK_DEPENDENCIES
     brew install $BREW_DEPENDENCIES
+    brew upgrade $BREW_DEPENDENCIES
     if [ "x$WITH_PYTHON_SUPPORT" == xON ] && $NOT_CLONE_ONLY
     then
       if [ "x$PYTHON_BUILD_PYTHON2_AND_PYTHON3" == xON ]
@@ -813,7 +870,7 @@ check_and_clone_git_dependency()
 }
 
 # If the dependencies have already been cloned, check if the local state of the repository is clean before upgrading
-GIT_DEPENDENCIES="gabime/spdlog#v1.6.1 humanoid-path-planner/hpp-spline#v4.7.0 jrl-umi3218/SpaceVecAlg jrl-umi3218/sch-core jrl-umi3218/RBDyn jrl-umi3218/eigen-qld jrl-umi3218/eigen-quadprog jrl-umi3218/Tasks jrl-umi3218/mc_rbdyn_urdf"
+GIT_DEPENDENCIES="gabime/spdlog#v1.6.1 humanoid-path-planner/hpp-spline#v4.7.0 jrl-umi3218/SpaceVecAlg jrl-umi3218/state-observation jrl-umi3218/sch-core jrl-umi3218/RBDyn jrl-umi3218/eigen-qld jrl-umi3218/eigen-quadprog jrl-umi3218/Tasks jrl-umi3218/mc_rbdyn_urdf"
 for repo in $GIT_DEPENDENCIES; do
   check_and_clone_git_dependency $repo $SOURCE_DIR
 done
@@ -882,6 +939,20 @@ then
     echo_log "-- [OK] Successfully cloned and updated the robot description $git_dep to $repo_dir (no catkin)"
   fi
   check_and_clone_git_dependency git@gite.lirmm.fr:mc-hrp4/mc_hrp4j $SOURCE_DIR
+  echo_log "-- [OK] Successfully cloned and updated the robot module $git_dep to $repo_dir"
+fi
+
+if $WITH_HRP4CR
+then
+  if $WITH_ROS_SUPPORT
+  then
+    check_and_clone_git_dependency 'isri-aist/hrp4cr_description#main' $CATKIN_DATA_WORKSPACE_SRC
+    echo_log "-- [OK] Successfully cloned and updated the robot description to $git_dep to $repo_dir (catkin)"
+  else
+    check_and_clone_git_dependency 'isri-aist/hrp4cr_description#main' $SOURCE_DIR
+    echo_log "-- [OK] Successfully cloned and updated the robot description $git_dep to $repo_dir (no catkin)"
+  fi
+  check_and_clone_git_dependency 'isri-aist/mc_hrp4cr#main'  $SOURCE_DIR
   echo_log "-- [OK] Successfully cloned and updated the robot module $git_dep to $repo_dir"
 fi
 
@@ -1003,8 +1074,19 @@ build_git_dependency_configure_and_build()
 {
   git_dependency_parsing $1
   echo "--> Compiling $git_dep (branch $git_dep_branch)"
-  mkdir -p "$SOURCE_DIR/$git_dep/build"
-  cd "$SOURCE_DIR/$git_dep/build"
+  if $BUILD_SUBDIR_IS_ABSOLUTE
+  then
+    mkdir -p "$BUILD_SUBDIR/$git_dep"
+    cd "$BUILD_SUBDIR/$git_dep"
+  else
+    mkdir -p "$SOURCE_DIR/$git_dep/$BUILD_SUBDIR"
+    # Add the build subdirecory to the ignored files list if it is not ignored already
+    if ! grep -Fxq "/$BUILD_SUBDIR/" $SOURCE_DIR/$git_dep/.git/info/exclude ;
+    then
+      echo "/$BUILD_SUBDIR/" >> $SOURCE_DIR/$git_dep/.git/info/exclude ;
+    fi
+    cd "$SOURCE_DIR/$git_dep/$BUILD_SUBDIR"
+  fi
   if [[ $OS == "Windows" ]]
   then
     hide_sh
@@ -1014,12 +1096,13 @@ build_git_dependency_configure_and_build()
   then
     custom_install_prefix="$2"
   fi
-  exec_log cmake .. -DCMAKE_INSTALL_PREFIX:STRING="$custom_install_prefix" \
+    exec_log cmake $SOURCE_DIR/$git_dep -DCMAKE_INSTALL_PREFIX:STRING="$custom_install_prefix" \
                     -DPYTHON_BINDING:BOOL=${WITH_PYTHON_SUPPORT} \
                     -DPYTHON_BINDING_USER_INSTALL:BOOL=${PYTHON_USER_INSTALL} \
                     -DPYTHON_BINDING_FORCE_PYTHON2:BOOL=${PYTHON_FORCE_PYTHON2} \
                     -DPYTHON_BINDING_FORCE_PYTHON3:BOOL=${PYTHON_FORCE_PYTHON3} \
                     -DPYTHON_BINDING_BUILD_PYTHON2_AND_PYTHON3:BOOL=${PYTHON_BUILD_PYTHON2_AND_PYTHON3} \
+                    -DMC_LOG_UI_PYTHON_EXECUTABLE:STRING="${MC_LOG_UI_PYTHON_EXECUTABLE}" \
                     -DCMAKE_BUILD_TYPE:STRING="$BUILD_TYPE" \
                     ${CMAKE_ADDITIONAL_OPTIONS}
   exit_if_error "-- [ERROR] CMake configuration failed for $git_dep"
@@ -1075,6 +1158,7 @@ export CMAKE_ADDITIONAL_OPTIONS="-DSPDLOG_BUILD_EXAMPLE:BOOL=OFF -DSPDLOG_BUILD_
 build_git_dependency_no_test gabime/spdlog
 export CMAKE_ADDITIONAL_OPTIONS="-DBUILD_PYTHON_INTERFACE:BOOL=OFF ${OLD_CMAKE_OPTIONS}"
 build_git_dependency_no_test humanoid-path-planner/hpp-spline
+build_git_dependency jrl-umi3218/state-observation
 export CMAKE_ADDITIONAL_OPTIONS="${OLD_CMAKE_OPTIONS}"
 if [ "x$WITH_PYTHON_SUPPORT" == xON ]
 then
@@ -1144,8 +1228,19 @@ then
   git submodule update --init
   exit_if_error "-- [ERROR] Failed to update submodules"
 fi
-mkdir -p build
-cd build
+if $BUILD_SUBDIR_IS_ABSOLUTE
+then
+  mkdir -p "$BUILD_SUBDIR/mc_rtc/"
+  cd "$BUILD_SUBDIR/mc_rtc"
+else
+  mkdir -p $BUILD_SUBDIR
+  # Add the build subdirecory to the ignored files list if it is not ignored already
+  if ! grep -Fxq "/$BUILD_SUBDIR/" .git/info/exclude ;
+  then
+    echo "/$BUILD_SUBDIR/" >> .git/info/exclude ;
+  fi
+  cd $BUILD_SUBDIR
+fi
 if $BUILD_TESTING
 then
   BUILD_TESTING_OPTION=ON
@@ -1161,8 +1256,10 @@ fi
 if ! $WITH_ROS_SUPPORT
 then
   CMAKE_ADDITIONAL_OPTIONS="${CMAKE_ADDITIONAL_OPTIONS} -DDISABLE_ROS=ON"
+else
+  CMAKE_ADDITIONAL_OPTIONS="${CMAKE_ADDITIONAL_OPTIONS} -DDISABLE_ROS=OFF"
 fi
-exec_log cmake ../ -DCMAKE_BUILD_TYPE:STRING="$BUILD_TYPE" \
+exec_log cmake $mc_rtc_dir -DCMAKE_BUILD_TYPE:STRING="$BUILD_TYPE" \
                    -DCMAKE_INSTALL_PREFIX:STRING="$INSTALL_PREFIX" \
                    -DBUILD_TESTING:BOOL=${BUILD_TESTING_OPTION} \
                    -DBUILD_BENCHMARKS:BOOL=${BUILD_BENCHMARKS_OPTION} \
@@ -1228,10 +1325,22 @@ then
   echo_log "-- Installing with HRP4J robot support"
   if ! $WITH_ROS_SUPPORT
   then
-    build_git_dependency git@gite.lirmm.fr:mc-hrp4/hrp4j
+    build_git_dependency git@gite.lirmm.fr:mc-hrp4/hrp4j_description
     echo_log "-- [OK] Successfully built the robot description $git_dep (no catkin)"
   fi
   build_git_dependency git@gite.lirmm.fr:mc-hrp4/mc_hrp4j
+  echo_log "-- [OK] Successfully built the robot module $git_dep"
+fi
+
+if $WITH_HRP4CR
+then
+  echo_log "-- Installing with HRP4CR robot support"
+  if ! $WITH_ROS_SUPPORT
+  then
+    build_git_dependency isri-aist/hrp4cr_description
+    echo_log "-- [OK] Successfully built the robot description $git_dep (no catkin)"
+  fi
+  build_git_dependency isri-aist/mc_hrp4cr
   echo_log "-- [OK] Successfully built the robot module $git_dep"
 fi
 
@@ -1291,3 +1400,8 @@ else
     echo_log "If you are running zsh, replace setup.bash with setup.zsh in that last line"
   fi
 fi
+
+echo_log ""
+echo_log "If you want autocompletion on the scripts add also the following to your .bashrc/.zshrc"
+echo_log "source $this_dir/autocompletion.bash"
+echo_log "If you are running zsh, replace autocompletion.bash with autocompletion.zsh in that last line"

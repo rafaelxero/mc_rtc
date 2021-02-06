@@ -8,6 +8,7 @@ usr/include/mc_rtc/log/*
 usr/include/mc_rtc/DataStore.h
 usr/include/mc_rtc/config.h
 usr/include/mc_rtc/constants.h
+usr/include/mc_rtc/debug.h
 usr/include/mc_rtc/loader_api.h
 usr/include/mc_rtc/loader.h
 usr/include/mc_rtc/MessagePackBuilder.h
@@ -51,6 +52,8 @@ usr/include/mc_tasks/api.h
 usr/include/mc_tasks/VectorOrientationTask.h
 usr/include/mc_tasks/SplineTrajectoryTask.hpp
 usr/include/mc_tasks/MomentumTask.h
+usr/include/mc_tasks/ImpedanceGains.h
+usr/include/mc_tasks/ImpedanceTask.h
 usr/include/mc_tasks/lipm_stabilizer/*
 usr/include/mc_trajectory/*
 usr/include/mc_planning/*

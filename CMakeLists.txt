@@ -1,5 +1,5 @@
 #
-# Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+# Copyright 2015-2020 CNRS-UM LIRMM, CNRS-AIST JRL
 #
 
 cmake_minimum_required(VERSION 3.1)
@@ -12,7 +12,7 @@ endif()
 
 set(PROJECT_NAME mc_rtc)
 set(PROJECT_DESCRIPTION mc_rtc)
-set(PROJECT_VERSION 1.4.0)
+set(PROJECT_VERSION 1.6.0)
 set(PROJECT_URL https://gite.lirmm.fr/multi-contact/mc_rtc)
 set(PROJECT_DEBUG_POSTFIX "_d")
 set(PROJECT_USE_KEYWORD_LINK_LIBRARIES TRUE)
@@ -32,6 +32,7 @@ include(cmake/version-script.cmake)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 project(${PROJECT_NAME} C CXX)
+set(MC_RTC_SOURCE_DIR "${PROJECT_SOURCE_DIR}")
 
 option(GENERATE_COVERAGE "Generate coverage data" FALSE)
 if("${CMAKE_CXX_FLAGS}" MATCHES "--coverage")
@@ -50,7 +51,10 @@ option(ENABLE_FAST_TESTS "Run controllers tests for a few iterations" OFF)
 
 option(BUILD_BENCHMARKS "Build benchmarks" OFF)
 
-option(DISABLE_ROS "Do not build with ROS support (even if ROS was found)" OFF)
+option(MC_RTC_BUILD_STATIC "Build a static version of mc_rtc, this has no support for pluggable components" OFF)
+option(MC_RTC_DISABLE_NETWORK "Build without network support" OFF)
+
+option(DISABLE_ROS "Build without ROS support (even if ROS was found)" OFF)
 
 add_project_dependency(Boost REQUIRED COMPONENTS filesystem timer)
 add_project_dependency(Tasks REQUIRED)
@@ -59,6 +63,7 @@ if(NOT TARGET RBDyn::Parsers)
   message(FATAL_ERROR "RBDyn must be built with parsers support")
 endif()
 add_project_dependency(eigen-quadprog REQUIRED)
+add_project_dependency(state-observation REQUIRED)
 
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/CMakeModules)
@@ -66,14 +71,18 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/CMakeModules)
 # hpp-spline (defines target: mc_rtc_3rd_party::hpp-spline)
 find_package(mc_rtc_3rd_party_hpp-spline REQUIRED)
 
-# LTDL (defines target: mc_rtc_3rd_party::ltdl)
-add_subdirectory(3rd-party/ltdl)
+if(NOT MC_RTC_BUILD_STATIC)
+  # LTDL (defines target: mc_rtc_3rd_party::ltdl)
+  add_subdirectory(3rd-party/ltdl)
+endif()
 
 # GEOS (defines/imports target: GEOS::geos)
 find_package(mc_rtc_3rd_party_geos REQUIRED)
 
-# nanomsg (defines/imports target: nanomsg)
-find_package(mc_rtc_3rd_party_nanomsg REQUIRED)
+if(NOT MC_RTC_DISABLE_NETWORK)
+  # nanomsg (defines/imports target: nanomsg)
+  find_package(mc_rtc_3rd_party_nanomsg REQUIRED)
+endif()
 
 # qhull (build re-entrant static version)
 add_subdirectory(3rd-party/qhull)
@@ -98,28 +107,41 @@ add_project_dependency(spdlog 1.6.1 REQUIRED)
 macro(find_description_package PACKAGE)
   set(PACKAGE_PATH_VAR "${PACKAGE}_PATH")
   string(TOUPPER "${PACKAGE_PATH_VAR}" PACKAGE_PATH_VAR)
-  find_package(${PACKAGE} REQUIRED)
-  if("${${PACKAGE}_INSTALL_PREFIX}" STREQUAL "")
-    if("${${PACKAGE}_SOURCE_PREFIX}" STREQUAL "")
-      message(FATAL_ERROR "Your ${PACKAGE} does not define where to find the data, please update.")
+  if(NOT DEFINED ${PACKAGE_PATH_VAR})
+    find_package(${PACKAGE} REQUIRED)
+    if("${${PACKAGE}_INSTALL_PREFIX}" STREQUAL "")
+      if("${${PACKAGE}_SOURCE_PREFIX}" STREQUAL "")
+        message(FATAL_ERROR "Your ${PACKAGE} does not define where to find the data, please update.")
+      else()
+        set(${PACKAGE_PATH_VAR} "${${PACKAGE}_SOURCE_PREFIX}")
+      endif()
     else()
-      set(${PACKAGE_PATH_VAR} "${${PACKAGE}_SOURCE_PREFIX}")
+      set(${PACKAGE_PATH_VAR} "${${PACKAGE}_INSTALL_PREFIX}")
     endif()
-  else()
-    set(${PACKAGE_PATH_VAR} "${${PACKAGE}_INSTALL_PREFIX}")
+    # Cleanup the path provided by CMake
+    get_filename_component(${PACKAGE_PATH_VAR} "${${PACKAGE_PATH_VAR}}" REALPATH)
   endif()
-  # Cleanup the path provided by CMake
-  get_filename_component(${PACKAGE_PATH_VAR} "${${PACKAGE_PATH_VAR}}" REALPATH)
   message("-- Found ${PACKAGE}: ${${PACKAGE_PATH_VAR}}")
 endmacro()
 
 find_description_package(mc_env_description)
 find_description_package(mc_int_obj_description)
 
-set(MC_PLUGINS_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/lib/mc_plugins)
-set(MC_ROBOTS_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/lib/mc_robots)
-set(MC_OBSERVERS_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/lib/mc_observers)
-set(MC_CONTROLLER_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/lib/mc_controller)
+macro(mc_rtc_set_prefix NAME FOLDER)
+  set(MC_${NAME}_LIBRARY_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/lib/${FOLDER})
+  if(WIN32)
+    set(MC_${NAME}_RUNTIME_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/bin/${FOLDER})
+  else()
+    set(MC_${NAME}_RUNTIME_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/lib/${FOLDER})
+  endif()
+  # For backward compatibility
+  set(MC_${NAME}_INSTALL_PREFIX "${MC_${NAME}_LIBRARY_INSTALL_PREFIX}")
+endmacro()
+
+mc_rtc_set_prefix(PLUGINS mc_plugins)
+mc_rtc_set_prefix(ROBOTS mc_robots)
+mc_rtc_set_prefix(OBSERVERS mc_observers)
+mc_rtc_set_prefix(CONTROLLER mc_controller)
 
 configure_file(${PROJECT_SOURCE_DIR}/include/mc_rtc/config.h.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/include/mc_rtc/config.h)
 
@@ -147,6 +169,13 @@ if(${PYTHON_BINDING})
  add_subdirectory(binding/python)
 endif()
 
+set(MC_RTC_BINDIR "${CMAKE_INSTALL_PREFIX}/bin")
+set(MC_RTC_LIBDIR "${CMAKE_INSTALL_PREFIX}/lib")
+
+add_subdirectory(robots)
+add_subdirectory(observers)
+add_subdirectory(controllers)
+
 install(DIRECTORY include ${CMAKE_BINARY_DIR}/include
           DESTINATION ${CMAKE_INSTALL_PREFIX}
           FILES_MATCHING REGEX "h(pp)?$")
@@ -167,5 +196,10 @@ install(
 install(FILES "src/mc_rtcMacros.cmake"
         DESTINATION "${CONFIG_INSTALL_DIR}")
 set(PACKAGE_EXTRA_MACROS "${PACKAGE_EXTRA_MACROS}
-include(\"\${CMAKE_CURRENT_LIST_DIR}/mc_rtcMacros.cmake\")
-include(\"\${CMAKE_CURRENT_LIST_DIR}/mc_rtc_fsm_states.cmake\")")
+include(\"\${CMAKE_CURRENT_LIST_DIR}/mc_rtcMacros.cmake\")")
+
+if(NOT MC_RTC_BUILD_STATIC)
+  set(PACKAGE_EXTRA_MACROS "${PACKAGE_EXTRA_MACROS}
+include(\"\${CMAKE_CURRENT_LIST_DIR}/mc_rtc_fsm_states.cmake\")
+include(\"\${CMAKE_CURRENT_LIST_DIR}/mc_rtc_observers.cmake\")")
+endif()

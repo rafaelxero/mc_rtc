@@ -6,9 +6,9 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 class Data(QtCore.QObject):
   data_updated = QtCore.pyqtSignal()
-  def __init__(self):
+  def __init__(self, data = {}):
     QtCore.QObject.__init__(self)
-    self.data = {}
+    self.data = data
   def notify_update(self):
     self.data_updated.emit()
   def __getitem__(self, key):
@@ -17,6 +17,8 @@ class Data(QtCore.QObject):
     self.data.__setitem__(key, value)
   def __len__(self):
     return self.data.__len__()
+  def __delitem__(self, key):
+    return self.data.__delitem__(key)
   def __contains__(self, key):
     return self.data.__contains__(key)
   def __iter__(self):

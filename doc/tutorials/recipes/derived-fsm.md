@@ -1,5 +1,6 @@
 ---
 layout: tutorials
+toc: true
 ---
 
 A common recipe to get more out of the FSM is to derive the FSM controller, this allows to:
@@ -94,3 +95,5 @@ protected:
 ## Getting started
 
 The `mc_rtc_new_fsm_controller` tool will let you create a new controller deriving from the FSM controller. It works similarly to the `mc_rtc_new_controller` tool.
+
+You can also use the [mc-rtc/new-fsm-controller](https://github.com/mc-rtc/new-fsm-controller) template project on GitHub.

@@ -26,6 +26,18 @@ public:
   /** Default constructor, always returns zero contribution */
   ForceSensorCalibData() {}
 
+  /** Restore the calibrator default values such that it always returns zero
+   * contribution
+   */
+  void reset()
+  {
+    mass_ = 0.0;
+    worldForce_ = sva::ForceVecd(Eigen::Vector6d::Zero());
+    X_f_ds_ = sva::PTransformd::Identity();
+    X_p_vb_ = sva::PTransformd::Identity();
+    offset_ = sva::ForceVecd(Eigen::Vector6d::Zero());
+  }
+
   /** Load data from a file, using a gravity vector. The file
    * should contain 13 parameters in that order: mass (1),
    * rpy for X_f_ds (3), position for X_p_vb (3), wrench
@@ -137,6 +149,26 @@ ForceSensor::ForceSensor(const std::string & name, const std::string & parentBod
   type_ = "ForceSensor";
 }
 
+ForceSensor::ForceSensor(const ForceSensor & fs) : ForceSensor(fs.name_, fs.parentBody(), fs.X_p_f())
+{
+  wrench_ = fs.wrench_;
+  *calibration_ = *fs.calibration_;
+}
+
+ForceSensor & ForceSensor::operator=(const ForceSensor & fs)
+{
+  if(&fs == this)
+  {
+    return *this;
+  }
+  name_ = fs.name_;
+  parent_ = fs.parent_;
+  X_p_s_ = fs.X_p_s_;
+  *calibration_ = *fs.calibration_;
+  wrench_ = fs.wrench_;
+  return *this;
+}
+
 ForceSensor::~ForceSensor() noexcept = default;
 
 void ForceSensor::loadCalibrator(const std::string & calib_file, const Eigen::Vector3d & gravity)
@@ -150,6 +182,11 @@ void ForceSensor::loadCalibrator(const std::string & calib_file, const Eigen::Ve
   {
     calibration_->loadData(calib_file, gravity);
   }
+}
+
+void ForceSensor::resetCalibrator()
+{
+  calibration_->reset();
 }
 
 const sva::PTransformd & ForceSensor::X_fsmodel_fsactual() const

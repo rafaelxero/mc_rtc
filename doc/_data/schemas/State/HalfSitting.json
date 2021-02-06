@@ -2,11 +2,12 @@
   "allOf":
   [
     {
-      "title": "fsm::HalfSitting",
+      "title": "mc_control::fsm::HalfSittingState",
       "description": "Brings the robot posture to halfsitting stance",
       "type": "object",
       "properties":
       {
+        "robot": {"type": "string", "default": "MainRobot", "description": "Name of the robot to put to halfsitting" },
         "stiffness": { "type": "number", "minimum": 0, "default": 1, "description": "Stiffness of the posture task" },
         "eval": { "type": "number", "minimum": 0, "description": "Threshold on posture eval after which the state is considered completed. If absent, the state is always considered completed." }
       },
