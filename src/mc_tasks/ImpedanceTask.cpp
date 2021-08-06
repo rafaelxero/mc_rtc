@@ -7,6 +7,7 @@
 #include <mc_tasks/MetaTaskLoader.h>
 
 #include <mc_rtc/gui/ArrayLabel.h>
+#include <mc_rtc/gui/Checkbox.h>
 #include <mc_rtc/gui/Transform.h>
 
 namespace mc_tasks
@@ -122,7 +123,16 @@ void ImpedanceTask::update(mc_solver::QPSolver & solver)
     deltaCompPoseW_.rotation() = aaDeltaCompRot.toRotationMatrix();
   }
 
-  // 4. Set compliance values to the targets of SurfaceTransformTask
+  // 4. Update deltaCompPoseW_ in hold mode (See the hold method documentation for more information)
+  if(hold_)
+  {
+    // Transform to target pose frame (see compliancePose implementation)
+    sva::PTransformd T_0_d(targetPoseW_.rotation());
+    // The previous compliancePose() is stored in SurfaceTransformTask::target()
+    deltaCompPoseW_ = T_0_d.inv() * SurfaceTransformTask::target() * targetPoseW_.inv() * T_0_d;
+  }
+
+  // 5. Set compliance values to the targets of SurfaceTransformTask
   refAccel(T_0_s * (targetAccelW_ + deltaCompAccelW_)); // represented in the surface frame
   refVelB(T_0_s * (targetVelW_ + deltaCompVelW_)); // represented in the surface frame
   target(compliancePose()); // represented in the world frame
@@ -149,6 +159,9 @@ void ImpedanceTask::reset()
   measuredWrench_ = sva::ForceVecd::Zero();
   filteredMeasuredWrench_ = sva::ForceVecd::Zero();
   lowPass_.reset(sva::ForceVecd::Zero());
+
+  // Reset hold
+  hold_ = false;
 }
 
 void ImpedanceTask::load(mc_solver::QPSolver & solver, const mc_rtc::Configuration & config)
@@ -183,55 +196,29 @@ void ImpedanceTask::addToLogger(mc_rtc::Logger & logger)
   SurfaceTransformTask::addToLogger(logger);
 
   // impedance parameters
-  logger.addLogEntry(name_ + "_gains_M", [this]() -> const sva::ImpedanceVecd & { return gains().M().vec(); });
-  logger.addLogEntry(name_ + "_gains_D", [this]() -> const sva::ImpedanceVecd & { return gains().D().vec(); });
-  logger.addLogEntry(name_ + "_gains_K", [this]() -> const sva::ImpedanceVecd & { return gains().K().vec(); });
-  logger.addLogEntry(name_ + "_gains_wrench",
+  logger.addLogEntry(name_ + "_gains_M", this, [this]() -> const sva::ImpedanceVecd & { return gains().M().vec(); });
+  logger.addLogEntry(name_ + "_gains_D", this, [this]() -> const sva::ImpedanceVecd & { return gains().D().vec(); });
+  logger.addLogEntry(name_ + "_gains_K", this, [this]() -> const sva::ImpedanceVecd & { return gains().K().vec(); });
+  logger.addLogEntry(name_ + "_gains_wrench", this,
                      [this]() -> const sva::ImpedanceVecd & { return gains().wrench().vec(); });
 
   // compliance values
-  logger.addLogEntry(name_ + "_deltaCompliancePose", [this]() -> const sva::PTransformd & { return deltaCompPoseW_; });
-  logger.addLogEntry(name_ + "_deltaComplianceVel", [this]() -> const sva::MotionVecd & { return deltaCompVelW_; });
-  logger.addLogEntry(name_ + "_deltaComplianceAccel", [this]() -> const sva::MotionVecd & { return deltaCompAccelW_; });
+  MC_RTC_LOG_HELPER(name_ + "_deltaCompliancePose", deltaCompPoseW_);
+  MC_RTC_LOG_HELPER(name_ + "_deltaComplianceVel", deltaCompVelW_);
+  MC_RTC_LOG_HELPER(name_ + "_deltaComplianceAccel", deltaCompAccelW_);
 
   // target values
-  logger.addLogEntry(name_ + "_targetPose", [this]() -> const sva::PTransformd & { return targetPoseW_; });
-  logger.addLogEntry(name_ + "_targetVel", [this]() -> const sva::MotionVecd & { return targetVelW_; });
-  logger.addLogEntry(name_ + "_targetAccel", [this]() -> const sva::MotionVecd & { return targetAccelW_; });
+  MC_RTC_LOG_HELPER(name_ + "_targetPose", targetPoseW_);
+  MC_RTC_LOG_HELPER(name_ + "_targetVel", targetVelW_);
+  MC_RTC_LOG_HELPER(name_ + "_targetAccel", targetAccelW_);
 
   // wrench
-  logger.addLogEntry(name_ + "_targetWrench", [this]() -> const sva::ForceVecd & { return targetWrench_; });
-  logger.addLogEntry(name_ + "_measuredWrench", [this]() -> const sva::ForceVecd & { return measuredWrench_; });
-  logger.addLogEntry(name_ + "_filteredMeasuredWrench",
-                     [this]() -> const sva::ForceVecd & { return filteredMeasuredWrench_; });
-  logger.addLogEntry(name_ + "_cutoffPeriod", [this]() { return cutoffPeriod(); });
-}
+  MC_RTC_LOG_HELPER(name_ + "_targetWrench", targetWrench_);
+  MC_RTC_LOG_HELPER(name_ + "_measuredWrench", measuredWrench_);
+  MC_RTC_LOG_HELPER(name_ + "_filteredMeasuredWrench", filteredMeasuredWrench_);
+  logger.addLogEntry(name_ + "_cutoffPeriod", this, [this]() { return cutoffPeriod(); });
 
-void ImpedanceTask::removeFromLogger(mc_rtc::Logger & logger)
-{
-  SurfaceTransformTask::removeFromLogger(logger);
-
-  // impedance parameters
-  logger.removeLogEntry(name_ + "_gains_M");
-  logger.removeLogEntry(name_ + "_gains_D");
-  logger.removeLogEntry(name_ + "_gains_K");
-  logger.removeLogEntry(name_ + "_gains_wrench");
-
-  // compliance values
-  logger.removeLogEntry(name_ + "_deltaCompliancePose");
-  logger.removeLogEntry(name_ + "_deltaComplianceVel");
-  logger.removeLogEntry(name_ + "_deltaComplianceAccel");
-
-  // target values
-  logger.removeLogEntry(name_ + "_targetPose");
-  logger.removeLogEntry(name_ + "_targetVel");
-  logger.removeLogEntry(name_ + "_targetAccel");
-
-  // wrench
-  logger.removeLogEntry(name_ + "_targetWrench");
-  logger.removeLogEntry(name_ + "_measuredWrench");
-  logger.removeLogEntry(name_ + "_filteredMeasuredWrench");
-  logger.removeLogEntry(name_ + "_cutoffPeriod");
+  MC_RTC_LOG_HELPER(name_ + "_hold", hold_);
 }
 
 void ImpedanceTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
@@ -241,34 +228,42 @@ void ImpedanceTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
 
   gui.addElement({"Tasks", name_},
                  // pose
-                 mc_rtc::gui::Transform("targetPose",
-                                        [this]() -> const sva::PTransformd & { return this->targetPose(); },
-                                        [this](const sva::PTransformd & pos) { this->targetPose(pos); }),
+                 mc_rtc::gui::Transform(
+                     "targetPose", [this]() -> const sva::PTransformd & { return this->targetPose(); },
+                     [this](const sva::PTransformd & pos) { this->targetPose(pos); }),
                  mc_rtc::gui::Transform("compliancePose", [this]() { return this->compliancePose(); }),
                  mc_rtc::gui::Transform("pose", [this]() { return this->surfacePose(); }),
                  // wrench
-                 mc_rtc::gui::ArrayInput("targetWrench", {"cx", "cy", "cz", "fx", "fy", "fz"},
-                                         [this]() { return this->targetWrench().vector(); },
-                                         [this](const Eigen::Vector6d & a) { this->targetWrench(a); }),
+                 mc_rtc::gui::ArrayInput(
+                     "targetWrench", {"cx", "cy", "cz", "fx", "fy", "fz"},
+                     [this]() { return this->targetWrench().vector(); },
+                     [this](const Eigen::Vector6d & a) { this->targetWrench(a); }),
                  mc_rtc::gui::ArrayLabel("measuredWrench", {"cx", "cy", "cz", "fx", "fy", "fz"},
                                          [this]() { return this->measuredWrench_.vector(); }),
                  mc_rtc::gui::ArrayLabel("filteredMeasuredWrench", {"cx", "cy", "cz", "fx", "fy", "fz"},
                                          [this]() { return this->filteredMeasuredWrench_.vector(); }),
-                 mc_rtc::gui::NumberInput("cutoffPeriod", [this]() { return this->cutoffPeriod(); },
-                                          [this](double a) { return this->cutoffPeriod(a); }));
+                 mc_rtc::gui::NumberInput(
+                     "cutoffPeriod", [this]() { return this->cutoffPeriod(); },
+                     [this](double a) { return this->cutoffPeriod(a); }),
+                 mc_rtc::gui::Checkbox(
+                     "hold", [this]() { return hold_; }, [this]() { hold_ = !hold_; }));
   gui.addElement({"Tasks", name_, "Impedance gains"},
-                 mc_rtc::gui::ArrayInput("mass", {"cx", "cy", "cz", "fx", "fy", "fz"},
-                                         [this]() -> const sva::ImpedanceVecd & { return gains().mass().vec(); },
-                                         [this](const Eigen::Vector6d & a) { gains().mass().vec(a); }),
-                 mc_rtc::gui::ArrayInput("damper", {"cx", "cy", "cz", "fx", "fy", "fz"},
-                                         [this]() -> const sva::ImpedanceVecd & { return gains().damper().vec(); },
-                                         [this](const Eigen::Vector6d & a) { gains().damper().vec(a); }),
-                 mc_rtc::gui::ArrayInput("spring", {"cx", "cy", "cz", "fx", "fy", "fz"},
-                                         [this]() -> const sva::ImpedanceVecd & { return gains().spring().vec(); },
-                                         [this](const Eigen::Vector6d & a) { gains().spring().vec(a); }),
-                 mc_rtc::gui::ArrayInput("wrench", {"cx", "cy", "cz", "fx", "fy", "fz"},
-                                         [this]() -> const sva::ImpedanceVecd & { return gains().wrench().vec(); },
-                                         [this](const Eigen::Vector6d & a) { gains().wrench().vec(a); }));
+                 mc_rtc::gui::ArrayInput(
+                     "mass", {"cx", "cy", "cz", "fx", "fy", "fz"},
+                     [this]() -> const sva::ImpedanceVecd & { return gains().mass().vec(); },
+                     [this](const Eigen::Vector6d & a) { gains().mass().vec(a); }),
+                 mc_rtc::gui::ArrayInput(
+                     "damper", {"cx", "cy", "cz", "fx", "fy", "fz"},
+                     [this]() -> const sva::ImpedanceVecd & { return gains().damper().vec(); },
+                     [this](const Eigen::Vector6d & a) { gains().damper().vec(a); }),
+                 mc_rtc::gui::ArrayInput(
+                     "spring", {"cx", "cy", "cz", "fx", "fy", "fz"},
+                     [this]() -> const sva::ImpedanceVecd & { return gains().spring().vec(); },
+                     [this](const Eigen::Vector6d & a) { gains().spring().vec(a); }),
+                 mc_rtc::gui::ArrayInput(
+                     "wrench", {"cx", "cy", "cz", "fx", "fy", "fz"},
+                     [this]() -> const sva::ImpedanceVecd & { return gains().wrench().vec(); },
+                     [this](const Eigen::Vector6d & a) { gains().wrench().vec(a); }));
 }
 
 } // namespace force

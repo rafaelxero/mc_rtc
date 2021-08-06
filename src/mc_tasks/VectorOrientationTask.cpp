@@ -87,17 +87,9 @@ const Eigen::Vector3d & VectorOrientationTask::actual() const
 void VectorOrientationTask::addToLogger(mc_rtc::Logger & logger)
 {
   TrajectoryBase::addToLogger(logger);
-  logger.addLogEntry(name_ + "_target", [this]() -> const Eigen::Vector3d & { return targetVector(); });
-  logger.addLogEntry(name_ + "_current", [this]() -> const Eigen::Vector3d & { return actual(); });
-  logger.addLogEntry(name_ + "_error", [this]() -> Eigen::Vector3d { return eval(); });
-}
-
-void VectorOrientationTask::removeFromLogger(mc_rtc::Logger & logger)
-{
-  TrajectoryBase::removeFromLogger(logger);
-  logger.removeLogEntry(name_ + "_target");
-  logger.removeLogEntry(name_ + "_current");
-  logger.removeLogEntry(name_ + "_error");
+  MC_RTC_LOG_GETTER(name_ + "_target", targetVector);
+  MC_RTC_LOG_HELPER(name_ + "_current", actual);
+  MC_RTC_LOG_HELPER(name_ + "_error", eval);
 }
 
 void VectorOrientationTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
@@ -105,8 +97,9 @@ void VectorOrientationTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
   TrajectoryBase::addToGUI(gui);
   gui.addElement(
       {"Tasks", name_},
-      mc_rtc::gui::ArrayInput("Target Direction", {"x", "y", "z"}, [this]() { return targetVector(); },
-                              [this](const Eigen::Vector3d & target) { targetVector(target); }),
+      mc_rtc::gui::ArrayInput(
+          "Target Direction", {"x", "y", "z"}, [this]() { return targetVector(); },
+          [this](const Eigen::Vector3d & target) { targetVector(target); }),
       mc_rtc::gui::Arrow(
           "Actual", mc_rtc::gui::ArrowConfig(mc_rtc::gui::Color(0., 0., 1.)),
           [this]() -> const Eigen::Vector3d & { return robots.robot(rIndex).mbc().bodyPosW[bIndex].translation(); },
@@ -119,15 +112,15 @@ void VectorOrientationTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
           [this]() -> Eigen::Vector3d {
             return robots.robot(rIndex).mbc().bodyPosW[bIndex].translation() + .25 * targetVector();
           }),
-      mc_rtc::gui::Point3D("Arrow end point",
-                           [this]() -> Eigen::Vector3d {
-                             return robots.robot(rIndex).mbc().bodyPosW[bIndex].translation() + .25 * targetVector();
-                           },
-                           [this](const Eigen::Vector3d & point) {
-                             Eigen::Vector3d direction =
-                                 point - robots.robot(rIndex).mbc().bodyPosW[bIndex].translation();
-                             targetVector(direction);
-                           }));
+      mc_rtc::gui::Point3D(
+          "Arrow end point",
+          [this]() -> Eigen::Vector3d {
+            return robots.robot(rIndex).mbc().bodyPosW[bIndex].translation() + .25 * targetVector();
+          },
+          [this](const Eigen::Vector3d & point) {
+            Eigen::Vector3d direction = point - robots.robot(rIndex).mbc().bodyPosW[bIndex].translation();
+            targetVector(direction);
+          }));
 }
 } // namespace mc_tasks
 

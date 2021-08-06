@@ -185,7 +185,7 @@ public:
   }
 
   /*! \brief Get the cutoff period for the low-pass filter of measured wrench. */
-  double cutoffPeriod()
+  double cutoffPeriod() const
   {
     return lowPass_.cutoffPeriod();
   }
@@ -194,6 +194,27 @@ public:
   void cutoffPeriod(double cutoffPeriod)
   {
     lowPass_.cutoffPeriod(cutoffPeriod);
+  }
+
+  /*! \brief Get whether hold mode is enabled. */
+  inline bool hold() const noexcept
+  {
+    return hold_;
+  }
+
+  /*! \brief Set hold mode.
+   *
+   *  In hold mode, the compliance modification (deltaCompPoseW_) is automatically updated so that the final target pose
+   * sent to the QP (i.e. compliancePose()) remains constant even if the user-specified target pose changes. A typical
+   * use case for hold mode is to set the current end-effector pose as targetPose. Thanks to the hold mode, the robot
+   * does not move the end-effector pose, but the deltaCompPoseW_ becomes smaller, and the external force exerted by the
+   * spring term of impedance dynamics becomes smaller. Without the hold mode, the mass and damper effects of impedance
+   * dynamics would cause the compliancePose to temporarily deviate from the commanded targetPose, causes unintended
+   * movement of the end-effector.
+   */
+  inline void hold(bool hold) noexcept
+  {
+    hold_ = hold;
   }
 
   /*! \brief Load parameters from a Configuration object. */
@@ -232,12 +253,14 @@ protected:
 
   mc_filter::LowPass<sva::ForceVecd> lowPass_;
 
+  // Hold mode
+  bool hold_ = false;
+
   void update(mc_solver::QPSolver & solver) override;
 
   void addToSolver(mc_solver::QPSolver & solver) override;
   void addToGUI(mc_rtc::gui::StateBuilder & gui) override;
   void addToLogger(mc_rtc::Logger & logger) override;
-  void removeFromLogger(mc_rtc::Logger & logger) override;
 
 private:
   /** Targets of SurfaceTransformTask should not be set by the user.

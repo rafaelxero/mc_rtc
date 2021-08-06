@@ -59,7 +59,7 @@ ObserverPipelines:
     update: true                         #   update the real robot instance from its results
     gui: true                            #   Displays the estimated velocity as an arrow (default)
     config:
-      bodySensor: Accelerometer          # This observer only uses roll and pitch rotation information from this sensor
+      imuBodySensor: Accelerometer       # This observer only uses roll and pitch rotation information from this sensor
                                          # along with a kinematic anchor point and the robot kinematics between the anchor
                                          # frame and the floating base frame. The anchor frame is expected to be provided
                                          # through a datastore callback (see below for details)
@@ -137,7 +137,7 @@ Floating base robots rarely have sensors capable of providing the full state of 
 
 The method expects the roll and pitch rotation angle w.r.t gravity to be provided by a sensor. The rotation along the gravity vector (yaw) is assumed to be unobservable by sensor (as is the case for IMU), and is instead replaced by the desired rotation of the control robot to provide a complete estimation of the sensor's frame.
 
-The estimation of position relies on the assumption that the contact position is known and only concerns itself with estimating the position that best matches the observed orientation. This is achieved by providing a anchor point in-between the assumed contact positions. When static a suitable choice of anchor frame is a point center in-between all contacts. When performing motions such as walking, the anchor frame is expected to be smoothly interpolated in-between the contacts such that there is no discontinuity when contact transition occurs. This frame is expected to be provided through a datastore callback [datastore]({{site.baseurl}}/tutorial/recipes/datastore.html).
+The estimation of position relies on the assumption that the contact position is known and only concerns itself with estimating the position that best matches the observed orientation. This is achieved by providing a anchor point in-between the assumed contact positions. When static a suitable choice of anchor frame is a point center in-between all contacts. When performing motions such as walking, the anchor frame is expected to be smoothly interpolated in-between the contacts such that there is no discontinuity when contact transition occurs. This frame is expected to be provided through a datastore callback [datastore]({{site.baseurl}}/tutorials/recipes/datastore.html).
 
 For example, in the pipeline described in the previous section, the anchor frame is provided as a frame center between the two expected feet contact.
 
@@ -194,7 +194,7 @@ Here is a short snippet of code to showcase how one can query the status of obse
 ```cpp
 bool checkObserverPipeline(const std::string & observerPipelineName)
 {
-  if(!hasObserverPipeline(observerPipeline))
+  if(!hasObserverPipeline(observerPipelineName))
   {
     mc_rtc::log::error("This controller does not have a pipeline named {}", observerPipelineName);
     return false;
@@ -210,7 +210,7 @@ bool checkObserverPipeline(const std::string & observerPipelineName)
       {
         // Display failure error
         mc_rtc::log::error("Observer \"{}\" failed with error \"{}\"", observer.observer().name(), observer.observer().error());
-        if(observer.observer.name() == "MyObserver")
+        if(observer.observer().name() == "MyObserver")
         {
           // do something specific if this observer failed
         }
@@ -252,7 +252,7 @@ To compile your own observer, you can use the provided macro, which takes care o
 add_observer(YourObserverName YourObserver.cpp YourObserver.h)
 ```
 
-Note: If you wish to inherit from one of the default observers provided along with the framework, you will need to link against it. For example, if you inherit from {% doxygen mc_observers::BodySensorObserver %} you need to link against the corresponding `mc_observers::BodySensorObserver %} target:
+Note: If you wish to inherit from one of the default observers provided along with the framework, you will need to link against it. For example, if you inherit from {% doxygen mc_observers::BodySensorObserver %} you need to link against the corresponding `mc_observers::BodySensorObserver` target:
 
 ```cmake
 target_link_libraries(YourObserverName PUBLIC mc_observers::BodySensorObserver)

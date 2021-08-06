@@ -82,10 +82,11 @@ void SlidingFootContactState::start(Controller & ctl)
   ctl.contactConstraint().contactConstr->resetDofContacts();
   setHandDofContact(ctl);
   slidingContactId_ = getContactId(ctl, slidingSurface_);
-  ctl.logger().addLogEntry("Sliding_" + slidingSurface_ + "_com_targetIn",
-                           [this]() -> const Eigen::Vector3d & { return com_target0; });
-  ctl.logger().addLogEntry("Sliding_" + slidingSurface_ + "_com_sensor",
-                           [this]() -> const Eigen::Vector3d & { return com_sensor; });
+#define LOG_MEMBER(NAME, MEMBER) MC_RTC_LOG_HELPER("Sliding_" + slidingSurface_ + NAME, MEMBER)
+  auto & logger = ctl.logger();
+  LOG_MEMBER("_com_targetIn", com_target0);
+  LOG_MEMBER("_com_sensor", com_sensor);
+#undef LOG_MEMBER
   if(wait_for_slide_trigger_)
   {
     auto gui = ctl.gui();
@@ -117,10 +118,12 @@ void SlidingFootContactState::start(Controller & ctl)
                                           ctl.contactConstraint().contactConstr->updateDofContacts();
                                           ctl.solver().addTask(copSlidingFootTask_);
                                         }),
-                    mc_rtc::gui::ArrayInput("Sliding target", {"x", "y"}, [this]() { return move_; },
-                                            [this](const Eigen::Vector2d & move) { move_ = move; }),
-                    mc_rtc::gui::ComboInput("Next foot", {slidingSurface_, supportSurface_}, [this]() { return next_; },
-                                            [this](const std::string & s) { next_ = s; }),
+                    mc_rtc::gui::ArrayInput(
+                        "Sliding target", {"x", "y"}, [this]() { return move_; },
+                        [this](const Eigen::Vector2d & move) { move_ = move; }),
+                    mc_rtc::gui::ComboInput(
+                        "Next foot", {slidingSurface_, supportSurface_}, [this]() { return next_; },
+                        [this](const std::string & s) { next_ = s; }),
                     mc_rtc::gui::Button("SLIDE!", [this]() {
                       if(phase_ == Phase::REACH_SUPPORT && !slide_triggered_)
                       {
@@ -262,8 +265,7 @@ bool SlidingFootContactState::run(Controller & ctl)
 
 void SlidingFootContactState::teardown(Controller & ctl)
 {
-  ctl.logger().removeLogEntry("Sliding_" + slidingSurface_ + "_com_targetIn");
-  ctl.logger().removeLogEntry("Sliding_" + slidingSurface_ + "_com_sensor");
+  ctl.logger().removeLogEntries(this);
   if(wait_for_slide_trigger_)
   {
     auto gui = ctl.gui();

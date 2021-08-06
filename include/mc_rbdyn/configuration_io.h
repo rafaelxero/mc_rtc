@@ -25,6 +25,9 @@
 #include <mc_rbdyn/GripperSurface.h>
 #include <mc_rbdyn/PlanarSurface.h>
 
+/* Serialized/deserialized from/to shared pointers */
+#include <sch-core/S_Object.h>
+
 /* Require a Robots instance to be deserialized */
 #include <mc_rbdyn/Contact.h>
 #include <mc_rtc/logging.h>
@@ -61,7 +64,12 @@ DECLARE_IO(rbd::parsers::Geometry::Sphere)
 DECLARE_IO(rbd::parsers::Geometry::Mesh)
 DECLARE_IO(rbd::parsers::Geometry::Superellipsoid)
 DECLARE_IO(rbd::parsers::Geometry)
+DECLARE_IO(rbd::parsers::Material::Color)
+DECLARE_IO(rbd::parsers::Material::Texture)
+DECLARE_IO(rbd::parsers::Material)
 DECLARE_IO(rbd::parsers::Visual)
+
+DECLARE_IO(mc_rbdyn::S_ObjectPtr)
 
 DECLARE_IO(mc_rbdyn::Base)
 DECLARE_IO(mc_rbdyn::BodySensor)

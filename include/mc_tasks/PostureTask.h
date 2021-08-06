@@ -22,25 +22,41 @@ public:
   /*! \brief Load parameters from a Configuration object */
   void load(mc_solver::QPSolver & solver, const mc_rtc::Configuration & config) override;
 
-  /** Does not make much sense for PostureTask, prefer selectActiveJoints
-   * or selectUnactiveJoints */
-  void dimWeight(const Eigen::VectorXd &) override {}
-
-  /** Does not make much sense for PostureTask, prefer selectActiveJoints
-   * or selectUnactiveJoints */
-  Eigen::VectorXd dimWeight() const override
+  /*! \brief Set the task dimensional weight
+   *
+   * For simple cases (using 0/1 as weights) prefer \ref selectActiveJoints or \ref selectUnactiveJoints which are
+   * simpler to use
+   */
+  inline void dimWeight(const Eigen::VectorXd & dimW) override
   {
-    return Eigen::VectorXd::Zero(0);
+    pt_.dimWeight(dimW);
   }
 
+  Eigen::VectorXd dimWeight() const override
+  {
+    return pt_.dimWeight();
+  }
+
+  /*! \brief Select active joints for this task
+   *
+   * Manipulate \ref dimWeight() to achieve its effect
+   */
   void selectActiveJoints(mc_solver::QPSolver & solver,
                           const std::vector<std::string> & activeJointsName,
                           const std::map<std::string, std::vector<std::array<int, 2>>> & activeDofs = {}) override;
 
+  /*! \brief Select inactive joints for this task
+   *
+   * Manipulate \ref dimWeight() to achieve its effect
+   */
   void selectUnactiveJoints(mc_solver::QPSolver & solver,
                             const std::vector<std::string> & unactiveJointsName,
                             const std::map<std::string, std::vector<std::array<int, 2>>> & unactiveDofs = {}) override;
 
+  /*! \brief Reset the joint selector effect
+   *
+   * Reset dimWeight to ones
+   */
   void resetJointsSelector(mc_solver::QPSolver & solver) override;
 
   Eigen::VectorXd eval() const override;
@@ -49,6 +65,38 @@ public:
 
   /** Change posture objective */
   void posture(const std::vector<std::vector<double>> & p);
+
+  /** Change reference velocity
+   *
+   * \p refVel Should be of size nrDof
+   */
+  inline void refVel(const Eigen::VectorXd & refVel) noexcept
+  {
+    assert(refVel.size() == robots_.robots()[rIndex_].mb().nrDof());
+    pt_.refVel(refVel);
+  }
+
+  /** Access the reference velocity */
+  inline const Eigen::VectorXd & refVel() const noexcept
+  {
+    return pt_.refVel();
+  }
+
+  /** Change reference acceleration
+   *
+   * \p refAccel Should be of size nrDof
+   */
+  inline void refAccel(const Eigen::VectorXd & refAccel) noexcept
+  {
+    assert(refAccel.size() == robots_.robots()[rIndex_].mb().nrDof());
+    pt_.refAccel(refAccel);
+  }
+
+  /** Access the reference acceleration */
+  inline const Eigen::VectorXd & refAccel() const noexcept
+  {
+    return pt_.refAccel();
+  }
 
   /** Get current posture objective */
   std::vector<std::vector<double>> posture() const;
@@ -97,8 +145,6 @@ protected:
   void addToGUI(mc_rtc::gui::StateBuilder &) override;
 
   void addToLogger(mc_rtc::Logger & logger) override;
-
-  void removeFromLogger(mc_rtc::Logger & logger) override;
 
 private:
   /** True if added to solver */

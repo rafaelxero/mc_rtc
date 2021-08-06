@@ -387,23 +387,13 @@ template<typename Derived>
 void SplineTrajectoryTask<Derived>::addToLogger(mc_rtc::Logger & logger)
 {
   TrajectoryBase::addToLogger(logger);
-  logger.addLogEntry(name_ + "_surfacePose", [this]() {
+  logger.addLogEntry(name_ + "_surfacePose", this, [this]() {
     const auto & robot = this->robots.robot(rIndex_);
     return robot.surfacePose(surfaceName_);
   });
-  logger.addLogEntry(name_ + "_targetPose", [this]() { return this->target(); });
-  logger.addLogEntry(name_ + "_refPose", [this]() { return this->refPose(); });
-  logger.addLogEntry(name_ + "_speed", [this]() -> const Eigen::VectorXd { return this->speed(); });
-}
-
-template<typename Derived>
-void SplineTrajectoryTask<Derived>::removeFromLogger(mc_rtc::Logger & logger)
-{
-  TrajectoryBase::removeFromLogger(logger);
-  logger.removeLogEntry(name_ + "_surfacePose");
-  logger.removeLogEntry(name_ + "_targetPose");
-  logger.removeLogEntry(name_ + "_refPose");
-  logger.removeLogEntry(name_ + "_speed");
+  MC_RTC_LOG_GETTER(name_ + "_targetPose", target);
+  MC_RTC_LOG_GETTER(name_ + "_refPose", refPose);
+  MC_RTC_LOG_HELPER(name_ + "_speed", speed);
 }
 
 template<typename Derived>
@@ -412,32 +402,33 @@ void SplineTrajectoryTask<Derived>::addToGUI(mc_rtc::gui::StateBuilder & gui)
   TrajectoryTask::addToGUI(gui);
 
   auto & spline = static_cast<Derived &>(*this).spline();
-  gui.addElement({"Tasks", name_},
-                 mc_rtc::gui::Checkbox("Paused", [this]() { return paused_; }, [this]() { paused_ = !paused_; }));
+  gui.addElement({"Tasks", name_}, mc_rtc::gui::Checkbox(
+                                       "Paused", [this]() { return paused_; }, [this]() { paused_ = !paused_; }));
   gui.addElement({"Tasks", name_}, mc_rtc::gui::Transform("Surface pose", [this]() {
                    const auto & robot = this->robots.robot(rIndex_);
                    return robot.surface(surfaceName_).X_0_s(robot);
                  }));
 
-  gui.addElement({"Tasks", name_}, mc_rtc::gui::Rotation("Target Rotation", [this]() { return this->target(); },
-                                                         [this](const Eigen::Quaterniond & ori) {
-                                                           sva::PTransformd X_0_t(ori, this->target().translation());
-                                                           this->target(X_0_t);
-                                                         }));
+  gui.addElement({"Tasks", name_}, mc_rtc::gui::Rotation(
+                                       "Target Rotation", [this]() { return this->target(); },
+                                       [this](const Eigen::Quaterniond & ori) {
+                                         sva::PTransformd X_0_t(ori, this->target().translation());
+                                         this->target(X_0_t);
+                                       }));
 
   // Target rotation is handled independently
   for(unsigned i = 0; i < oriSpline_.waypoints().size(); ++i)
   {
-    gui.addElement({"Tasks", name_, "Orientation Waypoint"},
-                   mc_rtc::gui::Rotation("Waypoint " + std::to_string(i),
-                                         [this, i, &spline]() {
-                                           // Get position of orientation waypoint along the spline
-                                           const auto & wp = this->oriSpline_.waypoint(i);
-                                           return sva::PTransformd(wp.second, spline.splev(wp.first, 0)[0]);
-                                         },
-                                         [this, i](const Eigen::Quaterniond & ori) {
-                                           this->oriSpline_.waypoint(i, ori.toRotationMatrix());
-                                         }));
+    gui.addElement(
+        {"Tasks", name_, "Orientation Waypoint"},
+        mc_rtc::gui::Rotation(
+            "Waypoint " + std::to_string(i),
+            [this, i, &spline]() {
+              // Get position of orientation waypoint along the spline
+              const auto & wp = this->oriSpline_.waypoint(i);
+              return sva::PTransformd(wp.second, spline.splev(wp.first, 0)[0]);
+            },
+            [this, i](const Eigen::Quaterniond & ori) { this->oriSpline_.waypoint(i, ori.toRotationMatrix()); }));
   }
 }
 

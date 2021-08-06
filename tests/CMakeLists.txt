@@ -78,6 +78,7 @@ mc_rtc_test(testConfigurationHelpers mc_rtc_utils)
 mc_rtc_test(test_io_utils mc_rtc_utils)
 get_filename_component(EXAMPLE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../doc/_examples" ABSOLUTE)
 mc_rtc_test(testSchemaExamples mc_tasks)
+mc_rtc_test(testLogger mc_rbdyn)
 
 ###########################
 # -- FSM related tests -- #
@@ -104,6 +105,12 @@ target_include_directories(test_controller_ticker PRIVATE ${CONFIG_HEADER_INCLUD
 # Adding a project configuration file (for MSVC only)
 generate_msvc_dot_user_file(test_controller_ticker)
 
+add_executable(test_controller_restart test_controller_restart.cpp)
+set_target_properties(test_controller_restart PROPERTIES FOLDER tests/ticker)
+target_link_libraries(test_controller_restart PUBLIC mc_control)
+target_include_directories(test_controller_restart PRIVATE ${CONFIG_HEADER_INCLUDE_DIR})
+generate_msvc_dot_user_file(test_controller_restart)
+
 if(NOT DISABLE_CONTROLLER_TESTS)
   add_subdirectory(controllers)
 endif()
@@ -126,6 +133,7 @@ set_target_properties(dummyClient PROPERTIES FOLDER tests/GUI)
 target_link_libraries(dummyClient PUBLIC mc_control_client)
 
 add_executable(dummyServer dummyServer.cpp)
+target_include_directories(dummyServer PRIVATE ${CONFIG_HEADER_INCLUDE_DIR})
 set_target_properties(dummyServer PROPERTIES FOLDER tests/GUI)
 target_link_libraries(dummyServer PUBLIC mc_control)
 

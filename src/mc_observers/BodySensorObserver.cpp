@@ -149,24 +149,16 @@ void BodySensorObserver::addToLogger(const mc_control::MCController &,
   auto cat = category + "_" + fbSensorName_;
   if(logPos_)
   {
-    logger.addLogEntry(cat + "_posW", [this]() { return posW_; });
+    MC_RTC_LOG_HELPER(cat + "_posW", posW_);
   }
   if(logVel_)
   {
-    logger.addLogEntry(cat + "_velW", [this]() { return velW_; });
+    MC_RTC_LOG_HELPER(cat + "_velW", velW_);
   }
   if(logAcc_)
   {
-    logger.addLogEntry(cat + "_accW", [this]() { return accW_; });
+    MC_RTC_LOG_HELPER(cat + "_accW", accW_);
   }
-}
-
-void BodySensorObserver::removeFromLogger(mc_rtc::Logger & logger, const std::string & category)
-{
-  auto cat = category + "_" + fbSensorName_;
-  logger.removeLogEntry(cat + "_posW");
-  logger.removeLogEntry(cat + "_velW");
-  logger.removeLogEntry(cat + "_accW");
 }
 
 void BodySensorObserver::addToGUI(const mc_control::MCController & ctl,
@@ -186,12 +178,13 @@ void BodySensorObserver::addToGUI(const mc_control::MCController & ctl,
   auto showVel = [this, &gui, category]() {
     if(guiVel_)
     {
-      gui.addElement(category, mc_rtc::gui::Arrow("Velocity", guiVelConfig_,
-                                                  [this]() -> const Eigen::Vector3d & { return posW_.translation(); },
-                                                  [this]() -> Eigen::Vector3d {
-                                                    Eigen::Vector3d end = posW_.translation() + velW_.linear();
-                                                    return end;
-                                                  }));
+      gui.addElement(category,
+                     mc_rtc::gui::Arrow(
+                         "Velocity", guiVelConfig_, [this]() -> const Eigen::Vector3d & { return posW_.translation(); },
+                         [this]() -> Eigen::Vector3d {
+                           Eigen::Vector3d end = posW_.translation() + velW_.linear();
+                           return end;
+                         }));
     }
     else
     {
@@ -201,12 +194,13 @@ void BodySensorObserver::addToGUI(const mc_control::MCController & ctl,
   auto showAcc = [this, &gui, category]() {
     if(guiAcc_)
     {
-      gui.addElement(category, mc_rtc::gui::Arrow("Acceleration", guiAccConfig_,
-                                                  [this]() -> const Eigen::Vector3d & { return posW_.translation(); },
-                                                  [this]() -> Eigen::Vector3d {
-                                                    Eigen::Vector3d end = posW_.translation() + accW_.linear();
-                                                    return end;
-                                                  }));
+      gui.addElement(category, mc_rtc::gui::Arrow(
+                                   "Acceleration", guiAccConfig_,
+                                   [this]() -> const Eigen::Vector3d & { return posW_.translation(); },
+                                   [this]() -> Eigen::Vector3d {
+                                     Eigen::Vector3d end = posW_.translation() + accW_.linear();
+                                     return end;
+                                   }));
     }
     else
     {
@@ -215,21 +209,24 @@ void BodySensorObserver::addToGUI(const mc_control::MCController & ctl,
   };
 
   gui.addElement(category,
-                 mc_rtc::gui::Checkbox("Show pose", [this]() { return guiPos_; },
-                                       [this, showPose]() {
-                                         guiPos_ = !guiPos_;
-                                         showPose();
-                                       }),
-                 mc_rtc::gui::Checkbox("Show velocity", [this]() { return guiVel_; },
-                                       [this, showVel]() {
-                                         guiVel_ = !guiVel_;
-                                         showVel();
-                                       }),
-                 mc_rtc::gui::Checkbox("Show acceleration", [this]() { return guiAcc_; },
-                                       [this, showAcc]() {
-                                         guiAcc_ = !guiAcc_;
-                                         showAcc();
-                                       }));
+                 mc_rtc::gui::Checkbox(
+                     "Show pose", [this]() { return guiPos_; },
+                     [this, showPose]() {
+                       guiPos_ = !guiPos_;
+                       showPose();
+                     }),
+                 mc_rtc::gui::Checkbox(
+                     "Show velocity", [this]() { return guiVel_; },
+                     [this, showVel]() {
+                       guiVel_ = !guiVel_;
+                       showVel();
+                     }),
+                 mc_rtc::gui::Checkbox(
+                     "Show acceleration", [this]() { return guiAcc_; },
+                     [this, showAcc]() {
+                       guiAcc_ = !guiAcc_;
+                       showAcc();
+                     }));
 
   showPose();
   showVel();
@@ -245,9 +242,9 @@ void BodySensorObserver::addToGUI(const mc_control::MCController & ctl,
 
     auto advancedCat = category;
     advancedCat.push_back("Advanced");
-    gui.addElement(advancedCat,
-                   mc_rtc::gui::ComboInput("BodySensor", sensorNames, [this]() { return fbSensorName_; },
-                                           [this](const std::string & sensor) { fbSensorName_ = sensor; }));
+    gui.addElement(advancedCat, mc_rtc::gui::ComboInput(
+                                    "BodySensor", sensorNames, [this]() { return fbSensorName_; },
+                                    [this](const std::string & sensor) { fbSensorName_ = sensor; }));
   }
 }
 

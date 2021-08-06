@@ -12,7 +12,7 @@ endif()
 
 set(PROJECT_NAME mc_rtc)
 set(PROJECT_DESCRIPTION mc_rtc)
-set(PROJECT_VERSION 1.6.0)
+set(PROJECT_VERSION 1.7.0)
 set(PROJECT_URL https://gite.lirmm.fr/multi-contact/mc_rtc)
 set(PROJECT_DEBUG_POSTFIX "_d")
 set(PROJECT_USE_KEYWORD_LINK_LIBRARIES TRUE)
@@ -53,6 +53,7 @@ option(BUILD_BENCHMARKS "Build benchmarks" OFF)
 
 option(MC_RTC_BUILD_STATIC "Build a static version of mc_rtc, this has no support for pluggable components" OFF)
 option(MC_RTC_DISABLE_NETWORK "Build without network support" OFF)
+option(MC_RTC_DEVELOPER_MODE "Disable exact version embedding to speed up recompilations" OFF)
 
 option(DISABLE_ROS "Build without ROS support (even if ROS was found)" OFF)
 
@@ -102,7 +103,7 @@ set_target_properties(mc_rtc_3rd_party::RapidJSON PROPERTIES
 )
 
 # spdlog
-add_project_dependency(spdlog 1.6.1 REQUIRED)
+add_project_dependency(spdlog 1.5.0 REQUIRED)
 
 macro(find_description_package PACKAGE)
   set(PACKAGE_PATH_VAR "${PACKAGE}_PATH")

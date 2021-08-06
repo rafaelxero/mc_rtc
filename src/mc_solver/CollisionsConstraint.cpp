@@ -135,7 +135,8 @@ void CollisionsConstraint::__addCollision(const mc_solver::QPSolver & solver, co
     }
     if(!match)
     {
-      mc_rtc::log::warning("No match found for collision wildcard {} in {}", body, robot.name());
+      mc_rtc::log::error_and_throw<std::runtime_error>("No match found for collision wildcard {} in {}", body,
+                                                       robot.name());
     }
     return true;
   };
@@ -153,9 +154,18 @@ void CollisionsConstraint::__addCollision(const mc_solver::QPSolver & solver, co
     return;
   }
   cols.push_back(col);
-  collConstr->addCollision(robots.mbs(), collId, static_cast<int>(r1Index), body1.first, body1.second.get(), X_b1_c,
-                           static_cast<int>(r2Index), body2.first, body2.second.get(), X_b2_c, col.iDist, col.sDist,
-                           col.damping, defaultDampingOffset);
+  if(r1.mb().nrDof() == 0)
+  {
+    collConstr->addCollision(robots.mbs(), collId, static_cast<int>(r2Index), body2.first, body2.second.get(), X_b2_c,
+                             static_cast<int>(r1Index), body1.first, body1.second.get(), X_b1_c, col.iDist, col.sDist,
+                             col.damping, defaultDampingOffset);
+  }
+  else
+  {
+    collConstr->addCollision(robots.mbs(), collId, static_cast<int>(r1Index), body1.first, body1.second.get(), X_b1_c,
+                             static_cast<int>(r2Index), body2.first, body2.second.get(), X_b2_c, col.iDist, col.sDist,
+                             col.damping, defaultDampingOffset);
+  }
   if(solver.gui())
   {
     if(!gui_)
@@ -174,9 +184,9 @@ void CollisionsConstraint::addMonitorButton(int collId, const mc_rbdyn::Collisio
     auto & gui = *gui_;
     std::string name = col.body1 + "/" + col.body2;
     category_.push_back("Monitors");
-    gui.addElement(category_,
-                   mc_rtc::gui::Checkbox("Monitor " + name, [collId, this]() { return monitored_.count(collId) != 0; },
-                                         [collId, this]() { toggleCollisionMonitor(collId); }));
+    gui.addElement(category_, mc_rtc::gui::Checkbox(
+                                  "Monitor " + name, [collId, this]() { return monitored_.count(collId) != 0; },
+                                  [collId, this]() { toggleCollisionMonitor(collId); }));
     category_.pop_back();
   }
 }

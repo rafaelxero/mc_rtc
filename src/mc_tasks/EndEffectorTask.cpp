@@ -195,17 +195,16 @@ void EndEffectorTask::addToLogger(mc_rtc::Logger & logger)
 {
   positionTask->addToLogger(logger);
   orientationTask->addToLogger(logger);
-  logger.addLogEntry(name_ + "_target", [this]() -> const sva::PTransformd & { return curTransform; });
+  MC_RTC_LOG_HELPER(name_ + "_target", curTransform);
   logger.addLogEntry(
-      name_, [this]() -> const sva::PTransformd & { return robots.robot(robotIndex).mbc().bodyPosW[bodyIndex]; });
+      name_, this, [this]() -> const sva::PTransformd & { return robots.robot(robotIndex).mbc().bodyPosW[bodyIndex]; });
 }
 
 void EndEffectorTask::removeFromLogger(mc_rtc::Logger & logger)
 {
+  MetaTask::removeFromLogger(logger);
   positionTask->removeFromLogger(logger);
   orientationTask->removeFromLogger(logger);
-  logger.removeLogEntry(name_ + "_target");
-  logger.removeLogEntry(name_);
 }
 
 void EndEffectorTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
@@ -213,8 +212,9 @@ void EndEffectorTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
   MetaTask::addToGUI(gui);
   gui.addElement(
       {"Tasks", name_},
-      mc_rtc::gui::Transform("pos_target", [this]() { return this->get_ef_pose(); },
-                             [this](const sva::PTransformd & pos) { this->set_ef_pose(pos); }),
+      mc_rtc::gui::Transform(
+          "pos_target", [this]() { return this->get_ef_pose(); },
+          [this](const sva::PTransformd & pos) { this->set_ef_pose(pos); }),
       mc_rtc::gui::Transform("pos", [this]() { return robots.robot(robotIndex).mbc().bodyPosW[bodyIndex]; }));
   gui.addElement({"Tasks", name_, "Gains", "Position"},
                  mc_rtc::gui::NumberInput(
@@ -223,24 +223,26 @@ void EndEffectorTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
                  mc_rtc::gui::NumberInput(
                      "damping", [this]() { return this->positionTask->damping(); },
                      [this](const double & d) { this->positionTask->setGains(this->positionTask->stiffness(), d); }),
-                 mc_rtc::gui::NumberInput("stiffness & damping", [this]() { return this->positionTask->stiffness(); },
-                                          [this](const double & g) { this->positionTask->stiffness(g); }),
-                 mc_rtc::gui::NumberInput("weight", [this]() { return this->positionTask->weight(); },
-                                          [this](const double & w) { this->positionTask->weight(w); }));
-  gui.addElement({"Tasks", name_, "Gains", "Orientation"},
-                 mc_rtc::gui::NumberInput("stiffness", [this]() { return this->orientationTask->stiffness(); },
-                                          [this](const double & s) {
-                                            this->orientationTask->setGains(s, this->orientationTask->damping());
-                                          }),
-                 mc_rtc::gui::NumberInput("damping", [this]() { return this->orientationTask->damping(); },
-                                          [this](const double & d) {
-                                            this->orientationTask->setGains(this->orientationTask->stiffness(), d);
-                                          }),
-                 mc_rtc::gui::NumberInput("stiffness & damping",
-                                          [this]() { return this->orientationTask->stiffness(); },
-                                          [this](const double & g) { this->orientationTask->stiffness(g); }),
-                 mc_rtc::gui::NumberInput("weight", [this]() { return this->orientationTask->weight(); },
-                                          [this](const double & w) { this->orientationTask->weight(w); }));
+                 mc_rtc::gui::NumberInput(
+                     "stiffness & damping", [this]() { return this->positionTask->stiffness(); },
+                     [this](const double & g) { this->positionTask->stiffness(g); }),
+                 mc_rtc::gui::NumberInput(
+                     "weight", [this]() { return this->positionTask->weight(); },
+                     [this](const double & w) { this->positionTask->weight(w); }));
+  gui.addElement(
+      {"Tasks", name_, "Gains", "Orientation"},
+      mc_rtc::gui::NumberInput(
+          "stiffness", [this]() { return this->orientationTask->stiffness(); },
+          [this](const double & s) { this->orientationTask->setGains(s, this->orientationTask->damping()); }),
+      mc_rtc::gui::NumberInput(
+          "damping", [this]() { return this->orientationTask->damping(); },
+          [this](const double & d) { this->orientationTask->setGains(this->orientationTask->stiffness(), d); }),
+      mc_rtc::gui::NumberInput(
+          "stiffness & damping", [this]() { return this->orientationTask->stiffness(); },
+          [this](const double & g) { this->orientationTask->stiffness(g); }),
+      mc_rtc::gui::NumberInput(
+          "weight", [this]() { return this->orientationTask->weight(); },
+          [this](const double & w) { this->orientationTask->weight(w); }));
 }
 
 } // namespace mc_tasks

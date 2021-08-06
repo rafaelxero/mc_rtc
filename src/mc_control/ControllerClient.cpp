@@ -420,6 +420,17 @@ void ControllerClient::handle_widget(const ElementId & id, const mc_rtc::Configu
       case Elements::Robot:
         robot(id, data[3], data[4], data[5]);
         break;
+      case Elements::Visual:
+        if(data[4].size() == 3)
+        {
+          Eigen::Vector3d pos = data[4];
+          visual(id, data[3], {pos});
+        }
+        else
+        {
+          visual(id, data[3], data[4]);
+        }
+        break;
       default:
         mc_rtc::log::error("Type {} is not handlded by this ControllerClient", static_cast<int>(type));
         break;
@@ -673,22 +684,22 @@ void ControllerClient::handle_form(const ElementId & id, const mc_rtc::Configura
     switch(type)
     {
       case Elements::Checkbox:
-        form_checkbox(id, name, required, el[3]);
+        form_checkbox(id, name, required, el[3], el.size() > 4 ? el[4] : true);
         break;
       case Elements::IntegerInput:
-        form_integer_input(id, name, required, el[3]);
+        form_integer_input(id, name, required, el[3], el.size() > 4 ? el[4] : true);
         break;
       case Elements::NumberInput:
-        form_number_input(id, name, required, el[3]);
+        form_number_input(id, name, required, el[3], el.size() > 4 ? el[4] : true);
         break;
       case Elements::StringInput:
-        form_string_input(id, name, required, el[3]);
+        form_string_input(id, name, required, el[3], el.size() > 4 ? el[4] : true);
         break;
       case Elements::ArrayInput:
-        form_array_input(id, name, required, el[3], el[4]);
+        form_array_input(id, name, required, el[3], el[4], el.size() > 5 ? el[5] : true);
         break;
       case Elements::ComboInput:
-        form_combo_input(id, name, required, el[3], el[4]);
+        form_combo_input(id, name, required, el[3], el[4], el.size() > 5 ? el[5] : -1);
         break;
       case Elements::DataComboInput:
         form_data_combo_input(id, name, required, el[3], el[4]);

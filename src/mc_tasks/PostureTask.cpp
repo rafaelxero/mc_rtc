@@ -85,17 +85,22 @@ void PostureTask::selectUnactiveJoints(mc_solver::QPSolver & solver,
                                        const std::map<std::string, std::vector<std::array<int, 2>>> &)
 {
   ensureHasJoints(robots_.robot(rIndex_), unactiveJointsName, "[" + name() + "::selectUnActiveJoints]");
-  std::vector<tasks::qp::JointStiffness> jsv;
+  Eigen::VectorXd dimW = pt_.dimWeight();
+  dimW.setOnes();
+  const auto & robot = robots_.robots()[rIndex_];
   for(const auto & j : unactiveJointsName)
   {
-    jsv.emplace_back(j, 0.0);
+    auto jIndex = static_cast<int>(robot.jointIndexByName(j));
+    const auto & joint = robot.mb().joint(jIndex);
+    const auto & dofIndex = robot.mb().jointPosInDof(jIndex);
+    dimW.segment(dofIndex, joint.dof()).setZero();
   }
-  pt_.jointsStiffness(solver.robots().mbs(), jsv);
+  pt_.dimWeight(dimW);
 }
 
 void PostureTask::resetJointsSelector(mc_solver::QPSolver & solver)
 {
-  pt_.jointsStiffness(solver.robots().mbs(), {});
+  selectUnactiveJoints(solver, {});
 }
 
 Eigen::VectorXd PostureTask::eval() const
@@ -212,24 +217,21 @@ void PostureTask::target(const std::map<std::string, std::vector<double>> & join
 
 void PostureTask::addToLogger(mc_rtc::Logger & logger)
 {
-  logger.addLogEntry(name_ + "_eval", [this]() -> const Eigen::VectorXd & { return pt_.eval(); });
-  logger.addLogEntry(name_ + "_speed", [this]() -> const Eigen::VectorXd & { return speed_; });
-}
-
-void PostureTask::removeFromLogger(mc_rtc::Logger & logger)
-{
-  logger.removeLogEntry(name_ + "_eval");
-  logger.removeLogEntry(name_ + "_speed");
+  logger.addLogEntry(name_ + "_eval", this, [this]() -> const Eigen::VectorXd & { return pt_.eval(); });
+  logger.addLogEntry(name_ + "_speed", this, [this]() -> const Eigen::VectorXd & { return speed_; });
+  logger.addLogEntry(name_ + "_refVel", this, [this]() -> const Eigen::VectorXd & { return refVel(); });
+  logger.addLogEntry(name_ + "_refAccel", this, [this]() -> const Eigen::VectorXd & { return refAccel(); });
 }
 
 void PostureTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
 {
   MetaTask::addToGUI(gui);
-  gui.addElement({"Tasks", name_, "Gains"},
-                 mc_rtc::gui::NumberInput("stiffness", [this]() { return this->stiffness(); },
-                                          [this](const double & s) { this->stiffness(s); }),
-                 mc_rtc::gui::NumberInput("weight", [this]() { return this->weight(); },
-                                          [this](const double & w) { this->weight(w); }));
+  gui.addElement(
+      {"Tasks", name_, "Gains"},
+      mc_rtc::gui::NumberInput(
+          "stiffness", [this]() { return this->stiffness(); }, [this](const double & s) { this->stiffness(s); }),
+      mc_rtc::gui::NumberInput(
+          "weight", [this]() { return this->weight(); }, [this](const double & w) { this->weight(w); }));
   std::vector<std::string> active_gripper_joints;
   for(const auto & g : robots_.robot(rIndex_).grippers())
   {
@@ -264,17 +266,17 @@ void PostureTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
     };
     if(isContinuous)
     {
-      gui.addElement({"Tasks", name_, "Target"},
-                     mc_rtc::gui::NumberInput(j.name(), [this, jIndex]() { return this->posture_[jIndex][0]; },
-                                              [jIndex, updatePosture](double v) { updatePosture(jIndex, v); }));
+      gui.addElement({"Tasks", name_, "Target"}, mc_rtc::gui::NumberInput(
+                                                     j.name(), [this, jIndex]() { return this->posture_[jIndex][0]; },
+                                                     [jIndex, updatePosture](double v) { updatePosture(jIndex, v); }));
     }
     else
     {
       gui.addElement({"Tasks", name_, "Target"},
-                     mc_rtc::gui::NumberSlider(j.name(), [this, jIndex]() { return this->posture_[jIndex][0]; },
-                                               [jIndex, updatePosture](double v) { updatePosture(jIndex, v); },
-                                               robots_.robot(rIndex_).ql()[jIndex][0],
-                                               robots_.robot(rIndex_).qu()[jIndex][0]));
+                     mc_rtc::gui::NumberSlider(
+                         j.name(), [this, jIndex]() { return this->posture_[jIndex][0]; },
+                         [jIndex, updatePosture](double v) { updatePosture(jIndex, v); },
+                         robots_.robot(rIndex_).ql()[jIndex][0], robots_.robot(rIndex_).qu()[jIndex][0]));
     }
   }
 }

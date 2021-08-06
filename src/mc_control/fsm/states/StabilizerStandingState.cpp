@@ -130,28 +130,34 @@ void StabilizerStandingState::start(Controller & ctl)
         mc_rtc::gui::Button("Right foot", [this]() {
           targetCoP(stabilizerTask_->contactAnklePose(ContactState::Right).translation());
         }));
-    ctl.gui()->addElement(
-        {"FSM", name(), "Move"},
-        mc_rtc::gui::ArrayInput("CoM Target", [this]() -> const Eigen::Vector3d & { return comTarget_; },
-                                [this](const Eigen::Vector3d & com) { targetCoM(com); }),
-        mc_rtc::gui::ArrayInput("Move CoM", []() -> Eigen::Vector3d { return Eigen::Vector3d::Zero(); },
-                                [this](const Eigen::Vector3d & com) { targetCoM(comTarget_ + com); }));
+    ctl.gui()->addElement({"FSM", name(), "Move"},
+                          mc_rtc::gui::ArrayInput(
+                              "CoM Target", [this]() -> const Eigen::Vector3d & { return comTarget_; },
+                              [this](const Eigen::Vector3d & com) { targetCoM(com); }),
+                          mc_rtc::gui::ArrayInput(
+                              "Move CoM", []() -> Eigen::Vector3d { return Eigen::Vector3d::Zero(); },
+                              [this](const Eigen::Vector3d & com) { targetCoM(comTarget_ + com); }));
   }
 
-  ctl.gui()->addElement(
-      {"FSM", name(), "Gains"},
-      mc_rtc::gui::NumberInput("CoM stiffness", [this]() { return K_; }, [this](const double & s) { K_ = s; }),
-      mc_rtc::gui::NumberInput("CoM damping", [this]() { return D_; }, [this](const double & d) { D_ = d; }),
-      mc_rtc::gui::NumberInput("CoM stiffness & damping", [this]() { return K_; },
-                               [this](const double & g) {
-                                 K_ = g;
-                                 D_ = 2 * std::sqrt(K_);
-                               }));
+  ctl.gui()->addElement({"FSM", name(), "Gains"},
+                        mc_rtc::gui::NumberInput(
+                            "CoM stiffness", [this]() { return K_; }, [this](const double & s) { K_ = s; }),
+                        mc_rtc::gui::NumberInput(
+                            "CoM damping", [this]() { return D_; }, [this](const double & d) { D_ = d; }),
+                        mc_rtc::gui::NumberInput(
+                            "CoM stiffness & damping", [this]() { return K_; },
+                            [this](const double & g) {
+                              K_ = g;
+                              D_ = 2 * std::sqrt(K_);
+                            }));
 
-  ctl.logger().addLogEntry(name() + "_stiffness", [this]() { return K_; });
-  ctl.logger().addLogEntry(name() + "_damping", [this]() { return D_; });
-  ctl.logger().addLogEntry(name() + "_targetCoM", [this]() -> const Eigen::Vector3d & { return comTarget_; });
-  ctl.logger().addLogEntry(name() + "_targetCoP", [this]() -> const Eigen::Vector3d & { return copTarget_; });
+#define LOG_MEMBER(NAME, MEMBER) MC_RTC_LOG_HELPER(name() + NAME, MEMBER)
+  auto & logger = ctl.logger();
+  LOG_MEMBER("_stiffness", K_);
+  LOG_MEMBER("_damping", D_);
+  LOG_MEMBER("_targetCoM", comTarget_);
+  LOG_MEMBER("_targetCoP", copTarget_);
+#undef LOG_MEMBER
 
   // Provide accessor callbacks on the datastore
   ctl.datastore().make_call("StabilizerStandingState::getCoMTarget",
@@ -243,10 +249,7 @@ void StabilizerStandingState::teardown(Controller & ctl)
 {
   ctl.solver().removeTask(stabilizerTask_);
   ctl.gui()->removeCategory({"FSM", name()});
-  ctl.logger().removeLogEntry(name() + "_stiffness");
-  ctl.logger().removeLogEntry(name() + "_damping");
-  ctl.logger().removeLogEntry(name() + "_targetCoM");
-  ctl.logger().removeLogEntry(name() + "_targetCoP");
+  ctl.logger().removeLogEntries(this);
 
   ctl.datastore().remove("StabilizerStandingState::getCoMTarget");
   ctl.datastore().remove("StabilizerStandingState::setCoMTarget");

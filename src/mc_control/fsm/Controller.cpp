@@ -281,24 +281,24 @@ void Controller::reset(const ControllerResetData & data)
                        return ret;
                      }));
     gui_->removeElement({"Contacts", "Add"}, "Add contact");
-    gui_->addElement(
-        {"Contacts", "Add"},
-        mc_rtc::gui::Form("Add contact",
-                          [this](const mc_rtc::Configuration & data) {
-                            std::string r0 = data("R0");
-                            std::string r1 = data("R1");
-                            std::string r0Surface = data("R0 surface");
-                            std::string r1Surface = data("R1 surface");
-                            double friction = data("Friction", mc_rbdyn::Contact::defaultFriction);
-                            Eigen::Vector6d dof = data("dof", Eigen::Vector6d::Ones().eval());
-                            addContact({r0, r1, r0Surface, r1Surface, friction, dof});
-                          },
-                          mc_rtc::gui::FormDataComboInput{"R0", true, {"robots"}},
-                          mc_rtc::gui::FormDataComboInput{"R0 surface", true, {"surfaces", "$R0"}},
-                          mc_rtc::gui::FormDataComboInput{"R1", true, {"robots"}},
-                          mc_rtc::gui::FormDataComboInput{"R1 surface", true, {"surfaces", "$R1"}},
-                          mc_rtc::gui::FormNumberInput{"Friction", false, mc_rbdyn::Contact::defaultFriction},
-                          mc_rtc::gui::FormArrayInput<Eigen::Vector6d>{"dof", false, Eigen::Vector6d::Ones()}));
+    gui_->addElement({"Contacts", "Add"},
+                     mc_rtc::gui::Form(
+                         "Add contact",
+                         [this](const mc_rtc::Configuration & data) {
+                           std::string r0 = data("R0");
+                           std::string r1 = data("R1");
+                           std::string r0Surface = data("R0 surface");
+                           std::string r1Surface = data("R1 surface");
+                           double friction = data("Friction", mc_rbdyn::Contact::defaultFriction);
+                           Eigen::Vector6d dof = data("dof", Eigen::Vector6d::Ones().eval());
+                           addContact({r0, r1, r0Surface, r1Surface, friction, dof});
+                         },
+                         mc_rtc::gui::FormDataComboInput{"R0", true, {"robots"}},
+                         mc_rtc::gui::FormDataComboInput{"R0 surface", true, {"surfaces", "$R0"}},
+                         mc_rtc::gui::FormDataComboInput{"R1", true, {"robots"}},
+                         mc_rtc::gui::FormDataComboInput{"R1 surface", true, {"surfaces", "$R1"}},
+                         mc_rtc::gui::FormNumberInput{"Friction", false, mc_rbdyn::Contact::defaultFriction},
+                         mc_rtc::gui::FormArrayInput<Eigen::Vector6d>{"dof", false, Eigen::Vector6d::Ones()}));
   }
   logger().addLogEntry("perf_FSM_UpdateContacts", [this]() { return updateContacts_dt_.count(); });
   startIdleState();
@@ -393,6 +393,17 @@ void Controller::addCollisions(const std::string & r1,
                                const std::string & r2,
                                const std::vector<mc_rbdyn::Collision> & collisions)
 {
+  if(r1 != r2 && collision_constraints_.count({r2, r1}))
+  {
+    std::vector<mc_rbdyn::Collision> swapped;
+    swapped.reserve(collisions.size());
+    for(const auto & c : collisions)
+    {
+      swapped.push_back({c.body2, c.body1, c.iDist, c.sDist, c.damping});
+    }
+    addCollisions(r2, r1, swapped);
+    return;
+  }
   if(!collision_constraints_.count({r1, r2}))
   {
     if(robots_idx_.count(r1) * robots_idx_.count(r2) == 0)

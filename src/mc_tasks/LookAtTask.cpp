@@ -59,26 +59,19 @@ Eigen::Vector3d LookAtTask::target() const
 void LookAtTask::addToLogger(mc_rtc::Logger & logger)
 {
   VectorOrientationTask::addToLogger(logger);
-  logger.addLogEntry(name_ + "_target_pos", [this]() -> const Eigen::Vector3d { return target(); });
-  logger.addLogEntry(name_ + "_current_pos", [this]() -> const Eigen::Vector3d & {
+  logger.addLogEntry(name_ + "_target_pos", this, [this]() -> const Eigen::Vector3d { return target(); });
+  logger.addLogEntry(name_ + "_current_pos", this, [this]() -> const Eigen::Vector3d & {
     return robots.robot(rIndex).mbc().bodyPosW[bIndex].translation();
-    ;
   });
-}
-
-void LookAtTask::removeFromLogger(mc_rtc::Logger & logger)
-{
-  VectorOrientationTask::removeFromLogger(logger);
-  logger.removeLogEntry(name_ + "_target_pos");
-  logger.removeLogEntry(name_ + "_current_pos");
 }
 
 void LookAtTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
 {
   VectorOrientationTask::addToGUI(gui);
 
-  gui.addElement({"Tasks", name_}, mc_rtc::gui::Point3D("Target Point", [this]() { return this->target(); },
-                                                        [this](const Eigen::Vector3d & pos) { this->target(pos); }));
+  gui.addElement({"Tasks", name_}, mc_rtc::gui::Point3D(
+                                       "Target Point", [this]() { return this->target(); },
+                                       [this](const Eigen::Vector3d & pos) { this->target(pos); }));
 }
 
 } // namespace mc_tasks

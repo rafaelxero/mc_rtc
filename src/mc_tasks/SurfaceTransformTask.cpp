@@ -139,18 +139,11 @@ void SurfaceTransformTask::targetSurface(unsigned int robotIndex,
 void SurfaceTransformTask::addToLogger(mc_rtc::Logger & logger)
 {
   TrajectoryBase::addToLogger(logger);
-  logger.addLogEntry(name_ + "_surface_pose", [this]() {
+  logger.addLogEntry(name_ + "_surface_pose", this, [this]() {
     const auto & robot = robots.robot(rIndex);
     return robot.surface(surfaceName).X_0_s(robot);
   });
-  logger.addLogEntry(name_ + "_target_pose", [this]() { return target(); });
-}
-
-void SurfaceTransformTask::removeFromLogger(mc_rtc::Logger & logger)
-{
-  TrajectoryBase::removeFromLogger(logger);
-  logger.removeLogEntry(name_ + "_surface_pose");
-  logger.removeLogEntry(name_ + "_target_pose");
+  logger.addLogEntry(name_ + "_target_pose", this, [this]() { return target(); });
 }
 
 std::function<bool(const mc_tasks::MetaTask &, std::string &)> SurfaceTransformTask::buildCompletionCriteria(
@@ -201,8 +194,9 @@ void SurfaceTransformTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
 {
   TrajectoryTaskGeneric<tasks::qp::SurfaceTransformTask>::addToGUI(gui);
   gui.addElement({"Tasks", name_},
-                 mc_rtc::gui::Transform("pos_target", [this]() { return this->target(); },
-                                        [this](const sva::PTransformd & pos) { this->target(pos); }),
+                 mc_rtc::gui::Transform(
+                     "pos_target", [this]() { return this->target(); },
+                     [this](const sva::PTransformd & pos) { this->target(pos); }),
                  mc_rtc::gui::Transform("pos", [this]() {
                    return robots.robot(rIndex).surface(surfaceName).X_0_s(robots.robot(rIndex));
                  }));

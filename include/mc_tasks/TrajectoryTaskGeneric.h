@@ -63,8 +63,8 @@ struct TrajectoryTaskGeneric : public TrajectoryTaskGenericCommon
   /*! \brief Reset task target velocity and acceleration to zero
    *
    */
-  virtual void reset() override;
-  
+  void reset() override;
+
   /*! \brief Set the trajectory reference velocity
    *
    * \param vel New reference velocity
@@ -167,9 +167,9 @@ struct TrajectoryTaskGeneric : public TrajectoryTaskGenericCommon
   /*! \brief Returns the task weight */
   double weight() const;
 
-  virtual void dimWeight(const Eigen::VectorXd & dimW) override;
+  void dimWeight(const Eigen::VectorXd & dimW) override;
 
-  virtual Eigen::VectorXd dimWeight() const override;
+  Eigen::VectorXd dimWeight() const override;
 
   /** \brief Create an active joints selector
    *
@@ -184,9 +184,9 @@ struct TrajectoryTaskGeneric : public TrajectoryTaskGenericCommon
    * \throws If checkJoints is true and a joint name in activeJointsName is not
    * part of the robot
    */
-  virtual void selectActiveJoints(const std::vector<std::string> & activeJointsName,
-                                  const std::map<std::string, std::vector<std::array<int, 2>>> & activeDofs = {},
-                                  bool checkJoints = true);
+  void selectActiveJoints(const std::vector<std::string> & activeJointsName,
+                          const std::map<std::string, std::vector<std::array<int, 2>>> & activeDofs = {},
+                          bool checkJoints = true);
 
   /** \brief Create an active joints selector
    *
@@ -200,10 +200,9 @@ struct TrajectoryTaskGeneric : public TrajectoryTaskGenericCommon
    * \param activeDofs Allow to select only part of the dofs of a joint
    * \throws If a joint name in activeJointsName is not part of the robot
    */
-  virtual void selectActiveJoints(
-      mc_solver::QPSolver & solver,
-      const std::vector<std::string> & activeJointsName,
-      const std::map<std::string, std::vector<std::array<int, 2>>> & activeDofs = {}) override;
+  void selectActiveJoints(mc_solver::QPSolver & solver,
+                          const std::vector<std::string> & activeJointsName,
+                          const std::map<std::string, std::vector<std::array<int, 2>>> & activeDofs = {}) override;
 
   /** \brief Create an unactive joints selector
    *
@@ -218,9 +217,9 @@ struct TrajectoryTaskGeneric : public TrajectoryTaskGenericCommon
    * \throws If checkJoints is true and a joint name in unactiveJointsName is not
    * part of the robot
    */
-  virtual void selectUnactiveJoints(const std::vector<std::string> & unactiveJointsName,
-                                    const std::map<std::string, std::vector<std::array<int, 2>>> & unactiveDofs = {},
-                                    bool checkJoints = true);
+  void selectUnactiveJoints(const std::vector<std::string> & unactiveJointsName,
+                            const std::map<std::string, std::vector<std::array<int, 2>>> & unactiveDofs = {},
+                            bool checkJoints = true);
 
   /** \brief Create an unactive joints selector
    *
@@ -234,18 +233,17 @@ struct TrajectoryTaskGeneric : public TrajectoryTaskGenericCommon
    * \param unactiveDofs Allow to select only part of the dofs of a joint
    * \throws If a joint name in unactiveJointsName is not part of the robot
    */
-  virtual void selectUnactiveJoints(
-      mc_solver::QPSolver & solver,
-      const std::vector<std::string> & unactiveJointsName,
-      const std::map<std::string, std::vector<std::array<int, 2>>> & unactiveDofs = {}) override;
+  void selectUnactiveJoints(mc_solver::QPSolver & solver,
+                            const std::vector<std::string> & unactiveJointsName,
+                            const std::map<std::string, std::vector<std::array<int, 2>>> & unactiveDofs = {}) override;
 
   virtual void resetJointsSelector();
-  
-  virtual void resetJointsSelector(mc_solver::QPSolver & solver) override;
 
-  virtual Eigen::VectorXd eval() const override;
+  void resetJointsSelector(mc_solver::QPSolver & solver) override;
 
-  virtual Eigen::VectorXd speed() const override;
+  Eigen::VectorXd eval() const override;
+
+  Eigen::VectorXd speed() const override;
 
   const Eigen::VectorXd & normalAcc() const;
 
@@ -265,8 +263,6 @@ protected:
 
   void addToLogger(mc_rtc::Logger & logger) override;
 
-  void removeFromLogger(mc_rtc::Logger & logger) override;
-
   std::function<bool(const mc_tasks::MetaTask & task, std::string &)> buildCompletionCriteria(
       double dt,
       const mc_rtc::Configuration & config) const override;
@@ -282,7 +278,7 @@ protected:
   std::shared_ptr<tasks::qp::TrajectoryTask> trajectoryT_ = nullptr;
 
 protected:
-  virtual void addToSolver(mc_solver::QPSolver & solver) override;
+  void addToSolver(mc_solver::QPSolver & solver) override;
 
 private:
   Eigen::VectorXd stiffness_;
@@ -290,7 +286,7 @@ private:
   double weight_;
   std::shared_ptr<tasks::qp::JointsSelector> selectorT_ = nullptr;
 
-  virtual void removeFromSolver(mc_solver::QPSolver & solver) override;
+  void removeFromSolver(mc_solver::QPSolver & solver) override;
 
   void update(mc_solver::QPSolver &) override;
 };

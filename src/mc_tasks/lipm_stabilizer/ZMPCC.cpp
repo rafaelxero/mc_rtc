@@ -55,14 +55,16 @@ void ZMPCC::addToGUI(mc_rtc::gui::StateBuilder & gui, const std::vector<std::str
 {
   using namespace mc_rtc::gui;
   gui.addElement(category,
-                 ArrayInput("CoM admittance", {"Ax", "Ay"},
-                            [this]() -> const Eigen::Vector2d & { return config_.comAdmittance; },
-                            [this](const Eigen::Vector2d & a) { config_.comAdmittance = a; }),
-                 NumberInput("CoM integrator leak rate [Hz]", [this]() { return integrator_.rate(); },
-                             [this](double T) {
-                               integrator_.rate(T);
-                               config_.integratorLeakRate = T;
-                             }));
+                 ArrayInput(
+                     "CoM admittance", {"Ax", "Ay"},
+                     [this]() -> const Eigen::Vector2d & { return config_.comAdmittance; },
+                     [this](const Eigen::Vector2d & a) { config_.comAdmittance = a; }),
+                 NumberInput(
+                     "CoM integrator leak rate [Hz]", [this]() { return integrator_.rate(); },
+                     [this](double T) {
+                       integrator_.rate(T);
+                       config_.integratorLeakRate = T;
+                     }));
 }
 
 void ZMPCC::removeFromGUI(mc_rtc::gui::StateBuilder & gui, const std::vector<std::string> & category)
@@ -73,15 +75,14 @@ void ZMPCC::removeFromGUI(mc_rtc::gui::StateBuilder & gui, const std::vector<std
 
 void ZMPCC::addToLogger(mc_rtc::Logger & logger, const std::string & name)
 {
-  logger.addLogEntry(name + "_zmpcc_comAdmittance",
+  logger.addLogEntry(name + "_zmpcc_comAdmittance", this,
                      [this]() -> const Eigen::Vector2d & { return config_.comAdmittance; });
-  logger.addLogEntry(name + "_zmpcc_errorZMP", [this]() -> const Eigen::Vector3d & { return error_; });
+  MC_RTC_LOG_HELPER(name + "_zmpcc_errorZMP", error_);
 }
 
-void ZMPCC::removeFromLogger(mc_rtc::Logger & logger, const std::string & name)
+void ZMPCC::removeFromLogger(mc_rtc::Logger & logger, const std::string &)
 {
-  logger.removeLogEntry(name + "_zmpcc_comAdmittance");
-  logger.removeLogEntry(name + "_zmpcc_errorZMP");
+  logger.removeLogEntries(this);
 }
 
 } // namespace lipm_stabilizer

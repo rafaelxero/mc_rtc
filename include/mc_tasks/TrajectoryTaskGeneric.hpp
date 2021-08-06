@@ -404,52 +404,50 @@ template<typename T>
 void TrajectoryTaskGeneric<T>::addToGUI(mc_rtc::gui::StateBuilder & gui)
 {
   MetaTask::addToGUI(gui);
-  gui.addElement({"Tasks", name_},
-                 mc_rtc::gui::ArrayInput("refVel", [this]() { return this->refVel(); },
-                                         [this](const Eigen::VectorXd & v) { this->refVel(v); }),
-                 mc_rtc::gui::ArrayInput("refAccel", [this]() { return this->refAccel(); },
-                                         [this](const Eigen::VectorXd & v) { this->refAccel(v); }));
-  gui.addElement({"Tasks", name_, "Gains"},
-                 mc_rtc::gui::NumberInput("stiffness", [this]() { return this->stiffness(); },
-                                          [this](const double & s) { this->setGains(s, this->damping()); }),
-                 mc_rtc::gui::NumberInput("damping", [this]() { return this->damping(); },
-                                          [this](const double & d) { this->setGains(this->stiffness(), d); }),
-                 mc_rtc::gui::NumberInput("stiffness & damping", [this]() { return this->stiffness(); },
-                                          [this](const double & g) { this->stiffness(g); }),
-                 mc_rtc::gui::NumberInput("weight", [this]() { return this->weight(); },
-                                          [this](const double & w) { this->weight(w); }));
   gui.addElement(
-      {"Tasks", name_, "Gains", "Dimensional"},
-      mc_rtc::gui::ArrayInput("stiffness", [this]() { return this->dimStiffness(); },
-                              [this](const Eigen::VectorXd & v) { this->setGains(v, this->dimDamping()); }),
-      mc_rtc::gui::ArrayInput("damping", [this]() { return this->dimDamping(); },
-                              [this](const Eigen::VectorXd & v) { this->setGains(this->dimStiffness(), v); }),
-      mc_rtc::gui::ArrayInput("stiffness & damping", [this]() { return this->dimStiffness(); },
-                              [this](const Eigen::VectorXd & v) { this->stiffness(v); }));
+      {"Tasks", name_},
+      mc_rtc::gui::ArrayInput(
+          "refVel", [this]() { return this->refVel(); }, [this](const Eigen::VectorXd & v) { this->refVel(v); }),
+      mc_rtc::gui::ArrayInput(
+          "refAccel", [this]() { return this->refAccel(); }, [this](const Eigen::VectorXd & v) { this->refAccel(v); }));
+  gui.addElement({"Tasks", name_, "Gains"},
+                 mc_rtc::gui::NumberInput(
+                     "stiffness", [this]() { return this->stiffness(); },
+                     [this](const double & s) { this->setGains(s, this->damping()); }),
+                 mc_rtc::gui::NumberInput(
+                     "damping", [this]() { return this->damping(); },
+                     [this](const double & d) { this->setGains(this->stiffness(), d); }),
+                 mc_rtc::gui::NumberInput(
+                     "stiffness & damping", [this]() { return this->stiffness(); },
+                     [this](const double & g) { this->stiffness(g); }),
+                 mc_rtc::gui::NumberInput(
+                     "weight", [this]() { return this->weight(); }, [this](const double & w) { this->weight(w); }));
+  gui.addElement({"Tasks", name_, "Gains", "Dimensional"},
+                 mc_rtc::gui::ArrayInput(
+                     "stiffness", [this]() { return this->dimStiffness(); },
+                     [this](const Eigen::VectorXd & v) { this->setGains(v, this->dimDamping()); }),
+                 mc_rtc::gui::ArrayInput(
+                     "damping", [this]() { return this->dimDamping(); },
+                     [this](const Eigen::VectorXd & v) { this->setGains(this->dimStiffness(), v); }),
+                 mc_rtc::gui::ArrayInput(
+                     "stiffness & damping", [this]() { return this->dimStiffness(); },
+                     [this](const Eigen::VectorXd & v) { this->stiffness(v); }));
 }
 
 template<typename T>
 void TrajectoryTaskGeneric<T>::addToLogger(mc_rtc::Logger & logger)
 {
-  logger.addLogEntry(name_ + "_damping", [this]() { return damping_(0); });
-  logger.addLogEntry(name_ + "_stiffness", [this]() { return stiffness_(0); });
-  logger.addLogEntry(name_ + "_dimWeight", [this]() -> const Eigen::VectorXd { return dimWeight(); });
-  logger.addLogEntry(name_ + "_dimDamping", [this]() -> const Eigen::VectorXd & { return damping_; });
-  logger.addLogEntry(name_ + "_dimStiffness", [this]() -> const Eigen::VectorXd & { return stiffness_; });
-  logger.addLogEntry(name_ + "_refVel", [this]() { return refVel_; });
-  logger.addLogEntry(name_ + "_refAccel", [this]() { return refAccel_; });
-}
-
-template<typename T>
-void TrajectoryTaskGeneric<T>::removeFromLogger(mc_rtc::Logger & logger)
-{
-  logger.removeLogEntry(name_ + "_damping");
-  logger.removeLogEntry(name_ + "_stiffness");
-  logger.removeLogEntry(name_ + "_dimWeight");
-  logger.removeLogEntry(name_ + "_dimDamping");
-  logger.removeLogEntry(name_ + "_dimStiffness");
-  logger.removeLogEntry(name_ + "_refVel");
-  logger.removeLogEntry(name_ + "_refAccel");
+  // clang-format off
+  logger.addLogEntries(this,
+                       name_ + "_damping", [this]() { return damping_(0); },
+                       name_ + "_stiffness", [this]() { return stiffness_(0); });
+  // clang-format on
+  MC_RTC_LOG_HELPER(name_ + "_weight", weight_);
+  MC_RTC_LOG_GETTER(name_ + "_dimWeight", dimWeight);
+  MC_RTC_LOG_HELPER(name_ + "_dimDamping", damping_);
+  MC_RTC_LOG_HELPER(name_ + "_dimStiffness", stiffness_);
+  MC_RTC_LOG_HELPER(name_ + "_refVel", refVel_);
+  MC_RTC_LOG_HELPER(name_ + "_refAccel", refAccel_);
 }
 
 template<typename T>

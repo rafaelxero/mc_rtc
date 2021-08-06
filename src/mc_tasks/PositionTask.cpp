@@ -81,19 +81,11 @@ void PositionTask::bodyPoint(const Eigen::Vector3d & bodyPoint)
 void PositionTask::addToLogger(mc_rtc::Logger & logger)
 {
   TrajectoryBase::addToLogger(logger);
-  logger.addLogEntry(name_ + "_target", [this]() { return position(); });
-  logger.addLogEntry(name_ + "_curPos", [this]() -> const Eigen::Vector3d & {
+  logger.addLogEntry(name_ + "_target", this, [this]() { return position(); });
+  logger.addLogEntry(name_ + "_curPos", this, [this]() -> const Eigen::Vector3d & {
     return robots.robot(rIndex).mbc().bodyPosW[bIndex].translation();
   });
-  logger.addLogEntry(name_ + "_curVel", [this]() -> const Eigen::VectorXd & { return errorT->speed(); });
-}
-
-void PositionTask::removeFromLogger(mc_rtc::Logger & logger)
-{
-  TrajectoryBase::removeFromLogger(logger);
-  logger.removeLogEntry(name_ + "_target");
-  logger.removeLogEntry(name_ + "_curPos");
-  logger.removeLogEntry(name_ + "_curVel");
+  logger.addLogEntry(name_ + "_curVel", this, [this]() -> const Eigen::VectorXd & { return errorT->speed(); });
 }
 
 void PositionTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
@@ -101,8 +93,9 @@ void PositionTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
   TrajectoryTaskGeneric<tasks::qp::PositionTask>::addToGUI(gui);
   gui.addElement(
       {"Tasks", name_},
-      mc_rtc::gui::Point3D("pos_target", [this]() { return this->position(); },
-                           [this](const Eigen::Vector3d & pos) { this->position(pos); }),
+      mc_rtc::gui::Point3D(
+          "pos_target", [this]() { return this->position(); },
+          [this](const Eigen::Vector3d & pos) { this->position(pos); }),
       mc_rtc::gui::Point3D("pos", [this]() { return robots.robot(rIndex).mbc().bodyPosW[bIndex].translation(); }));
 }
 

@@ -438,12 +438,22 @@ protected:
   /** Called to close a table identified by \p id */
   virtual void table_end(const ElementId & /*id*/) {}
 
+  /** Should display a robot model, the RobotModule can be created using \p parameters, its configuration is in \q and
+   * its world position is in \p posW */
   virtual void robot(const ElementId & id,
                      const std::vector<std::string> & /*parameters*/,
                      const std::vector<std::vector<double>> & /*q*/,
                      const sva::PTransformd & /*posW*/)
   {
     default_impl("Robot", id);
+  }
+
+  /** Should display the visual element \p visual at the position \p pose */
+  virtual void visual(const ElementId & id,
+                      [[maybe_unused]] const rbd::parsers::Visual & visual,
+                      [[maybe_unused]] const sva::PTransformd & pose)
+  {
+    default_impl("Visual", id);
   }
 
   /** Should display a form to send schema-based request to the server
@@ -461,7 +471,10 @@ protected:
     default_impl("Form", id);
   }
 
-  /** A checkbox within a form */
+  /** A checkbox within a form
+   *
+   * This is kept for backward compatibility, mc_rtc never calls this version and you should implement the full version
+   */
   virtual void form_checkbox(const ElementId & /*formId*/,
                              const std::string & /*name*/,
                              bool /*required*/,
@@ -469,7 +482,20 @@ protected:
   {
   }
 
-  /** An integer input within a form */
+  /** A checkbox within a form */
+  virtual void form_checkbox(const ElementId & formId,
+                             const std::string & name,
+                             bool required,
+                             bool default_,
+                             bool /*default_from_user*/)
+  {
+    form_checkbox(formId, name, required, default_);
+  }
+
+  /** An integer input within a form
+   *
+   * This is kept for backward compatibility, mc_rtc never calls this version and you should implement the full version
+   */
   virtual void form_integer_input(const ElementId & /*formId*/,
                                   const std::string & /*name*/,
                                   bool /*required*/,
@@ -477,7 +503,20 @@ protected:
   {
   }
 
-  /** A number input within a form */
+  /** An integer input within a form */
+  virtual void form_integer_input(const ElementId & formId,
+                                  const std::string & name,
+                                  bool required,
+                                  int default_,
+                                  bool /*default_from_user*/)
+  {
+    form_integer_input(formId, name, required, default_);
+  }
+
+  /** A number input within a form
+   *
+   * This is kept for backward compatibility, mc_rtc never calls this version and you should implement the full version
+   */
   virtual void form_number_input(const ElementId & /*formId*/,
                                  const std::string & /*name*/,
                                  bool /*required*/,
@@ -485,7 +524,20 @@ protected:
   {
   }
 
-  /** A string input within a form */
+  /** A number input within a form */
+  virtual void form_number_input(const ElementId & formId,
+                                 const std::string & name,
+                                 bool required,
+                                 double default_,
+                                 bool /*default_from_user*/)
+  {
+    form_number_input(formId, name, required, default_);
+  }
+
+  /** A string input within a form
+   *
+   * This is kept for backward compatibility, mc_rtc never calls this version and you should implement the full version
+   */
   virtual void form_string_input(const ElementId & /*formId*/,
                                  const std::string & /*name*/,
                                  bool /*required*/,
@@ -493,12 +545,48 @@ protected:
   {
   }
 
-  /** An array input within a form */
+  /** A string input within a form */
+  virtual void form_string_input(const ElementId & formId,
+                                 const std::string & name,
+                                 bool required,
+                                 const std::string & default_,
+                                 bool /*default_from_user*/)
+  {
+    form_string_input(formId, name, required, default_);
+  }
+
+  /** An array input within a form
+   *
+   * This is kept for backward compatibility, mc_rtc never calls this version and you should implement the full version
+   */
   virtual void form_array_input(const ElementId & /*formId*/,
                                 const std::string & /*name*/,
                                 bool /*required*/,
                                 const Eigen::VectorXd & /*default*/,
                                 bool /*fixed_size*/)
+  {
+  }
+
+  /** An array input within a form */
+  virtual void form_array_input(const ElementId & formId,
+                                const std::string & name,
+                                bool required,
+                                const Eigen::VectorXd & default_,
+                                bool fixed_size,
+                                bool /*default_from_user*/)
+  {
+    form_array_input(formId, name, required, default_, fixed_size);
+  }
+
+  /** A combo input within a form
+   *
+   * This is kept for backward compatibility, mc_rtc never calls this version and you should implement the full version
+   */
+  virtual void form_combo_input(const ElementId & /*formId*/,
+                                const std::string & /*name*/,
+                                bool /*required*/,
+                                const std::vector<std::string> & /*values*/,
+                                bool /*send_index*/)
   {
   }
 
@@ -515,12 +603,14 @@ protected:
    * \p send_index If true, the implementation should send back the index
    * rather than the value
    */
-  virtual void form_combo_input(const ElementId & /*formId*/,
-                                const std::string & /*name*/,
-                                bool /*required*/,
-                                const std::vector<std::string> & /*values*/,
-                                bool /*send_index*/)
+  virtual void form_combo_input(const ElementId & formId,
+                                const std::string & name,
+                                bool required,
+                                const std::vector<std::string> & values,
+                                bool send_index,
+                                int /*def*/)
   {
+    form_combo_input(formId, name, required, values, send_index);
   }
 
   /** A data combo input within a form

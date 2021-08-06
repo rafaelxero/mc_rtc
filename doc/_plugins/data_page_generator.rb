@@ -91,7 +91,7 @@ module Jekyll
       if schema.has_key?("allOf")
         schema["allOf"].each_index{ | index |
           resolveAllOf(schema["allOf"][index])
-          schema = schema.deep_merge(schema["allOf"][index])
+          schema = schema.deep_merge(resolveAllOf(schema["allOf"][index]))
         }
         schema.delete("allOf");
       end
@@ -132,7 +132,8 @@ module Jekyll
             default = parent[key_out]["default"].dup()
           end
           if category != "definitions"
-            parent[key_out] = site.data["schemas"][category][name].dup()
+            # Merge with surrounding schema 
+            parent[key_out] = resolveAllOf(site.data["schemas"][category][name])
             if parent[key_out].has_key?("title")
               parent[key_out]["REF"] = "#{category}.#{name}"
             end
@@ -176,7 +177,7 @@ module Jekyll
       # Write generated schemas to a temporary file (for debug purposes)
       # File.open('/tmp/mc-rtc-doc-json-schemas.json', 'w') { |file| file.write(JSON.pretty_generate(site.data["schemas"])) }
       # puts "Generated json schema has been saved to /tmp/mc-rtc-doc-json-schemas.json"
-      default_categories = ["mc_rbdyn", "ConstraintSet", "MetaTask", "State", "Observers"]
+      default_categories = ["mc_control", "mc_rbdyn", "ConstraintSet", "MetaTask", "State", "Observers"]
       site.pages << AllSchemasPage.new(site, site.source, 'json.html', site.data["schemas"], default_categories, {"All objects" => 'json-full.html'})
       site.pages << AllSchemasPage.new(site, site.source, 'json-full.html', site.data["schemas"], ["Eigen", "SpaceVecAlg", "RBDyn", "Tasks", "GUI"] + default_categories)
     end

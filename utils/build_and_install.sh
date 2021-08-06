@@ -421,6 +421,9 @@ exec_log cmake --version
 exec_log python --version
 
 echo_log "-- Loading extra configuration for $OSTYPE"
+export SYSTEM_HAS_SPDLOG=OFF
+export SYSTEM_HAS_NINJA=ON
+export DISABLE_NINJA=OFF
 if [[ $OSTYPE == "darwin"* ]]
 then
   . $this_dir/config_build_and_install.macos.sh
@@ -523,37 +526,6 @@ echo_log "   APT_DEPENDENCIES=$APT_DEPENDENCIES"
 echo_log "   ROS_APT_DEPENDENCIES=$ROS_APT_DEPENDENCIES"
 echo_log "   SUDO_CMD=$SUDO_CMD"
 
-###############################################
-#  -- Check python/pip coherency if needed -- #
-###############################################
-
-if [ "x$WITH_PYTHON_SUPPORT" == xON ] && [ "x$PYTHON_FORCE_PYTHON2" == xOFF ] && [ "x$PYTHON_FORCE_PYTHON3" == xOFF ]
-then
-  if ! pip --version | grep -q "`python -c 'import sys; print(\"python {}.{}\".format(sys.version_info.major, sys.version_info.minor));'`"
-  then
-    echo_log "The pip command does not match the corresponding python version, this will lead to errors"
-    echo_log "Either fix your system or use --python-force-python2 true or --python-force-python3 true"
-  fi
-fi
-
-if [ "x$WITH_PYTHON_SUPPORT" == xON ] && ( [ "x$PYTHON_FORCE_PYTHON2" == xON ] || [ "x$PYTHON_BUILD_PYTHON2_AND_PYTHON3" == xON ] )
-then
-  if ! pip2 --version | grep -q "`python2 -c 'import sys; print(\"python {}.{}\".format(sys.version_info.major, sys.version_info.minor));'`"
-  then
-    echo_log "The pip2 command does not match the corresponding python2 version, this will lead to errors"
-    echo_log "Resolve the issue at your system level"
-  fi
-fi
-
-if [ "x$WITH_PYTHON_SUPPORT" == xON ] && ( [ "x$PYTHON_FORCE_PYTHON3" == xON ] || [ "x$PYTHON_BUILD_PYTHON3_AND_PYTHON3" == xON ] )
-then
-  if ! pip3 --version | grep -q "`python3 -c 'import sys; print(\"python {}.{}\".format(sys.version_info.major, sys.version_info.minor));'`"
-  then
-    echo_log "The pip3 command does not match the corresponding python3 version, this will lead to errors"
-    echo_log "Resolve the issue at your system level"
-  fi
-fi
-
 ###################################
 #  --  APT/Brew dependencies  --  #
 ###################################
@@ -623,6 +595,37 @@ echo_log ""
 echo_log "-- [SUCCESS] Successfully installed system dependencies"
 echo_log ""
 
+###############################################
+#  -- Check python/pip coherency if needed -- #
+###############################################
+
+if [ "x$WITH_PYTHON_SUPPORT" == xON ] && [ "x$PYTHON_FORCE_PYTHON2" == xOFF ] && [ "x$PYTHON_FORCE_PYTHON3" == xOFF ]
+then
+  if ! pip --version | grep -q "`python -c 'import sys; print(\"python {}.{}\".format(sys.version_info.major, sys.version_info.minor));'`"
+  then
+    echo_log "The pip command does not match the corresponding python version, this will lead to errors"
+    echo_log "Either fix your system or use --python-force-python2 true or --python-force-python3 true"
+  fi
+fi
+
+if [ "x$WITH_PYTHON_SUPPORT" == xON ] && ( [ "x$PYTHON_FORCE_PYTHON2" == xON ] || [ "x$PYTHON_BUILD_PYTHON2_AND_PYTHON3" == xON ] )
+then
+  if ! pip2 --version | grep -q "`python2 -c 'import sys; print(\"python {}.{}\".format(sys.version_info.major, sys.version_info.minor));'`"
+  then
+    echo_log "The pip2 command does not match the corresponding python2 version, this will lead to errors"
+    echo_log "Resolve the issue at your system level"
+  fi
+fi
+
+if [ "x$WITH_PYTHON_SUPPORT" == xON ] && ( [ "x$PYTHON_FORCE_PYTHON3" == xON ] || [ "x$PYTHON_BUILD_PYTHON3_AND_PYTHON3" == xON ] )
+then
+  if ! pip3 --version | grep -q "`python3 -c 'import sys; print(\"python {}.{}\".format(sys.version_info.major, sys.version_info.minor));'`"
+  then
+    echo_log "The pip3 command does not match the corresponding python3 version, this will lead to errors"
+    echo_log "Resolve the issue at your system level"
+  fi
+fi
+
 ########################
 ##  -- Install ROS --  #
 ########################
@@ -654,7 +657,7 @@ then
   fi
   CATKIN_DATA_WORKSPACE=$SOURCE_DIR/catkin_data_ws
   CATKIN_DATA_WORKSPACE_SRC=${CATKIN_DATA_WORKSPACE}/src
-  if [[ ! -d $CATKIN_DATA_WORKSPACE_SRC ]]
+  if [[ ! -f $CATKIN_DATA_WORKSPACE_SRC/devel/setup.bash ]]
   then
     mkdir -p ${CATKIN_DATA_WORKSPACE_SRC}
     if $NOT_CLONE_ONLY
@@ -670,7 +673,7 @@ then
   fi
   CATKIN_WORKSPACE=$SOURCE_DIR/catkin_ws
   CATKIN_WORKSPACE_SRC=${CATKIN_WORKSPACE}/src
-  if [[ ! -d $CATKIN_WORKSPACE_SRC ]]
+  if [[ ! -f $CATKIN_WORKSPACE_SRC/devel/setup.bash ]]
   then
     mkdir -p ${CATKIN_WORKSPACE_SRC}
     if $NOT_CLONE_ONLY
@@ -739,7 +742,9 @@ clone_git_dependency()
     fi
     cd "$2/$git_dep"
     if ! git checkout "$git_dep_branch" -B $git_dep_branch; then
-      echo_log "[ERROR] Failed to checkout branch ${git_dep_branch}"
+      if ! git checkout "origin/$git_dep_branch" -B $git_dep_branch; then
+        echo_log "[ERROR] Failed to checkout branch ${git_dep_branch}"
+      fi
     fi
     git submodule sync --recursive && git submodule update --init --recursive
   else
@@ -870,7 +875,12 @@ check_and_clone_git_dependency()
 }
 
 # If the dependencies have already been cloned, check if the local state of the repository is clean before upgrading
-GIT_DEPENDENCIES="gabime/spdlog#v1.6.1 humanoid-path-planner/hpp-spline#v4.7.0 jrl-umi3218/SpaceVecAlg jrl-umi3218/state-observation jrl-umi3218/sch-core jrl-umi3218/RBDyn jrl-umi3218/eigen-qld jrl-umi3218/eigen-quadprog jrl-umi3218/Tasks jrl-umi3218/mc_rbdyn_urdf"
+GIT_DEPENDENCIES="humanoid-path-planner/hpp-spline#v4.7.0 jrl-umi3218/SpaceVecAlg jrl-umi3218/state-observation jrl-umi3218/sch-core jrl-umi3218/RBDyn jrl-umi3218/eigen-qld jrl-umi3218/eigen-quadprog jrl-umi3218/Tasks jrl-umi3218/mc_rbdyn_urdf"
+if [ "x$SYSTEM_HAS_SPDLOG" == xOFF ]
+then
+  GIT_DEPENDENCIES="gabime/spdlog#v1.6.1 $GIT_DEPENDENCIES"
+fi
+
 for repo in $GIT_DEPENDENCIES; do
   check_and_clone_git_dependency $repo $SOURCE_DIR
 done
@@ -904,10 +914,10 @@ if $WITH_HRP2
 then
   if $WITH_ROS_SUPPORT
   then
-    check_and_clone_git_dependency git@gite.lirmm.fr:mc-hrp2/hrp2_drc $CATKIN_DATA_WORKSPACE_SRC
+    check_and_clone_git_dependency git@gite.lirmm.fr:mc-hrp2/hrp2_drc_description#main $CATKIN_DATA_WORKSPACE_SRC
     echo_log "-- [OK] Successfully cloned and updated the robot description to $git_dep to $repo_dir (catkin)"
   else
-    check_and_clone_git_dependency git@gite.lirmm.fr:mc-hrp2/hrp2_drc $SOURCE_DIR
+    check_and_clone_git_dependency git@gite.lirmm.fr:mc-hrp2/hrp2_drc_description#main $SOURCE_DIR
     echo_log "-- [OK] Successfully cloned and updated the robot description $git_dep to $repo_dir (no catkin)"
   fi
   check_and_clone_git_dependency git@gite.lirmm.fr:mc-hrp2/mc-hrp2 $SOURCE_DIR
@@ -1096,7 +1106,13 @@ build_git_dependency_configure_and_build()
   then
     custom_install_prefix="$2"
   fi
+  cmake_generator=""
+  if [ "x$SYSTEM_HAS_NINJA" == xON ] && [ "x$DISABLE_NINJA" != xON ] && [ ! -f Makefile ]
+  then
+    cmake_generator="-GNinja"
+  fi
     exec_log cmake $SOURCE_DIR/$git_dep -DCMAKE_INSTALL_PREFIX:STRING="$custom_install_prefix" \
+                    -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON \
                     -DPYTHON_BINDING:BOOL=${WITH_PYTHON_SUPPORT} \
                     -DPYTHON_BINDING_USER_INSTALL:BOOL=${PYTHON_USER_INSTALL} \
                     -DPYTHON_BINDING_FORCE_PYTHON2:BOOL=${PYTHON_FORCE_PYTHON2} \
@@ -1104,6 +1120,7 @@ build_git_dependency_configure_and_build()
                     -DPYTHON_BINDING_BUILD_PYTHON2_AND_PYTHON3:BOOL=${PYTHON_BUILD_PYTHON2_AND_PYTHON3} \
                     -DMC_LOG_UI_PYTHON_EXECUTABLE:STRING="${MC_LOG_UI_PYTHON_EXECUTABLE}" \
                     -DCMAKE_BUILD_TYPE:STRING="$BUILD_TYPE" \
+                    ${cmake_generator} \
                     ${CMAKE_ADDITIONAL_OPTIONS}
   exit_if_error "-- [ERROR] CMake configuration failed for $git_dep"
   build_project $git_dep
@@ -1154,8 +1171,11 @@ build_catkin_workspace()
 ###############################
 
 export OLD_CMAKE_OPTIONS="${CMAKE_ADDITIONAL_OPTIONS}"
-export CMAKE_ADDITIONAL_OPTIONS="-DSPDLOG_BUILD_EXAMPLE:BOOL=OFF -DSPDLOG_BUILD_SHARED:BOOL=ON ${CMAKE_ADDITIONAL_OPTIONS}"
-build_git_dependency_no_test gabime/spdlog
+if [ "x$SYSTEM_HAS_SPDLOG" == xOFF ]
+then
+  export CMAKE_ADDITIONAL_OPTIONS="-DSPDLOG_BUILD_EXAMPLE:BOOL=OFF -DSPDLOG_BUILD_SHARED:BOOL=ON ${CMAKE_ADDITIONAL_OPTIONS}"
+  build_git_dependency_no_test gabime/spdlog
+fi
 export CMAKE_ADDITIONAL_OPTIONS="-DBUILD_PYTHON_INTERFACE:BOOL=OFF ${OLD_CMAKE_OPTIONS}"
 build_git_dependency_no_test humanoid-path-planner/hpp-spline
 build_git_dependency jrl-umi3218/state-observation
@@ -1165,12 +1185,15 @@ then
   build_git_dependency jrl-umi3218/Eigen3ToPython eigen
 fi
 build_git_dependency jrl-umi3218/SpaceVecAlg sva
+export CMAKE_ADDITIONAL_OPTIONS="-DCMAKE_CXX_STANDARD=11 ${OLD_CMAKE_OPTIONS}"
 build_git_dependency jrl-umi3218/sch-core
 if [ "x$WITH_PYTHON_SUPPORT" == xON ]
 then
   build_git_dependency jrl-umi3218/sch-core-python sch
 fi
+export CMAKE_ADDITIONAL_OPTIONS="${OLD_CMAKE_OPTIONS}"
 build_git_dependency jrl-umi3218/RBDyn rbdyn
+export DISABLE_NINJA=ON
 build_git_dependency jrl-umi3218/eigen-qld eigen_qld
 build_git_dependency jrl-umi3218/eigen-quadprog
 if $WITH_LSSOL
@@ -1179,6 +1202,7 @@ then
   build_git_dependency git@gite.lirmm.fr:multi-contact/eigen-lssol
   echo_log "-- [OK] Successfully built $git_dep to $repo_dir"
 fi
+export DISABLE_NINJA=OFF
 
 build_git_dependency jrl-umi3218/Tasks tasks
 build_git_dependency jrl-umi3218/mc_rbdyn_urdf mc_rbdyn_urdf
@@ -1259,7 +1283,13 @@ then
 else
   CMAKE_ADDITIONAL_OPTIONS="${CMAKE_ADDITIONAL_OPTIONS} -DDISABLE_ROS=OFF"
 fi
+cmake_generator=""
+if [ "x$SYSTEM_HAS_NINJA" == xON ] && [ "x$DISABLE_NINJA" != xON ] && [ ! -f Makefile ]
+then
+  cmake_generator="-GNinja"
+fi
 exec_log cmake $mc_rtc_dir -DCMAKE_BUILD_TYPE:STRING="$BUILD_TYPE" \
+                   -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON \
                    -DCMAKE_INSTALL_PREFIX:STRING="$INSTALL_PREFIX" \
                    -DBUILD_TESTING:BOOL=${BUILD_TESTING_OPTION} \
                    -DBUILD_BENCHMARKS:BOOL=${BUILD_BENCHMARKS_OPTION} \
@@ -1268,6 +1298,8 @@ exec_log cmake $mc_rtc_dir -DCMAKE_BUILD_TYPE:STRING="$BUILD_TYPE" \
                    -DPYTHON_BINDING_FORCE_PYTHON2:BOOL=${PYTHON_FORCE_PYTHON2} \
                    -DPYTHON_BINDING_FORCE_PYTHON3:BOOL=${PYTHON_FORCE_PYTHON3} \
                    -DPYTHON_BINDING_BUILD_PYTHON2_AND_PYTHON3:BOOL=${PYTHON_BUILD_PYTHON2_AND_PYTHON3} \
+                   -DMC_LOG_UI_PYTHON_EXECUTABLE:STRING="${MC_LOG_UI_PYTHON_EXECUTABLE}" \
+                   ${cmake_generator} \
                    ${CMAKE_ADDITIONAL_OPTIONS}
 exit_if_error "CMake configuration failed for mc_rtc"
 build_project mc_rtc
@@ -1301,7 +1333,7 @@ then
   echo_log "-- Installing with HRP2 robot support"
   if ! $WITH_ROS_SUPPORT
   then
-    build_git_dependency git@gite.lirmm.fr:mc-hrp2/hrp2_drc
+    build_git_dependency git@gite.lirmm.fr:mc-hrp2/hrp2_drc_description
     echo_log "-- [OK] Successfully built the robot description $git_dep (no catkin)"
   fi
   build_git_dependency git@gite.lirmm.fr:mc-hrp2/mc-hrp2

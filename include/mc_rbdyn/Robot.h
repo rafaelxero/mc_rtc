@@ -16,8 +16,6 @@
 #include <RBDyn/FD.h>
 #include <RBDyn/Friction.h>
 
-#include <sch/S_Object/S_Object.h>
-
 #include <memory>
 #include <unordered_map>
 
@@ -32,7 +30,6 @@ struct MC_RBDYN_DLLAPI Robot
   friend struct Robots;
 
 public:
-  using S_ObjectPtr = std::shared_ptr<sch::S_Object>;
   using convex_pair_t = std::pair<std::string, S_ObjectPtr>;
 
 public:
@@ -377,6 +374,10 @@ public:
   const std::vector<std::vector<double>> & al() const;
   /** Access the robot's angular upper acceleration limits (const) */
   const std::vector<std::vector<double>> & au() const;
+  /** Access the robot's angular lower jerk limits (const) */
+  const std::vector<std::vector<double>> & jl() const;
+  /** Access the robot's angular upper jerk limits (const) */
+  const std::vector<std::vector<double>> & ju() const;
   /** Access the robot's angular lower torque limits (const) */
   const std::vector<std::vector<double>> & tl() const;
   /** Access the robot's angular upper torque limits (const) */
@@ -397,6 +398,10 @@ public:
   std::vector<std::vector<double>> & al();
   /** Access the robot's angular upper acceleration limits */
   std::vector<std::vector<double>> & au();
+  /** Access the robot's angular lower jerk limits */
+  std::vector<std::vector<double>> & jl();
+  /** Access the robot's angular upper jerk limits */
+  std::vector<std::vector<double>> & ju();
   /** Access the robot's angular lower torque limits */
   std::vector<std::vector<double>> & tl();
   /** Access the robot's angular upper torque limits */
@@ -866,6 +871,9 @@ public:
    */
   mc_control::Gripper & gripper(const std::string & gripper);
 
+  /** Checks whether a gripper is part of this robot */
+  bool hasGripper(const std::string & gripper) const;
+
   inline const std::unordered_map<std::string, mc_control::GripperPtr> & grippersByName() const
   {
     return grippers_;
@@ -889,6 +897,8 @@ private:
   std::vector<std::vector<double>> vu_;
   std::vector<std::vector<double>> al_;
   std::vector<std::vector<double>> au_;
+  std::vector<std::vector<double>> jl_;
+  std::vector<std::vector<double>> ju_;
   std::vector<std::vector<double>> tl_;
   std::vector<std::vector<double>> tu_;
   std::vector<std::vector<double>> tdl_;

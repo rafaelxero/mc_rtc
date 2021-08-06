@@ -22,6 +22,8 @@
 
 #include <RBDyn/parsers/common.h>
 
+#include <sch/S_Object/S_Object.h>
+
 #include <array>
 #include <map>
 #include <vector>
@@ -30,6 +32,8 @@
 
 namespace mc_rbdyn
 {
+
+using S_ObjectPtr = std::shared_ptr<sch::S_Object>;
 
 /** Holds a vector of unique pointers
  *
@@ -91,6 +95,15 @@ struct MC_RBDYN_DLLAPI RobotModule
    */
   using accelerationBounds_t = std::vector<std::map<std::string, std::vector<double>>>;
 
+  /*! Holds information regarding the additional jerk bounds (specified in addition to urdf limits)
+   *
+   * The vector should have 2 entries:
+   * - lower/upper jerk bounds
+   *
+   * Each entry is a map joint name <-> bound
+   */
+  using jerkBounds_t = std::vector<std::map<std::string, std::vector<double>>>;
+
   /*! Holds information regarding the additional torque-derivative bounds (specified in addition to urdf limits)
    *
    * The vector should have 2 entries:
@@ -126,6 +139,12 @@ struct MC_RBDYN_DLLAPI RobotModule
         releaseSafetyOffset(releaseSafetyOffset), overCommandLimitIterN(overCommandLimitIterN)
       {
       }
+
+      /*! Load safety parameters from a configuration object */
+      void load(const mc_rtc::Configuration & config);
+      /*! Save safety parameters */
+      mc_rtc::Configuration save() const;
+
       /*! Percentage of max velocity of active joints in the gripper */
       double percentVMax;
       /*! Difference between the command and the reality that triggers the safety */
@@ -274,6 +293,20 @@ struct MC_RBDYN_DLLAPI RobotModule
     return _accelerationBounds;
   }
 
+  /** Returns the robot's jerk bounds
+   *
+   * The vector should hold 2 string -> vector<double> map
+   *
+   * Each map's keys are joint names and values are joint limits.
+   *
+   * They should be provided in the following order:
+   * - jerk limits (lower/upper)
+   */
+  const std::vector<std::map<std::string, std::vector<double>>> & jerkBounds() const
+  {
+    return _jerkBounds;
+  }
+
   /** Returns the robot's torque-derivative bounds
    *
    * The vector should hold 2 string -> vector<double> map
@@ -305,7 +338,9 @@ struct MC_RBDYN_DLLAPI RobotModule
 
   /** Returns a map describing the convex hulls for the robot
    *
-   * A key defines a valid collision name, a value is composed of two strings:
+   * A key defines a valid collision name, there should be no collision with the names in \ref collisionObjects()
+   *
+   * A value is composed of two strings:
    *
    * 1. the name of the body the convex is attached to
    *
@@ -317,6 +352,24 @@ struct MC_RBDYN_DLLAPI RobotModule
   const std::map<std::string, std::pair<std::string, std::string>> & convexHull() const
   {
     return _convexHull;
+  }
+
+  /** Returns a map describing collision objects for the robot
+   *
+   * A key defines a valid collision name, there should be no collision with the names \ref convexHull()
+   *
+   * A value is composed of two strings:
+   *
+   * 1. the name of the body the object is attached to
+   *
+   * 2. the collision object
+   *
+   * The transformation between the convex and the body it's attached to are
+   * provided in a separate map see \ref collisionTransforms()
+   */
+  const std::map<std::string, std::pair<std::string, S_ObjectPtr>> & collisionObjects() const
+  {
+    return _collisionObjects;
   }
 
   /** Returns a map describing the STPBV hulls for the robot
@@ -534,12 +587,16 @@ struct MC_RBDYN_DLLAPI RobotModule
   bounds_t _bounds;
   /** \see accelerationBounds() */
   accelerationBounds_t _accelerationBounds;
+  /** \see jerkBounds() */
+  jerkBounds_t _jerkBounds;
   /** \see torqueDerivativeBounds() */
   torqueDerivativeBounds_t _torqueDerivativeBounds;
   /** \see stance() */
   std::map<std::string, std::vector<double>> _stance;
   /** \see convexHull() */
   std::map<std::string, std::pair<std::string, std::string>> _convexHull;
+  /** \see collisionObjects() */
+  std::map<std::string, std::pair<std::string, S_ObjectPtr>> _collisionObjects;
   /** \see stpbvHull() */
   std::map<std::string, std::pair<std::string, std::string>> _stpbvHull;
   /** Holds visual representation of bodies in the robot */

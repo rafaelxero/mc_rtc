@@ -11,6 +11,7 @@
 #include <mc_rbdyn/surface_utils.h>
 #include <mc_rtc/constants.h>
 #include <mc_rtc/logging.h>
+#include <mc_rtc/pragma.h>
 
 #include <RBDyn/CoM.h>
 #include <RBDyn/EulerIntegration.h>
@@ -33,6 +34,7 @@ namespace
 using bound_t = std::vector<std::vector<double>>;
 using bounds_t = std::tuple<bound_t, bound_t, bound_t, bound_t, bound_t, bound_t>;
 using accelerationBounds_t = std::tuple<bound_t, bound_t>;
+using jerkBounds_t = std::tuple<bound_t, bound_t>;
 using torqueDerivativeBounds_t = std::tuple<bound_t, bound_t>;
 using rm_bounds_t = mc_rbdyn::RobotModule::bounds_t;
 using rm_bound_t = rm_bounds_t::value_type;
@@ -101,6 +103,26 @@ accelerationBounds_t acceleration_bounds(const rbd::MultiBody & mb, const rm_bou
   };
   return std::make_tuple(fill_bound(mb, "lower acceleration", safe_bounds(0), &rbd::Joint::dof, -INFINITY, -INFINITY),
                          fill_bound(mb, "upper acceleration", safe_bounds(1), &rbd::Joint::dof, INFINITY, INFINITY));
+}
+
+/** Generate jerk bounds compatible with the given MultiBody
+ *
+ * If bounds is provided, use the values provided to build the bounds.
+ *
+ * Otherwise, default bounds are returned.
+ */
+jerkBounds_t jerk_bounds(const rbd::MultiBody & mb, const rm_bounds_t & bounds)
+{
+  rm_bound_t default_bound = {};
+  auto safe_bounds = [&bounds, &default_bound](size_t idx) -> const rm_bound_t & {
+    if(idx < bounds.size())
+    {
+      return bounds[idx];
+    }
+    return default_bound;
+  };
+  return std::make_tuple(fill_bound(mb, "lower jerk", safe_bounds(0), &rbd::Joint::dof, -INFINITY, -INFINITY),
+                         fill_bound(mb, "upper jerk", safe_bounds(1), &rbd::Joint::dof, INFINITY, INFINITY));
 }
 
 /** Generate torque-derivative bounds compatible with the given MultiBody
@@ -229,11 +251,8 @@ namespace mc_rbdyn
 
 // We can safely ignore those since they are due to different index types and
 // our index never go near unsafe territories
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wsign-conversion"
-#ifdef __clang__
-#  pragma clang diagnostic ignored "-Wshorten-64-to-32"
-#endif
+MC_RTC_diagnostic_push
+MC_RTC_diagnostic_ignored(GCC, "-Wsign-conversion", ClangOnly, "-Wshorten-64-to-32")
 
 Robot::Robot(const std::string & name,
              Robots & robots,
@@ -307,10 +326,19 @@ Robot::Robot(const std::string & name,
   }
   std::tie(al_, au_) = acceleration_bounds(mb(), module_.accelerationBounds());
 
+  if(module_.jerkBounds().size() != 0 && module_.jerkBounds().size() != 2)
+  {
+    mc_rtc::log::error_and_throw<std::invalid_argument>(
+        "The additional jerk bounds of RobotModule \"{}\" have a size of {} "
+        "instead of 2 ([jl, ju]).",
+        module_.name, module_.jerkBounds().size());
+  }
+  std::tie(jl_, ju_) = jerk_bounds(mb(), module_.jerkBounds());
+
   if(module_.torqueDerivativeBounds().size() != 0 && module_.torqueDerivativeBounds().size() != 2)
   {
     mc_rtc::log::error_and_throw<std::invalid_argument>(
-        "The additional acceleration bounds of RobotModule \"{}\" have a size of {} "
+        "The additional torque-derivative bounds of RobotModule \"{}\" have a size of {} "
         "instead of 2 ([tdl, tdu]).",
         module_.name, module_.torqueDerivativeBounds().size());
   }
@@ -319,22 +347,42 @@ Robot::Robot(const std::string & name,
   if(loadFiles)
   {
     loadSCH(*this, module_.convexHull(), &sch::mc_rbdyn::Polyhedron, convexes_, collisionTransforms_);
-  }
-  for(const auto & c : module_._collision)
-  {
-    const auto & body = c.first;
-    const auto & collisions = c.second;
-    if(collisions.size() == 1)
+    for(const auto & c : module_._collision)
     {
-      VisualToConvex(name_, body, body, collisions[0], convexes_, collisionTransforms_);
-      continue;
-    }
-    size_t added = 0;
-    for(const auto & col : collisions)
-    {
-      if(VisualToConvex(name_, body + "_" + std::to_string(added), body, col, convexes_, collisionTransforms_))
+      const auto & body = c.first;
+      const auto & collisions = c.second;
+      if(collisions.size() == 1)
       {
-        added++;
+        VisualToConvex(name_, body, body, collisions[0], convexes_, collisionTransforms_);
+        continue;
+      }
+      size_t added = 0;
+      for(const auto & col : collisions)
+      {
+        if(VisualToConvex(name_, body + "_" + std::to_string(added), body, col, convexes_, collisionTransforms_))
+        {
+          added++;
+        }
+      }
+    }
+    for(const auto & o : module_.collisionObjects())
+    {
+      if(convexes_.count(o.first) != 0)
+      {
+        mc_rtc::log::warning("While loading {}, another object named {} was already loaded, the object specified in "
+                             "collisionObjects will be ignored",
+                             name_, o.first);
+        continue;
+      }
+      convexes_[o.first] = {o.second.first, S_ObjectPtr(o.second.second->clone())};
+      auto it = module_.collisionTransforms().find(o.first);
+      if(it != module_.collisionTransforms().end())
+      {
+        collisionTransforms_[o.first] = it->second;
+      }
+      else
+      {
+        collisionTransforms_[o.first] = sva::PTransformd::Identity();
       }
     }
   }
@@ -363,10 +411,13 @@ Robot::Robot(const std::string & name,
   }
 
   forceSensors_ = module_.forceSensors();
-  for(auto & fs : forceSensors_)
+  if(loadFiles)
   {
-    bfs::path calib_file = bfs::path(module_.calib_dir) / std::string("calib_data." + fs.name());
-    fs.loadCalibrator(calib_file.string(), mbc().gravity);
+    for(auto & fs : forceSensors_)
+    {
+      bfs::path calib_file = bfs::path(module_.calib_dir) / std::string("calib_data." + fs.name());
+      fs.loadCalibrator(calib_file.string(), mbc().gravity);
+    }
   }
   for(size_t i = 0; i < forceSensors_.size(); ++i)
   {
@@ -801,6 +852,14 @@ const std::vector<std::vector<double>> & Robot::au() const
 {
   return au_;
 }
+const std::vector<std::vector<double>> & Robot::jl() const
+{
+  return jl_;
+}
+const std::vector<std::vector<double>> & Robot::ju() const
+{
+  return ju_;
+}
 const std::vector<std::vector<double>> & Robot::tl() const
 {
   return tl_;
@@ -840,6 +899,14 @@ std::vector<std::vector<double>> & Robot::al()
 std::vector<std::vector<double>> & Robot::au()
 {
   return au_;
+}
+std::vector<std::vector<double>> & Robot::jl()
+{
+  return jl_;
+}
+std::vector<std::vector<double>> & Robot::ju()
+{
+  return ju_;
 }
 std::vector<std::vector<double>> & Robot::tl()
 {
@@ -1084,7 +1151,7 @@ const std::map<std::string, Robot::convex_pair_t> & Robot::convexes() const
 
 void Robot::addConvex(const std::string & cName,
                       const std::string & body,
-                      Robot::S_ObjectPtr convex,
+                      S_ObjectPtr convex,
                       const sva::PTransformd & X_b_c)
 {
   if(convexes_.count(cName))
@@ -1341,20 +1408,13 @@ void Robot::copy(Robots & robots, const std::string & copyName, unsigned int rob
   robot.fixSurfaces();
   for(const auto & cH : convexes_)
   {
-    // FIXME Should implement sch::S_Object::clone in sch-core but this should be good enough for now
-    sch::S_Polyhedron * poly = dynamic_cast<sch::S_Polyhedron *>(cH.second.second.get());
-    if(poly)
-    {
-      robot.convexes_[cH.first] = {cH.second.first, std::make_shared<sch::S_Polyhedron>(*poly)};
-    }
-    else
-    {
-      mc_rtc::log::warning("Could not copy the convex {} as it's not an sch::S_Polyhedron object, send complaint to "
-                           "mc_rtc maintainers...",
-                           cH.first);
-    }
+    robot.convexes_[cH.first] = {cH.second.first, S_ObjectPtr(cH.second.second->clone())};
   }
   fixSCH(robot, robot.convexes_, robot.collisionTransforms_);
+  for(size_t i = 0; i < forceSensors_.size(); ++i)
+  {
+    robot.forceSensors_[i].copyCalibrator(forceSensors_[i]);
+  }
 }
 
 void Robot::copy(Robots & robots, const std::string & copyName, unsigned int robots_idx) const
@@ -1397,7 +1457,7 @@ void mc_rbdyn::Robot::addSurface(SurfacePtr surface, bool doNotReplace)
   surfaces_[surface->name()] = std::move(surface);
 }
 
-#pragma GCC diagnostic pop
+MC_RTC_diagnostic_pop
 
 double mc_rbdyn::Robot::mass() const
 {
@@ -1426,6 +1486,11 @@ mc_control::Gripper & Robot::gripper(const std::string & gripper)
     mc_rtc::log::error_and_throw<std::runtime_error>("No gripper named {} in robot {}", gripper, name());
   }
   return *grippers_.at(gripper);
+}
+
+bool Robot::hasGripper(const std::string & gripper) const
+{
+  return grippers_.count(gripper);
 }
 
 unsigned int robotIndexFromConfig(const mc_rtc::Configuration & config,

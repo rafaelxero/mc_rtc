@@ -54,14 +54,20 @@ void MetaTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
   if(dimWeight().size())
   {
     gui.addElement({"Tasks", name_, "Gains", "Dimensional"},
-                   mc_rtc::gui::ArrayInput("weight", [this]() { return this->dimWeight(); },
-                                           [this](const Eigen::VectorXd & v) { this->dimWeight(v); }));
+                   mc_rtc::gui::ArrayInput(
+                       "weight", [this]() { return this->dimWeight(); },
+                       [this](const Eigen::VectorXd & v) { this->dimWeight(v); }));
   }
 }
 
 void MetaTask::removeFromGUI(mc_rtc::gui::StateBuilder & gui)
 {
   gui.removeCategory({"Tasks", name_});
+}
+
+void MetaTask::removeFromLogger(mc_rtc::Logger & logger)
+{
+  logger.removeLogEntries(this);
 }
 
 std::function<bool(const mc_tasks::MetaTask & task, std::string &)> MetaTask::buildCompletionCriteria(

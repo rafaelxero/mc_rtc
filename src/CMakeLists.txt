@@ -18,7 +18,7 @@ macro(install_mc_rtc_lib_common MC_LIB KWD)
     target_compile_options(${MC_LIB} ${KWD} -matomics -s USE_PTHREADS=1)
   endif()
   if(TREAT_WARNINGS_AS_ERRORS)
-    if(WIN32)
+    if(MSVC)
       target_compile_options(${MC_LIB} ${KWD} $<BUILD_INTERFACE:/WX>)
     else()
       target_compile_options(${MC_LIB} ${KWD} $<BUILD_INTERFACE:-Werror>)
@@ -40,6 +40,9 @@ endmacro()
 macro(install_mc_rtc_lib MC_LIB)
   set_target_properties(${MC_LIB} PROPERTIES FOLDER mc_libraries/${MC_LIB})
   install_mc_rtc_lib_common(${MC_LIB} PUBLIC)
+  if(MSVC)
+    target_compile_options(${MC_LIB} PRIVATE "/bigobj")
+  endif()
   if(GENERATE_COVERAGE)
     target_compile_options(${MC_LIB} PRIVATE "--coverage")
     set_target_properties(${MC_LIB} PROPERTIES LINK_FLAGS "--coverage")
@@ -64,6 +67,8 @@ add_custom_command(OUTPUT ${VERSION_HEADER}
   COMMAND ${CMAKE_COMMAND} -DPROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
                            -DPROJECT_BINARY_DIR="${PROJECT_BINARY_DIR}"
                            -DPROJECT_VERSION="${PROJECT_VERSION}"
+                           -DPROJECT_VERSION_MAJOR="${PROJECT_VERSION_MAJOR}"
+                           -DMC_RTC_DEVELOPER_MODE="${MC_RTC_DEVELOPER_MODE}"
                             -P "${PROJECT_SOURCE_DIR}/CMakeModules/MakeVersionHeader.cmake"
   DEPENDS ${MC_RTC_ALL_FILES}
 )
@@ -105,6 +110,7 @@ set(mc_rtc_utils_HDR
   ../include/mc_rtc/DataStore.h
   ../include/mc_rtc/type_name.h
   ../include/mc_rtc/debug.h
+  ../include/mc_rtc/pragma.h
 )
 
 add_library(mc_rtc_utils SHARED ${mc_rtc_utils_SRC} ${mc_rtc_utils_HDR})
@@ -241,6 +247,7 @@ set(mc_rtc_gui_HDR
   ../include/mc_rtc/gui/Trajectory.h
   ../include/mc_rtc/gui/Transform.h
   ../include/mc_rtc/gui/types.h
+  ../include/mc_rtc/gui/Visual.h
   ../include/mc_rtc/gui/XYTheta.h
   ../include/mc_rtc/gui/details/traits.h
 

@@ -53,25 +53,19 @@ void MomentumTask::momentum(const sva::ForceVecd & m)
 void MomentumTask::addToLogger(mc_rtc::Logger & logger)
 {
   TrajectoryBase::addToLogger(logger);
-  logger.addLogEntry(name_ + "_target_momentum", [this]() { return momentum(); });
+  logger.addLogEntry(name_ + "_target_momentum", this, [this]() { return momentum(); });
   // FIXME Not correct with dimWeight
-  logger.addLogEntry(name_ + "_momentum", [this]() { return sva::ForceVecd(momentum().vector() - errorT->eval()); });
-}
-
-void MomentumTask::removeFromLogger(mc_rtc::Logger & logger)
-{
-  TrajectoryBase::removeFromLogger(logger);
-  logger.removeLogEntry(name_ + "_momentum");
-  logger.removeLogEntry(name_ + "_target_momentum");
+  logger.addLogEntry(name_ + "_momentum", this,
+                     [this]() { return sva::ForceVecd(momentum().vector() - errorT->eval()); });
 }
 
 void MomentumTask::addToGUI(mc_rtc::gui::StateBuilder & gui)
 {
   TrajectoryTaskGeneric<tasks::qp::MomentumTask>::addToGUI(gui);
   gui.addElement({"Tasks", name_},
-                 mc_rtc::gui::ArrayInput("target", {"cx", "cy", "cz", "fx", "fy", "fz"},
-                                         [this]() { return this->momentum(); },
-                                         [this](const sva::ForceVecd & m) { this->momentum(m); }),
+                 mc_rtc::gui::ArrayInput(
+                     "target", {"cx", "cy", "cz", "fx", "fy", "fz"}, [this]() { return this->momentum(); },
+                     [this](const sva::ForceVecd & m) { this->momentum(m); }),
                  mc_rtc::gui::ArrayLabel("momentum", {"cx", "cy", "cz", "fx", "fy", "fz"}, [this]() -> Eigen::Vector6d {
                    return this->momentum().vector() - this->errorT->eval();
                  }));
