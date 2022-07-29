@@ -6,13 +6,23 @@ set(MC_RTC_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../include")
 
 set(VERSION_SCRIPT_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/version-script.lds")
 
+if(UNIX AND NOT EMSCRIPTEN)
+  include(CheckCXXSourceCompiles)
+  check_cxx_compiler_flag("-msse2" SSE2_SUPPORTED)
+endif()
+
 macro(install_mc_rtc_lib_common MC_LIB KWD)
   target_include_directories(${MC_LIB} INTERFACE $<INSTALL_INTERFACE:include> $<BUILD_INTERFACE:${MC_RTC_INCLUDE_DIR}>)
+  if(MSVC)
+    target_compile_options(${MC_LIB} ${KWD} /source-charset:utf-8)
+  endif()
   if(NOT EMSCRIPTEN)
     if(WIN32)
       target_compile_definitions(${MC_LIB} ${KWD} "-DNOMINMAX"  "-D_ENABLE_EXTENDED_ALIGNED_STORAGE")
     else()
-      target_compile_options(${MC_LIB} ${KWD} "-mfpmath=sse" "-msse2")
+      if(SSE2_SUPPORTED)
+        target_compile_options(${MC_LIB} ${KWD} "-mfpmath=sse" "-msse2")
+      endif()
     endif()
   else()
     target_compile_options(${MC_LIB} ${KWD} -matomics -s USE_PTHREADS=1)
@@ -54,9 +64,9 @@ macro(install_mc_rtc_lib MC_LIB)
   add_library(mc_rtc::${MC_LIB} ALIAS ${MC_LIB})
   install(TARGETS ${MC_LIB}
     EXPORT "${TARGETS_EXPORT_NAME}"
-    RUNTIME DESTINATION bin
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
+    RUNTIME DESTINATION "${MC_RTC_BINDIR}"
+    LIBRARY DESTINATION "${MC_RTC_LIBDIR}"
+    ARCHIVE DESTINATION "${MC_RTC_LIBDIR}"
   )
 endmacro()
 
@@ -86,6 +96,7 @@ set(mc_rtc_utils_SRC
   mc_rtc/iterate_binary_log.cpp
   mc_rtc/Logger.cpp
   mc_rtc/MessagePackBuilder.cpp
+  mc_rtc/deprecated.cpp
   mc_rtc/logging.cpp
   mc_rtc/version.cpp
   ${DEBUG_SOURCE}
@@ -110,13 +121,19 @@ set(mc_rtc_utils_HDR
   ../include/mc_rtc/DataStore.h
   ../include/mc_rtc/type_name.h
   ../include/mc_rtc/debug.h
+  ../include/mc_rtc/deprecated.h
   ../include/mc_rtc/pragma.h
+  ../include/mc_rtc/shared.h
 )
 
 add_library(mc_rtc_utils SHARED ${mc_rtc_utils_SRC} ${mc_rtc_utils_HDR})
 set_target_properties(mc_rtc_utils PROPERTIES COMPILE_FLAGS "-DMC_RTC_UTILS_EXPORTS")
 target_include_directories(mc_rtc_utils PRIVATE "${PROJECT_BINARY_DIR}/include/mc_rtc")
-target_link_libraries(mc_rtc_utils PUBLIC SpaceVecAlg::SpaceVecAlg Boost::filesystem Boost::disable_autolinking yaml-cpp spdlog::spdlog PRIVATE $<BUILD_INTERFACE:mc_rtc_3rd_party::RapidJSON>)
+target_compile_definitions(mc_rtc_utils PUBLIC ${BOOST_USE_STACKTRACE_DEFINE})
+target_link_libraries(mc_rtc_utils PUBLIC SpaceVecAlg::SpaceVecAlg Boost::${BOOST_STACKTRACE} Boost::filesystem Boost::disable_autolinking yaml-cpp spdlog::spdlog ${CMAKE_DL_LIBS} PRIVATE $<BUILD_INTERFACE:mc_rtc_3rd_party::RapidJSON>)
+if(NOT Boost_USE_STATIC_LIBS)
+  target_link_libraries(mc_rtc_utils PUBLIC Boost::dynamic_linking)
+endif()
 if(NOT MC_RTC_BUILD_STATIC)
   target_link_libraries(mc_rtc_utils PRIVATE mpack)
 else()
@@ -140,6 +157,9 @@ set(mc_rtc_loader_HDR
 add_library(mc_rtc_loader SHARED ${mc_rtc_loader_SRC} ${mc_rtc_loader_HDR})
 set_target_properties(mc_rtc_loader PROPERTIES COMPILE_FLAGS "-DMC_RTC_LOADER_EXPORTS")
 target_link_libraries(mc_rtc_loader PUBLIC Boost::filesystem Boost::disable_autolinking mc_rtc_utils)
+if(NOT Boost_USE_STATIC_LIBS)
+  target_link_libraries(mc_rtc_loader PUBLIC Boost::dynamic_linking)
+endif()
 if(NOT MC_RTC_BUILD_STATIC)
   target_link_libraries(mc_rtc_loader PUBLIC ${LTDL})
 endif()
@@ -168,10 +188,13 @@ mc_rbdyn/ZMP.cpp
 mc_control/generic_gripper.cpp
 mc_rbdyn/Device.cpp
 mc_rbdyn/BodySensor.cpp
+mc_rbdyn/Frame.cpp
+mc_rbdyn/RobotFrame.cpp
 )
 
 set(mc_rbdyn_HDR
 ../include/mc_rbdyn/api.h
+../include/mc_rbdyn/fwd.h
 ../include/mc_rbdyn/Contact.h
 ../include/mc_rbdyn/contact_transform.h
 ../include/mc_rbdyn/CylindricalSurface.h
@@ -203,11 +226,14 @@ set(mc_rbdyn_HDR
 ../include/mc_rbdyn/ZMP.h
 ../include/mc_control/generic_gripper.h
 ../include/mc_rbdyn/Device.h
+../include/mc_rbdyn/Frame.h
+../include/mc_rbdyn/RobotFrame.h
 )
 
 add_library(mc_rbdyn SHARED ${mc_rbdyn_SRC} ${mc_rbdyn_HDR})
 set_target_properties(mc_rbdyn PROPERTIES COMPILE_FLAGS "-DMC_RBDYN_EXPORTS")
-target_link_libraries(mc_rbdyn PUBLIC mc_rbdyn_urdf::mc_rbdyn_urdf RBDyn::Parsers Tasks::Tasks mc_rtc_loader mc_rtc_utils mc_filter GEOS::geos)
+target_link_libraries(mc_rbdyn PUBLIC RBDyn::Parsers Tasks::Tasks mc_rtc_loader mc_rtc_utils mc_filter GEOS::geos)
+target_compile_definitions(mc_rbdyn PUBLIC -DUSE_UNSTABLE_GEOS_CPP_API)
 # qhull
 if(MC_RTC_BUILD_STATIC)
   target_link_libraries(mc_rbdyn PRIVATE "-Wl,--no-whole-archive" qhullstatic_r "-Wl,--no-whole-archive" qhullcpp)
@@ -337,13 +363,13 @@ set(mc_trajectory_HDR
 
 add_library(mc_trajectory SHARED ${mc_trajectory_SRC} ${mc_trajectory_HDR})
 set_target_properties(mc_trajectory PROPERTIES COMPILE_FLAGS "-DMC_TRAJECTORY_EXPORTS")
-target_link_libraries(mc_trajectory PUBLIC mc_rtc_3rd_party::hpp-spline mc_rtc::mc_rtc_gui)
+target_link_libraries(mc_trajectory PUBLIC ndcurves::ndcurves mc_rtc::mc_rtc_gui)
 install_mc_rtc_lib(mc_trajectory)
 
 set(mc_tasks_SRC
 mc_tasks/MomentumTask.cpp
 mc_tasks/PositionTask.cpp
-mc_tasks/SurfaceTransformTask.cpp
+mc_tasks/TransformTask.cpp
 mc_tasks/OrientationTask.cpp
 mc_tasks/VectorOrientationTask.cpp
 mc_tasks/EndEffectorTask.cpp
@@ -361,7 +387,7 @@ mc_tasks/GazeTask.cpp
 mc_tasks/PositionBasedVisServoTask.cpp
 mc_tasks/PostureTask.cpp
 mc_tasks/LookAtTask.cpp
-mc_tasks/LookAtSurfaceTask.cpp
+mc_tasks/LookAtFrameTask.cpp
 mc_tasks/MetaTaskLoader.cpp
 mc_tasks/lipm_stabilizer/StabilizerTask.cpp
 mc_tasks/lipm_stabilizer/StabilizerTask_log_gui.cpp
@@ -380,6 +406,7 @@ set(mc_tasks_HDR
 ../include/mc_tasks/VectorOrientationTask.h
 ../include/mc_tasks/PositionTask.h
 ../include/mc_tasks/SurfaceTransformTask.h
+../include/mc_tasks/TransformTask.h
 ../include/mc_tasks/RelativeEndEffectorTask.h
 ../include/mc_tasks/SmoothTask.h
 ../include/mc_tasks/SplineTrajectoryTask.h
@@ -398,7 +425,8 @@ set(mc_tasks_HDR
 ../include/mc_tasks/PositionBasedVisServoTask.h
 ../include/mc_tasks/PostureTask.h
 ../include/mc_tasks/LookAtTask.h
-../include/mc_tasks/ExactCubicTrajectoryTask.h
+../include/mc_tasks/LookAtFrameTask.h
+../include/mc_tasks/LookAtSurfaceTask.h
 ../include/mc_tasks/lipm_stabilizer/StabilizerTask.h
 ../include/mc_tasks/lipm_stabilizer/Contact.h
 ../include/mc_tasks/lipm_stabilizer/ZMPCC.h
@@ -475,6 +503,7 @@ mc_control/mc_global_controller.cpp
 mc_control/mc_global_controller_configuration.cpp
 mc_control/mc_global_controller_gui.cpp
 mc_control/mc_global_controller_services.cpp
+mc_solver/QPSolver_setContacts.cpp
 )
 
 if(MC_RTC_BUILD_STATIC)
@@ -486,6 +515,7 @@ set(mc_control_HDR
 ../include/mc_control/api.h
 ../include/mc_control/CompletionCriteria.h
 ../include/mc_control/Configuration.h
+../include/mc_control/Contact.h
 ../include/mc_control/ControllerServer.h
 ../include/mc_control/GlobalPlugin.h
 ../include/mc_control/GlobalPluginMacros.h

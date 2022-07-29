@@ -1,9 +1,15 @@
 #
-# Copyright 2015-2019 CNRS-UM LIRMM, CNRS-AIST JRL
+# Copyright 2015-2022 CNRS-UM LIRMM, CNRS-AIST JRL
 #
 
 if(NOT DEFINED MC_LOG_UI_PYTHON_EXECUTABLE)
-  set(MC_LOG_UI_PYTHON_EXECUTABLE "python")
+  if(PYTHON_BINDING_FORCE_PYTHON3)
+    set(MC_LOG_UI_PYTHON_EXECUTABLE "python3")
+  elseif(PYTHON_BINDING_FORCE_PYTHON2)
+    set(MC_LOG_UI_PYTHON_EXECUTABLE "python2")
+  else()
+    set(MC_LOG_UI_PYTHON_EXECUTABLE "python")
+  endif()
 endif()
 
 find_package(Boost REQUIRED COMPONENTS program_options timer)
@@ -34,6 +40,9 @@ set(mc_bin_utils_SRC
 add_mc_rtc_utils(mc_bin_utils ${mc_bin_utils_SRC})
 target_include_directories(mc_bin_utils PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(mc_bin_utils PUBLIC Boost::program_options Boost::disable_autolinking)
+if(NOT Boost_USE_STATIC_LIBS)
+  target_link_libraries(mc_bin_utils PUBLIC Boost::dynamic_linking)
+endif()
 if(NOT MC_RTC_BUILD_STATIC)
   target_link_libraries(mc_bin_utils PRIVATE mpack)
 else()

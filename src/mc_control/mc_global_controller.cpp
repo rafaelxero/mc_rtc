@@ -13,6 +13,7 @@
 
 #include <mc_rbdyn/RobotLoader.h>
 
+#include <mc_rtc/ConfigurationHelpers.h>
 #include <mc_rtc/config.h>
 #include <mc_rtc/gui/Button.h>
 #include <mc_rtc/gui/Form.h>
@@ -50,48 +51,18 @@ MCGlobalController::MCGlobalController(const GlobalConfiguration & conf)
   try
   {
     plugin_loader_.reset(new mc_rtc::ObjectLoader<mc_control::GlobalPlugin>(
-        "MC_RTC_GLOBAL_PLUGIN", config.global_plugin_paths, config.use_sandbox, config.verbose_loader));
+        "MC_RTC_GLOBAL_PLUGIN", config.global_plugin_paths, config.verbose_loader));
   }
   catch(mc_rtc::LoaderException & exc)
   {
-    mc_rtc::log::error_and_throw<std::runtime_error>("Failed to initialize plugin loader");
+    mc_rtc::log::error_and_throw("Failed to initialize plugin loader");
   }
 #ifdef MC_RTC_BUILD_STATIC
-  GlobalPluginLoader::loader().enable_sandboxing(config.use_sandbox);
   GlobalPluginLoader::loader().set_verbosity(config.verbose_loader);
-  auto * plugin_loader = &GlobalPluginLoader::loader();
-#else
-  auto * plugin_loader = plugin_loader_.get();
 #endif
   for(const auto & plugin : config.global_plugins)
   {
-    try
-    {
-      plugins_.emplace_back(plugin, plugin_loader->create_unique_object(plugin));
-      GlobalPlugin * plugin = plugins_.back().plugin.get();
-      const auto & plugin_config = plugins_.back().plugin->configuration();
-      if(plugin_config.should_run_before)
-      {
-        plugins_before_.push_back({plugin, duration_ms{0}});
-        if(plugin_config.should_always_run)
-        {
-          plugins_before_always_.push_back(plugin);
-        }
-      }
-      if(plugin_config.should_run_after)
-      {
-        plugins_after_.push_back({plugin, duration_ms{0}});
-        if(plugin_config.should_always_run)
-        {
-          plugins_after_always_.push_back(plugin);
-        }
-      }
-    }
-    catch(mc_rtc::LoaderException & exc)
-    {
-      mc_rtc::log::error("Global plugin {} failed to load, functions provided by this plugin will not be available",
-                         plugin);
-    }
+    loadPlugin(plugin, "global configuration");
   }
 
   // Loading controller modules
@@ -99,14 +70,13 @@ MCGlobalController::MCGlobalController(const GlobalConfiguration & conf)
   try
   {
     controller_loader_.reset(new mc_rtc::ObjectLoader<mc_control::MCController>(
-        "MC_RTC_CONTROLLER", config.controller_module_paths, config.use_sandbox, config.verbose_loader));
+        "MC_RTC_CONTROLLER", config.controller_module_paths, config.verbose_loader));
   }
   catch(mc_rtc::LoaderException & exc)
   {
-    mc_rtc::log::error_and_throw<std::runtime_error>("Failed to initialize controller loader");
+    mc_rtc::log::error_and_throw("Failed to initialize controller loader");
   }
 #ifdef MC_RTC_BUILD_STATIC
-  ControllerLoader::loader().enable_sandboxing(config.use_sandbox);
   ControllerLoader::loader().set_verbosity(config.verbose_loader);
 #endif
   if(std::find(config.enabled_controllers.begin(), config.enabled_controllers.end(), "HalfSitPose")
@@ -123,6 +93,9 @@ MCGlobalController::MCGlobalController(const GlobalConfiguration & conf)
       current_ctrl = c;
       controller_ = controllers[c].get();
     }
+    config.load_controller_plugin_configs(c, config.global_plugins);
+    auto ctrl_plugins = mc_rtc::fromVectorOrElement<std::string>(config.controllers_configs[c], "Plugins", {});
+    config.load_controller_plugin_configs(c, ctrl_plugins);
   }
   next_ctrl = current_ctrl;
   next_controller_ = nullptr;
@@ -135,16 +108,9 @@ MCGlobalController::MCGlobalController(const GlobalConfiguration & conf)
                       "\t- The controller library is not in a path read by mc_rtc\n"
                       "\t- The controller constuctor segfaults\n"
                       "\t- The controller library hasn't been properly linked");
-    mc_rtc::log::error_and_throw<std::runtime_error>("No controller enabled");
+    mc_rtc::log::error_and_throw("No controller enabled");
   }
 
-  if(config.enable_log)
-  {
-    for(auto c : controllers)
-    {
-      c.second->logger().setup(config.log_policy, config.log_directory, config.log_template);
-    }
-  }
   if(config.enable_gui_server)
   {
     server_.reset(new mc_control::ControllerServer(config.timestep, config.gui_timestep, config.gui_server_pub_uris,
@@ -152,7 +118,14 @@ MCGlobalController::MCGlobalController(const GlobalConfiguration & conf)
   }
 }
 
-MCGlobalController::~MCGlobalController() {}
+MCGlobalController::~MCGlobalController()
+{
+  // We clear all datastore before (potentially) unloading any libraries
+  for(auto & ctl : controllers)
+  {
+    ctl.second->datastore().clear();
+  }
+}
 
 std::shared_ptr<mc_rbdyn::RobotModule> MCGlobalController::get_robot_module()
 {
@@ -197,121 +170,195 @@ void MCGlobalController::init(const std::vector<double> & initq, const std::arra
 
 void MCGlobalController::init(const std::vector<double> & initq, const sva::PTransformd & initAttitude)
 {
-  initEncoders(initq);
+  initEncoders(robot(), initq);
   robot().posW(initAttitude);
+  for(auto & robot : robots())
+  {
+    if(robot.robotIndex() == robots().robotIndex())
+    {
+      continue;
+    }
+    initEncoders(robot);
+  }
   this->initController();
 }
 
 void MCGlobalController::init(const std::vector<double> & initq)
 {
-  initEncoders(initq);
+  initEncoders(robot(), initq);
 
   auto & q = robot().mbc().q;
-  // Configure initial attitude (requires FK to be computed)
-  if(config.init_attitude_from_sensor)
+  if(!controller_->config().has("init_pos")
+     && !(controller_->config().has(robot().name()) && controller_->config()(robot().name()).has("init_pos")))
   {
-    auto initAttitude = [this](const mc_rbdyn::BodySensor & sensor) {
-      mc_rtc::log::info("Initializing attitude from body sensor: {}", sensor.name());
-      // Update free flyer from body sensor takin into account the kinematics
-      // between sensor and body
-      const auto & fb = robot().mb().body(0).name();
-      sva::PTransformd X_0_s(sensor.orientation(), sensor.position());
-      const auto X_s_b = sensor.X_b_s().inv();
-      sva::PTransformd X_b_fb = robot().X_b1_b2(sensor.parentBody(), fb);
-      sva::PTransformd X_s_fb = X_b_fb * X_s_b;
-      robot().posW(X_s_fb * X_0_s);
-    };
-    if(config.init_attitude_sensor.empty())
+    // Configure initial attitude (requires FK to be computed)
+    if(config.init_attitude_from_sensor)
     {
-      initAttitude(controller_->robot().bodySensor());
-    }
-    else
-    {
-      if(controller_->robot().hasBodySensor(config.init_attitude_sensor))
+      auto initAttitude = [this](const mc_rbdyn::BodySensor & sensor) {
+        mc_rtc::log::info("Initializing attitude from body sensor: {}", sensor.name());
+        // Update free flyer from body sensor takin into account the kinematics
+        // between sensor and body
+        const auto & fb = robot().mb().body(0).name();
+        sva::PTransformd X_0_s(sensor.orientation(), sensor.position());
+        const auto X_s_b = sensor.X_b_s().inv();
+        sva::PTransformd X_b_fb = robot().X_b1_b2(sensor.parentBody(), fb);
+        sva::PTransformd X_s_fb = X_b_fb * X_s_b;
+        robot().posW(X_s_fb * X_0_s);
+      };
+      if(config.init_attitude_sensor.empty())
       {
-        initAttitude(controller_->robot().bodySensor(config.init_attitude_sensor));
+        initAttitude(controller_->robot().bodySensor());
       }
       else
       {
-        mc_rtc::log::error_and_throw<std::invalid_argument>("No body sensor named {}, could not initialize attitude. "
-                                                            "Please check your InitAttitudeSensor configuration.",
-                                                            config.init_attitude_sensor);
+        if(controller_->robot().hasBodySensor(config.init_attitude_sensor))
+        {
+          initAttitude(controller_->robot().bodySensor(config.init_attitude_sensor));
+        }
+        else
+        {
+          mc_rtc::log::error_and_throw<std::invalid_argument>("No body sensor named {}, could not initialize attitude. "
+                                                              "Please check your InitAttitudeSensor configuration.",
+                                                              config.init_attitude_sensor);
+        }
+      }
+    }
+    else
+    {
+      mc_rtc::log::info("Initializing attitude from robot module: q=[{}]",
+                        mc_rtc::io::to_string(robot().module().default_attitude(), ", ", 3));
+      if(q[0].size() == 7)
+      {
+        const auto & initAttitude = robot().module().default_attitude();
+        q[0] = {std::begin(initAttitude), std::end(initAttitude)};
+        robot().forwardKinematics();
       }
     }
   }
-  else
+  for(auto & robot : robots())
   {
-    mc_rtc::log::info("Initializing attitude from robot module: q=[{}]",
-                      mc_rtc::io::to_string(robot().module().default_attitude(), ", ", 3));
-    if(q[0].size() == 7)
+    if(robot.robotIndex() == robots().robotIndex())
     {
-      const auto & initAttitude = robot().module().default_attitude();
-      q[0] = {std::begin(initAttitude), std::end(initAttitude)};
-      robot().forwardKinematics();
+      continue;
     }
+    initEncoders(robot);
   }
   this->initController();
 }
 
-void MCGlobalController::initEncoders(const std::vector<double> & initq)
+void MCGlobalController::init(const std::map<std::string, std::vector<double>> & initqs,
+                              const std::map<std::string, sva::PTransformd> & initAttitudes)
 {
-  if(initq.size() != controller_->robot().refJointOrder().size())
+  init(initqs, initAttitudes, false);
+}
+
+void MCGlobalController::init(const std::map<std::string, std::vector<double>> & initqs,
+                              const std::map<std::string, sva::PTransformd> & initAttitudes,
+                              bool reset)
+{
+  for(auto & robot : robots())
+  {
+    auto initq_it = initqs.find(robot.name());
+    if(initq_it != initqs.end())
+    {
+      initEncoders(robot, initq_it->second);
+    }
+    else
+    {
+      initEncoders(robot);
+    }
+    auto initatt_it = initAttitudes.find(robot.name());
+    if(initatt_it != initAttitudes.end())
+    {
+      robot.posW(initatt_it->second);
+    }
+    else
+    {
+      auto & q = robot.mbc().q;
+      if(q[0].size() == 7)
+      {
+        const auto & initAttitude = robot.module().default_attitude();
+        q[0] = {std::begin(initAttitude), std::end(initAttitude)};
+        robot.forwardKinematics();
+      }
+    }
+  }
+  initController(reset);
+}
+
+void MCGlobalController::reset(const std::map<std::string, std::vector<double>> & initqs,
+                               const std::map<std::string, sva::PTransformd> & initAttitudes)
+{
+  controllers.erase(current_ctrl);
+  setup_logger_.erase(current_ctrl);
+  pre_gripper_mbcs_.clear();
+  config.load_controllers_configs();
+  AddController(current_ctrl);
+  controller_ = controllers[current_ctrl].get();
+  init(initqs, initAttitudes, true);
+}
+
+void MCGlobalController::initEncoders(mc_rbdyn::Robot & robot, const std::vector<double> & initq)
+{
+  const auto & rjo = robot.refJointOrder();
+  if(initq.size() != rjo.size())
   {
     mc_rtc::log::error_and_throw<std::domain_error>(
-        "Could not initialize the robot state from encoder sensors: got {} encoder values but the robot ({}) expects "
-        "{}.\nMake sure that the MainRobot is compatible with the real/simulated robot used by the interface.",
-        initq.size(), controller_->robot().name(), controller_->robot().refJointOrder().size());
+        "Could not initialize {} state from encoder sensors: got {} encoder values but {} values are expected\n"
+        "Make sure that the MainRobot is compatible with the real/simulated robot used by the interface.",
+        robot.name(), initq.size(), rjo.size());
   }
 
-  auto & q = robot().mbc().q;
-  const auto & rjo = ref_joint_order();
+  auto & q = robot.mbc().q;
   for(size_t i = 0; i < rjo.size(); ++i)
   {
     const auto & jn = rjo[i];
-    if(robot().hasJoint(jn))
+    if(robot.hasJoint(jn))
     {
-      q[robot().jointIndexByName(jn)][0] = initq[i];
+      q[robot.jointIndexByName(jn)][0] = initq[i];
     }
   }
   for(auto & g : controller_->robot().grippers())
   {
     g.get().reset(initq);
   }
-  for(size_t i = 1; i < controller_->robots().size(); ++i)
-  {
-    auto & robot = controller_->robots().robot(i);
-    if(robot.grippers().empty())
-    {
-      continue;
-    }
-    const auto & rjo = robot.refJointOrder();
-    std::vector<double> rinitq;
-    rinitq.reserve(rjo.size());
-    for(const auto & j : rjo)
-    {
-      if(robot.hasJoint(j))
-      {
-        auto jIndex = robot.jointIndexByName(j);
-        const auto & q = robot.mbc().q[jIndex];
-        for(const auto & qi : q)
-        {
-          rinitq.push_back(qi);
-        }
-      }
-      else
-      {
-        rinitq.push_back(0);
-      }
-    }
-    for(auto & g : robot.grippers())
-    {
-      g.get().reset(rinitq);
-    }
-  }
-  robot().forwardKinematics();
+  robot.forwardKinematics();
 }
 
-void MCGlobalController::initController()
+void MCGlobalController::initEncoders(mc_rbdyn::Robot & robot)
+{
+  // We only need to go through this to initialize the gripper, otherwise the robots are already initialized to the
+  // stance configuration
+  if(robot.grippers().empty())
+  {
+    return;
+  }
+  const auto & rjo = robot.refJointOrder();
+  std::vector<double> rinitq;
+  rinitq.reserve(rjo.size());
+  for(const auto & j : rjo)
+  {
+    if(robot.hasJoint(j))
+    {
+      auto jIndex = robot.jointIndexByName(j);
+      const auto & q = robot.mbc().q[jIndex];
+      for(const auto & qi : q)
+      {
+        rinitq.push_back(qi);
+      }
+    }
+    else
+    {
+      rinitq.push_back(0);
+    }
+  }
+  for(auto & g : robot.grippers())
+  {
+    g.get().reset(rinitq);
+  }
+}
+
+void MCGlobalController::initController(bool reset)
 {
   if(config.enable_log)
   {
@@ -321,10 +368,21 @@ void MCGlobalController::initController()
   controller_->reset({q});
   controller_->resetObserverPipelines();
   initGUI();
-  for(auto & plugin : plugins_)
+  if(reset)
   {
-    plugin.plugin->init(*this, config.global_plugin_configs[plugin.name]);
+    for(auto & plugin : plugins_)
+    {
+      plugin.plugin->reset(*this);
+    }
   }
+  else
+  {
+    for(auto & plugin : plugins_)
+    {
+      plugin.plugin->init(*this, config.global_plugin_configs[plugin.name]);
+    }
+  }
+  resetControllerPlugins();
 }
 
 void MCGlobalController::setSensorPosition(const Eigen::Vector3d & pos)
@@ -648,6 +706,7 @@ bool MCGlobalController::run()
       {
         fs.wrench(controller_->realRobot().forceSensor(fs.name()).wrench());
       }
+      next_controller_->realRobot().mbc() = controller_->realRobot().mbc();
     }
     if(!running)
     {
@@ -678,8 +737,9 @@ bool MCGlobalController::run()
       {
         plugin.plugin->reset(*this);
       }
+      resetControllerPlugins();
     }
-    next_controller_ = 0;
+    next_controller_ = nullptr;
     current_ctrl = next_ctrl;
     if(config.enable_log)
     {
@@ -1032,83 +1092,6 @@ void MCGlobalController::setup_log()
   }
   // Copy controller pointer to avoid lambda issue
   MCController * controller = controller_;
-  controller->logger().addLogEntry(
-      "qIn", [controller]() -> const std::vector<double> & { return controller->robot().encoderValues(); });
-  controller->logger().addLogEntry(
-      "ff", [controller]() -> const sva::PTransformd & { return controller->robot().mbc().bodyPosW[0]; });
-  // Convert reference order to mbc.q, -1 if the joint does not exist
-  std::vector<int> refToQ;
-  for(const auto & j : controller->robot().refJointOrder())
-  {
-    if(controller->robot().hasJoint(j))
-    {
-      int jIndex = static_cast<int>(controller->robot().jointIndexByName(j));
-      if(controller->robot().mb().joint(jIndex).dof() == 1)
-      {
-        refToQ.push_back(jIndex);
-        continue;
-      }
-    }
-    refToQ.push_back(-1);
-  }
-  std::vector<double> qOut(controller->robot().refJointOrder().size(), 0);
-  controller->logger().addLogEntry("qOut", [controller, refToQ, qOut]() mutable -> const std::vector<double> & {
-    for(size_t i = 0; i < qOut.size(); ++i)
-    {
-      if(refToQ[i] != -1)
-      {
-        qOut[i] = controller->robot().mbc().q[static_cast<size_t>(refToQ[i])][0];
-      }
-    }
-    return qOut;
-  });
-  controller->logger().addLogEntry(
-      "tauIn", [controller]() -> const std::vector<double> & { return controller->robot().jointTorques(); });
-  for(const auto & fs : controller->robot().forceSensors())
-  {
-    const auto & fs_name = fs.name();
-    controller->logger().addLogEntry(fs.name(), [controller, fs_name]() -> const sva::ForceVecd & {
-      return controller->robot().forceSensor(fs_name).wrench();
-    });
-  }
-
-  // Log all body sensors
-  const auto & bodySensors = controller->robot().bodySensors();
-  for(size_t i = 0; i < bodySensors.size(); ++i)
-  {
-    const auto & name = bodySensors[i].name();
-    controller->logger().addLogEntry(name + "_position", [controller, name]() -> const Eigen::Vector3d & {
-      return controller->robot().bodySensor(name).position();
-    });
-    controller->logger().addLogEntry(name + "_orientation", [controller, name]() -> const Eigen::Quaterniond & {
-      return controller->robot().bodySensor(name).orientation();
-    });
-    controller->logger().addLogEntry(name + "_linearVelocity", [controller, name]() -> const Eigen::Vector3d & {
-      return controller->robot().bodySensor(name).linearVelocity();
-    });
-    controller->logger().addLogEntry(name + "_angularVelocity", [controller, name]() -> const Eigen::Vector3d & {
-      return controller->robot().bodySensor(name).angularVelocity();
-    });
-    controller->logger().addLogEntry(name + "_linearAcceleration", [controller, name]() -> const Eigen::Vector3d & {
-      return controller->robot().bodySensor(name).linearAcceleration();
-    });
-    controller->logger().addLogEntry(name + "_angularAcceleration", [controller, name]() -> const Eigen::Vector3d & {
-      return controller->robot().bodySensor(name).angularAcceleration();
-    });
-  }
-
-  if(config.log_real)
-  {
-    controller->logger().addLogEntry("realRobot_ff", [controller]() -> const sva::PTransformd & {
-      return controller->realRobots().robot().mbc().bodyPosW[0];
-    });
-    controller->logger().addLogEntry(
-        "realRobot_q", [controller]() -> const std::vector<double> & { return controller->robot().encoderValues(); });
-    controller->logger().addLogEntry("realRobot_alpha", [controller]() -> const std::vector<double> & {
-      return controller->robot().encoderVelocities();
-    });
-  }
-
   // Performance measures
   controller->logger().addLogEntry("perf_GlobalRun", [this]() { return global_run_dt.count(); });
   controller->logger().addLogEntry("perf_ControllerRun", [this]() { return controller_run_dt.count(); });
@@ -1126,7 +1109,7 @@ void MCGlobalController::setup_log()
         return p.name;
       }
     }
-    mc_rtc::log::error_and_throw<std::runtime_error>(
+    mc_rtc::log::error_and_throw(
         "Impossible error, searched for a plugin name from a pointer to a plugin that was not loaded");
   };
   for(const auto & plugin : plugins_before_)
@@ -1147,6 +1130,110 @@ void MCGlobalController::setup_log()
     return nanoseconds_since_epoch;
   });
   setup_logger_[current_ctrl] = true;
+}
+
+GlobalPlugin * MCGlobalController::loadPlugin(const std::string & name, const char * requiredBy)
+{
+#ifdef MC_RTC_BUILD_STATIC
+  auto * plugin_loader = &GlobalPluginLoader::loader();
+#else
+  auto * plugin_loader = plugin_loader_.get();
+#endif
+  try
+  {
+    plugins_.emplace_back(name, plugin_loader->create_unique_object(name));
+    GlobalPlugin * plugin = plugins_.back().plugin.get();
+    const auto & plugin_config = plugins_.back().plugin->configuration();
+    if(plugin_config.should_run_before)
+    {
+      plugins_before_.push_back({plugin, duration_ms{0}});
+      if(plugin_config.should_always_run)
+      {
+        plugins_before_always_.push_back(plugin);
+      }
+    }
+    if(plugin_config.should_run_after)
+    {
+      plugins_after_.push_back({plugin, duration_ms{0}});
+      if(plugin_config.should_always_run)
+      {
+        plugins_after_always_.push_back(plugin);
+      }
+    }
+    return plugin;
+  }
+  catch(mc_rtc::LoaderException & exc)
+  {
+    mc_rtc::log::error(
+        "Plugin {} (required by {}) failed to load, functions provided by this plugin will not be available", name,
+        requiredBy);
+  }
+  return nullptr;
+}
+
+void MCGlobalController::resetControllerPlugins()
+{
+  auto next_ctrl_plugins =
+      mc_rtc::fromVectorOrElement<std::string>(config.controllers_configs[next_ctrl], "Plugins", {});
+  // Remove the plugins that are loaded at the global level
+  for(const auto & p : plugins_)
+  {
+    auto it = std::find(next_ctrl_plugins.begin(), next_ctrl_plugins.end(), p.name);
+    if(it != next_ctrl_plugins.end())
+    {
+      next_ctrl_plugins.erase(it);
+    }
+  }
+  // Go over controller plugins that are already loaded
+  for(auto it = controller_plugins_.begin(); it != controller_plugins_.end();)
+  {
+    // The plugin is removed if it was loaded by another controller and not needed by this one
+    auto next_plugin_it = std::find(next_ctrl_plugins.begin(), next_ctrl_plugins.end(), it->name);
+    bool should_remove = (next_plugin_it == next_ctrl_plugins.end());
+    if(should_remove)
+    {
+      // First we remove the plugin from the before/always lists as needed
+      auto it_before = std::find_if(plugins_before_.begin(), plugins_before_.end(),
+                                    [&](const PluginBefore & p) { return p.plugin == it->plugin.get(); });
+      if(it_before != plugins_before_.end())
+      {
+        plugins_before_.erase(it_before);
+      }
+      auto it_before_always = std::find(plugins_before_always_.begin(), plugins_before_always_.end(), it->plugin.get());
+      if(it_before_always != plugins_before_always_.end())
+      {
+        plugins_before_always_.erase(it_before_always);
+      }
+      auto it_after = std::find_if(plugins_after_.begin(), plugins_after_.end(),
+                                   [&](const PluginAfter & p) { return p.plugin == it->plugin.get(); });
+      if(it_after != plugins_after_.end())
+      {
+        plugins_after_.erase(it_after);
+      }
+      auto it_after_always = std::find(plugins_after_always_.begin(), plugins_after_always_.end(), it->plugin.get());
+      if(it_after_always != plugins_after_always_.end())
+      {
+        plugins_after_always_.erase(it_after_always);
+      }
+      // Finally we can remove the handle
+      it = controller_plugins_.erase(it);
+    }
+    else
+    {
+      next_ctrl_plugins.erase(next_plugin_it);
+      it->plugin->reset(*this);
+      ++it;
+    }
+  }
+  // At this point, next_ctrl_plugins only contains plugins that are required by this controller and not already loaded
+  for(const auto & name : next_ctrl_plugins)
+  {
+    auto plugin = loadPlugin(name, next_ctrl.c_str());
+    if(plugin)
+    {
+      plugin->init(*this, config.global_plugin_configs[name]);
+    }
+  }
 }
 
 } // namespace mc_control

@@ -5,6 +5,9 @@
 #include <mc_rtc/Configuration.h>
 #include <mc_rtc/pragma.h>
 
+#include <boost/filesystem.hpp>
+namespace bfs = boost::filesystem;
+
 #include <boost/test/unit_test.hpp>
 
 #include "utils.h"
@@ -636,7 +639,9 @@ void testConfigurationReading(mc_rtc::Configuration & config, bool fromDisk2, bo
   {
     if(fromDisk2)
     {
-      config.load(sampleConfig2(true, json2));
+      std::string path = sampleConfig2(true, json2);
+      config.load(path);
+      bfs::remove(path);
     }
     else
     {
@@ -667,7 +672,10 @@ mc_rtc::Configuration makeConfig(bool fromDisk, bool json)
 {
   if(fromDisk)
   {
-    return mc_rtc::Configuration(sampleConfig(fromDisk, json));
+    auto path = sampleConfig(fromDisk, json);
+    auto out = mc_rtc::Configuration(path);
+    bfs::remove(path);
+    return out;
   }
   else
   {
@@ -799,6 +807,8 @@ BOOST_AUTO_TEST_CASE(TestConfigurationWriting)
 
   mc_rtc::Configuration config_partial(tmpF);
   BOOST_CHECK(config_partial == ref_double_v);
+
+  bfs::remove(tmpF);
 }
 
 BOOST_AUTO_TEST_CASE(TestConfigurationCeption)
@@ -1062,4 +1072,102 @@ BOOST_AUTO_TEST_CASE(TestConfigurationErrorMessage)
       "Stored Json value is not a Vector6d (error path: (\"deep\")[2](\"object1\")(\"key2\")[1](\"object2\")(\"v3d\"))",
       Eigen::Vector6d v = config("deep")[2]("object1")("key2")[1]("object2")("v3d"));
   MC_RTC_diagnostic_pop
+}
+
+static std::string YAML_TEST_TWEAKS = R"(
+col-default: &col-default
+  iDist: 0.05
+  sDist: 0.01
+  damping: 0
+collisions:
+- b1: body1
+  b2: body2
+  <<: *col-default
+- b1: body1
+  b2: body3
+  <<: *col-default
+special:
+  b1: body1
+  b2: body2
+  <<: *col-default
+  sDist: 0.04
+Y_is_string: Y
+N_is_string: N
+yes_is_string: yes
+no_is_string: no
+Yes_is_string: Yes
+No_is_string: No
+)";
+
+BOOST_AUTO_TEST_CASE(TestConfigurationYAMLTweaks)
+{
+  auto config = mc_rtc::Configuration::fromYAMLData(YAML_TEST_TWEAKS);
+  BOOST_REQUIRE(config.has("collisions"));
+  auto collisions = config("collisions");
+  BOOST_REQUIRE(collisions.size() == 2);
+  for(const auto & col : collisions)
+  {
+    BOOST_REQUIRE(col.has("b1"));
+    BOOST_REQUIRE(col.has("b2"));
+    BOOST_REQUIRE(col.has("iDist"));
+    double iDist = col("iDist");
+    BOOST_REQUIRE_EQUAL(iDist, 0.05);
+    BOOST_REQUIRE(col.has("sDist"));
+    double sDist = col("sDist");
+    BOOST_REQUIRE_EQUAL(sDist, 0.01);
+    BOOST_REQUIRE(col.has("damping"));
+    double damping = col("damping");
+    BOOST_REQUIRE_EQUAL(damping, 0.0);
+  }
+  BOOST_REQUIRE(config.has("special"));
+  {
+    auto special = config("special");
+    BOOST_REQUIRE(special.has("iDist"));
+    double iDist = special("iDist");
+    BOOST_REQUIRE_EQUAL(iDist, 0.05);
+    BOOST_REQUIRE(special.has("sDist"));
+    double sDist = special("sDist");
+    BOOST_REQUIRE_EQUAL(sDist, 0.04);
+    BOOST_REQUIRE(special.has("damping"));
+    double damping = special("damping");
+    BOOST_REQUIRE_EQUAL(damping, 0.0);
+  }
+  for(const auto & k : {"Y", "N", "yes", "no", "Yes", "No"})
+  {
+    std::string key = fmt::format("{}_is_string", k);
+    BOOST_REQUIRE(config.has(key));
+    std::string value = config(key);
+    BOOST_REQUIRE_EQUAL(value, k);
+  }
+}
+
+BOOST_AUTO_TEST_CASE(TestFileConfiguration)
+{
+  auto file = sampleConfig2(true, false);
+  {
+    mc_rtc::ConfigurationFile config(file);
+    BOOST_REQUIRE_EQUAL(config.path(), file);
+    BOOST_REQUIRE(config.has("int"));
+    int i = config("int");
+    BOOST_REQUIRE_EQUAL(i, 12);
+    config.remove("int");
+    BOOST_REQUIRE(!config.has("int"));
+    config.reload();
+    BOOST_REQUIRE(config.has("int"));
+    i = config("int");
+    BOOST_REQUIRE_EQUAL(i, 12);
+    config.add("int", 42);
+    config.add("string", "Hello world");
+    config.save();
+  }
+  {
+    mc_rtc::Configuration config(file);
+    BOOST_REQUIRE(config.has("int"));
+    int i = config("int");
+    BOOST_REQUIRE(config.has("string"));
+    std::string s = config("string");
+    BOOST_REQUIRE_EQUAL(s, "Hello world");
+    BOOST_REQUIRE_EQUAL(i, 42);
+  }
+  bfs::remove(file);
 }

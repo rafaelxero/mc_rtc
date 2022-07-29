@@ -15,13 +15,12 @@ void EncoderObserver::configure(const mc_control::MCController & ctl, const mc_r
   updateRobot_ = config("updateRobot", static_cast<std::string>(robot_));
   if(!ctl.robots().hasRobot(robot_))
   {
-    mc_rtc::log::error_and_throw<std::runtime_error>("Observer {} requires robot \"{}\" but this robot does not exit",
-                                                     name(), robot_);
+    mc_rtc::log::error_and_throw("Observer {} requires robot \"{}\" but this robot does not exit", name(), robot_);
   }
   if(!ctl.robots().hasRobot(updateRobot_))
   {
-    mc_rtc::log::error_and_throw<std::runtime_error>(
-        "Observer {} requires robot \"{}\" (updateRobot) but this robot does not exit", name(), updateRobot_);
+    mc_rtc::log::error_and_throw("Observer {} requires robot \"{}\" (updateRobot) but this robot does not exit", name(),
+                                 updateRobot_);
   }
   const std::string & position = config("position", std::string("encoderValues"));
   if(position == "control")
@@ -38,7 +37,7 @@ void EncoderObserver::configure(const mc_control::MCController & ctl, const mc_r
   }
   else
   {
-    mc_rtc::log::error_and_throw<std::runtime_error>(
+    mc_rtc::log::error_and_throw(
         "[EncoderObserver::{}] Invalid configuration value \"{}\" for field \"position\" (valid values are [control, "
         "encoderValues, none])",
         name_, position);
@@ -63,7 +62,7 @@ void EncoderObserver::configure(const mc_control::MCController & ctl, const mc_r
   }
   else
   {
-    mc_rtc::log::error_and_throw<std::runtime_error>(
+    mc_rtc::log::error_and_throw(
         "[EncoderObserver::{}] Invalid configuration value \"{}\" for field \"velocity\" (valid values are [control, "
         "encoderFiniteDifferences, encoderVelocities, none])",
         name_, velocity);
@@ -83,37 +82,39 @@ void EncoderObserver::configure(const mc_control::MCController & ctl, const mc_r
   desc_ = name_ + " (position=" + position + ",velocity=" + velocity + ")";
 }
 
-void EncoderObserver::reset(const mc_control::MCController & ctl)
+void EncoderObserver::reset(const mc_control::MCController &)
 {
-  auto & robot = ctl.robots().robot(robot_);
-  const auto & enc = robot.encoderValues();
-  if(enc.empty()
-     && (posUpdate_ == PosUpdate::EncoderValues || velUpdate_ == VelUpdate::EncoderFiniteDifferences
-         || velUpdate_ == VelUpdate::EncoderVelocities))
-  {
-    mc_rtc::log::error_and_throw<std::runtime_error>("[EncoderObserver] requires robot {} to have encoder measurements",
-                                                     robot_);
-  }
-  if(velUpdate_ == VelUpdate::EncoderVelocities && robot.encoderVelocities().empty())
-  {
-    mc_rtc::log::error_and_throw<std::runtime_error>(
-        "[EncoderObserver] requires robot {} to have encoder velocity measurements", robot_);
-  }
-
-  if(!enc.empty())
-  {
-    prevEncoders_ = enc;
-    encodersVelocity_.resize(enc.size());
-    for(unsigned i = 0; i < enc.size(); ++i)
-    {
-      encodersVelocity_[i] = 0;
-    }
-  }
+  initialized_ = false;
 }
 
 bool EncoderObserver::run(const mc_control::MCController & ctl)
 {
   auto & robot = ctl.robots().robot(robot_);
+  if(!initialized_)
+  {
+    initialized_ = true;
+    const auto & enc = robot.encoderValues();
+    if(enc.empty()
+       && (posUpdate_ == PosUpdate::EncoderValues || velUpdate_ == VelUpdate::EncoderFiniteDifferences
+           || velUpdate_ == VelUpdate::EncoderVelocities))
+    {
+      mc_rtc::log::error_and_throw("[EncoderObserver] requires robot {} to have encoder measurements", robot_);
+    }
+    if(velUpdate_ == VelUpdate::EncoderVelocities && robot.encoderVelocities().empty())
+    {
+      mc_rtc::log::error_and_throw("[EncoderObserver] requires robot {} to have encoder velocity measurements", robot_);
+    }
+
+    if(!enc.empty())
+    {
+      prevEncoders_ = enc;
+      encodersVelocity_.resize(enc.size());
+      for(unsigned i = 0; i < enc.size(); ++i)
+      {
+        encodersVelocity_[i] = 0;
+      }
+    }
+  }
   if(velUpdate_ == VelUpdate::EncoderFiniteDifferences)
   {
     const auto & enc = robot.encoderValues();

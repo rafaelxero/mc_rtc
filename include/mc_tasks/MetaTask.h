@@ -139,6 +139,24 @@ public:
   /*! \brief Load parameters from a Configuration object */
   virtual void load(mc_solver::QPSolver & solver, const mc_rtc::Configuration & config);
 
+  /*! \brief Get the number of iterations since the task was added to the solver */
+  inline size_t iterInSolver() const noexcept
+  {
+    return iterInSolver_;
+  }
+
+  /*! \brief Set the number of iterations since the task was added to the solver to zero */
+  inline void resetIterInSolver() noexcept
+  {
+    iterInSolver_ = 0;
+  }
+
+  /*! \brief Increment the number of iterations since the task was added to the solver */
+  inline void incrementIterInSolver() noexcept
+  {
+    iterInSolver_++;
+  }
+
 protected:
   /*! \brief Add the task to a solver
    *
@@ -258,8 +276,7 @@ protected:
     {
       if(!robot.hasJoint(jName))
       {
-        mc_rtc::log::error_and_throw<std::runtime_error>("{} No joint named {} in robot {}", prefix, jName,
-                                                         robot.name());
+        mc_rtc::log::error_and_throw("{} No joint named {} in robot {}", prefix, jName, robot.name());
       }
     }
   }
@@ -288,6 +305,8 @@ protected:
 
   std::string type_;
   std::string name_;
+
+  size_t iterInSolver_ = 0;
 };
 
 using MetaTaskPtr = std::shared_ptr<MetaTask>;

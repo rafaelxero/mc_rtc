@@ -35,7 +35,7 @@ struct MC_RBDYN_DLLAPI FDQPWeights
     }
     if(config.has("net_wrench"))
     {
-      netWrenchSqrt = std::sqrt(static_cast<double>(config.has("net_wrench")));
+      netWrenchSqrt = std::sqrt(static_cast<double>(config("net_wrench")));
     }
     if(config.has("pressure"))
     {
@@ -132,10 +132,14 @@ struct DCMBiasEstimatorConfiguration
   double biasDriftPerSecondStd = 0.02;
   /// Maximum bias in the sagital and lateral directions [m]
   Eigen::Vector2d biasLimit = {0.02, 0.02};
+  /// Maximum bias in the sagital and lateral directions used to correct the CoM, should be smaller than bisaLimit [m]
+  Eigen::Vector2d comBiasLimit = biasLimit;
   /// Whether the DCM bias estimator is enabled (default: false for backwards compatibility)
   bool withDCMBias = false;
   /// Whether the DCM filter is enabled
   bool withDCMFilter = false;
+  /// Whether the absolution CoM position gets unbiased
+  bool correctCoMPos = false;
 
   void load(const mc_rtc::Configuration & config)
   {
@@ -143,7 +147,9 @@ struct DCMBiasEstimatorConfiguration
     config("zmpMeasureErrorStd", zmpMeasureErrorStd);
     config("biasDriftPerSecondStd", biasDriftPerSecondStd);
     config("biasLimit", biasLimit);
+    config("comBiasLimit", comBiasLimit);
     config("withDCMBias", withDCMBias);
+    config("correctCoMPos", correctCoMPos);
     config("withDCMFilter", withDCMFilter);
   }
 
@@ -154,7 +160,9 @@ struct DCMBiasEstimatorConfiguration
     config.add("zmpMeasureErrorStd", zmpMeasureErrorStd);
     config.add("biasDriftPerSecondStd", biasDriftPerSecondStd);
     config.add("biasLimit", biasLimit);
+    config.add("comBiasLimit", comBiasLimit);
     config.add("withDCMBias", withDCMBias);
+    config.add("correctCoMPos", correctCoMPos);
     config.add("withDCMFilter", withDCMFilter);
     return config;
   }
@@ -381,14 +389,17 @@ struct MC_RBDYN_DLLAPI StabilizerConfiguration
   std::vector<std::string> comActiveJoints; /**< Joints used by CoM IK task */
   Eigen::Vector3d comStiffness = {1000., 1000., 100.}; /**< Stiffness of CoM IK task */
   double comWeight = 1000.; /**< Weight of CoM IK task */
+  Eigen::Vector3d comDimWeight = Eigen::Vector3d::Ones(); /**< Dimensional weight of CoM IK task */
   double comHeight = 0.84; /**< Desired height of the CoM */
 
   std::string torsoBodyName; /**< Name of the torso body */
   double torsoPitch = 0; /**< Target world pitch angle for the torso */
   double torsoStiffness = 10; /**< Stiffness of the torso task. */
   double torsoWeight = 100; /**< Weight of the torso task. Should be much lower than CoM and Contacts */
+  Eigen::Vector3d torsoDimWeight = Eigen::Vector3d::Ones(); /**< Dimensional weight of the torso task */
   double pelvisStiffness = 10; /**< Stiffness of the pelvis task. */
-  double pelvisWeight = 100; /**< Weight of the torso task. Should be much lower than CoM and Contacts */
+  double pelvisWeight = 100; /**< Weight of the pelvis task. Should be much lower than CoM and Contacts */
+  Eigen::Vector3d pelvisDimWeight = Eigen::Vector3d::Ones(); /**< Dimensional weight of the pelvis task */
 
   sva::MotionVecd contactDamping{{300, 300, 300},
                                  {300, 300, 300}}; /**< Damping coefficients of the contacts CoP tasks */
@@ -486,6 +497,7 @@ struct MC_RBDYN_DLLAPI StabilizerConfiguration
         tasks("com")("active_joints", comActiveJoints);
         tasks("com")("stiffness", comStiffness);
         tasks("com")("weight", comWeight);
+        tasks("com")("dimWeight", comDimWeight);
         tasks("com")("height", comHeight);
       }
 
@@ -495,12 +507,14 @@ struct MC_RBDYN_DLLAPI StabilizerConfiguration
         tasks("torso")("pitch", torsoPitch);
         tasks("torso")("stiffness", torsoStiffness);
         tasks("torso")("weight", torsoWeight);
+        tasks("torso")("dimWeight", torsoDimWeight);
       }
 
       if(tasks.has("pelvis"))
       {
         tasks("pelvis")("stiffness", pelvisStiffness);
         tasks("pelvis")("weight", pelvisWeight);
+        tasks("pelvis")("dimWeight", pelvisDimWeight);
       }
 
       if(tasks.has("contact"))
@@ -589,16 +603,19 @@ struct MC_RBDYN_DLLAPI StabilizerConfiguration
     conf("tasks")("com").add("active_joints", comActiveJoints);
     conf("tasks")("com").add("stiffness", comStiffness);
     conf("tasks")("com").add("weight", comWeight);
+    conf("tasks")("com").add("dimWeight", comDimWeight);
     conf("tasks")("com").add("height", comHeight);
 
     conf("tasks").add("torso");
     conf("tasks")("torso").add("pitch", torsoPitch);
     conf("tasks")("torso").add("stiffness", torsoStiffness);
     conf("tasks")("torso").add("weight", torsoWeight);
+    conf("tasks")("torso").add("dimWeight", torsoDimWeight);
 
     conf("tasks").add("pelvis");
     conf("tasks")("pelvis").add("stiffness", pelvisStiffness);
     conf("tasks")("pelvis").add("weight", pelvisWeight);
+    conf("tasks")("pelvis").add("dimWeight", pelvisDimWeight);
 
     conf("tasks").add("contact");
     conf("tasks")("contact").add("damping", contactDamping);

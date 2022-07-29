@@ -138,13 +138,36 @@ public:
   void init(const std::vector<double> & initq, const sva::PTransformd & initAttitude);
 
   /**
-   * @brief Initializes controller, observers and plugins
+   * @brief Initialize multiple robots to the given configuration and attitude
    *
-   * Should only be called if init() has been called with initController=false.
+   * If some robots' configuration or position is not provided then the robot module data is used to initialize the
+   * robot.
    *
-   * The robot state must be properly initialized prior to calling this function.
+   * @param initqs Initial joints configuration for each robot, for each robot this data is expected in the
+   * corresponding ref_joint_order
+   *
+   * @param initAttitudes Initial world position for each robot
+   *
    */
-  void initController();
+  void init(const std::map<std::string, std::vector<double>> & initqs = {},
+            const std::map<std::string, sva::PTransformd> & initAttitudes = {});
+
+  /**
+   * @brief Fully reset the current controller to the given initial state
+   *
+   * This deletes then re-create the current controller so that it is started from scratch.
+   *
+   * If some robots' configuration or position is not provided then the robot module data is used to initialize the
+   * robot.
+   *
+   * @param initqs Initial joints configuration for each robot, for each robot this data is expected in the
+   * corresponding ref_joint_order
+   *
+   * @param initAttitudes Initial world position for each robot
+   *
+   */
+  void reset(const std::map<std::string, std::vector<double>> & resetqs = {},
+             const std::map<std::string, sva::PTransformd> & resetAttitudes = {});
 
   /** @name Sensing
    *
@@ -716,11 +739,35 @@ public:
   void refreshLog();
 
 private:
+  /** Initialize all robots */
+  void init(const std::map<std::string, std::vector<double>> & initqs,
+            const std::map<std::string, sva::PTransformd> & initAttitudes,
+            bool reset);
+
   /**
-   * @brief Initializes the robot from provided encoder values
+   * @brief Initializes a robot configuration from provided encoder values
+   *
+   * @param robot Robot that will be initialized
+   *
    * @param initq Encoder values for all actuated joints
    */
-  void initEncoders(const std::vector<double> & initq);
+  void initEncoders(mc_rbdyn::Robot & robot, const std::vector<double> & initq);
+
+  /**
+   * @brief Initializes a robot using its default configuration from the module
+   *
+   * @param robot Robot that will be initialized
+   */
+  void initEncoders(mc_rbdyn::Robot & robot);
+
+  /**
+   * @brief Initializes controller, observers and plugins
+   *
+   * The robot state must be properly initialized prior to calling this function.
+   *
+   * @param reset Should be true when called for reset
+   */
+  void initController(bool reset = false);
 
 public:
   /*! \brief Returns true if the controller is running
@@ -745,8 +792,6 @@ public:
 
     inline bool enabled(const std::string & ctrl);
 
-    bool use_sandbox = false;
-
     bool verbose_loader = true;
 
     bool init_attitude_from_sensor = false;
@@ -768,8 +813,6 @@ public:
     double timestep = 0.002;
     bool include_halfsit_controller = true;
 
-    bool log_real = false;
-
     bool enable_log = true;
     mc_rtc::Logger::Policy log_policy = mc_rtc::Logger::Policy::NON_THREADED;
     std::string log_directory;
@@ -785,6 +828,8 @@ public:
     void load_controllers_configs();
 
     void load_plugin_configs();
+
+    void load_controller_plugin_configs(const std::string & controller, const std::vector<std::string> & plugins);
   };
 
 private:
@@ -814,6 +859,7 @@ private:
     GlobalPluginPtr plugin;
   };
   std::vector<PluginHandle> plugins_;
+  std::vector<PluginHandle> controller_plugins_;
   struct PluginBefore
   {
     GlobalPlugin * plugin;
@@ -847,6 +893,21 @@ private:
 
   /** Keep track of controller outputs before applying gripper control */
   std::vector<rbd::MultiBodyConfig> pre_gripper_mbcs_;
+
+  /** Reset controller-specific plugins
+   *
+   * When switching controllers, plugins that are enabled in both controllers are reset, new plugins are init
+   *
+   */
+  void resetControllerPlugins();
+
+  /** Load a plugin
+   *
+   * \param name Name of the plugin
+   *
+   * \returns nullptr if the loading fails
+   */
+  GlobalPlugin * loadPlugin(const std::string & name, const char * requiredBy);
 };
 
 } // namespace mc_control

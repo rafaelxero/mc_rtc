@@ -43,7 +43,7 @@ struct MC_RTC_GUI_DLLAPI StateBuilder
 
   /** Add a given element
    *
-   * T must derive from Element
+   * \tparam T Must derive from Element
    *
    * \param category Category of the element
    *
@@ -51,6 +51,21 @@ struct MC_RTC_GUI_DLLAPI StateBuilder
    */
   template<typename T>
   void addElement(const std::vector<std::string> & category, T element);
+
+  /** Add a given element
+   *
+   * \tparam SourceT Type of the source pointer
+   *
+   * \tparam T Must derive from Element
+   *
+   * \param source Source attached to this object
+   *
+   * \param category Category of the element
+   *
+   * \param element Element added to the GUI
+   */
+  template<typename SourceT, typename T>
+  void addElement(SourceT * source, const std::vector<std::string> & category, T element);
 
   /** Add multiple elements to the same category at once
    *
@@ -62,6 +77,19 @@ struct MC_RTC_GUI_DLLAPI StateBuilder
    */
   template<typename T, typename... Args>
   void addElement(const std::vector<std::string> & category, T element, Args... args);
+
+  /** Add multiple elements to the same category at once
+   *
+   * \param source Source attached to this object
+   *
+   * \param category Category of the elements
+   *
+   * \param element Element added to the GUI
+   *
+   * \param args Other elements added to the GUI
+   */
+  template<typename SourceT, typename T, typename... Args>
+  void addElement(SourceT * source, const std::vector<std::string> & category, T element, Args... args);
 
   /** Add a given element and specify stacking
    *
@@ -76,6 +104,21 @@ struct MC_RTC_GUI_DLLAPI StateBuilder
   template<typename T>
   void addElement(const std::vector<std::string> & category, ElementsStacking stacking, T element);
 
+  /** Add a given element and specify stacking
+   *
+   * T must derive from Element
+   *
+   * \param source Source attached to this object
+   *
+   * \param category Category of the element
+   *
+   * \param stacking Stacking direction
+   *
+   * \param element Element added to the GUI
+   */
+  template<typename SourceT, typename T>
+  void addElement(SourceT * source, const std::vector<std::string> & category, ElementsStacking stacking, T element);
+
   /** Add multiple elements to the same category at once with a specific stacking
    *
    * \param category Category of the elements
@@ -88,6 +131,25 @@ struct MC_RTC_GUI_DLLAPI StateBuilder
    */
   template<typename T, typename... Args>
   void addElement(const std::vector<std::string> & category, ElementsStacking stacking, T element, Args... args);
+
+  /** Add multiple elements to the same category at once with a specific stacking
+   *
+   * \param source Source attached to this object
+   *
+   * \param category Category of the elements
+   *
+   * \param element Element added to the GUI
+   *
+   * \param stacking Stacking direction
+   *
+   * \param args Other elements added to the GUI
+   */
+  template<typename SourceT, typename T, typename... Args>
+  void addElement(SourceT * source,
+                  const std::vector<std::string> & category,
+                  ElementsStacking stacking,
+                  T element,
+                  Args... args);
 
   /** Checks if an element is already in the GUI
    *
@@ -107,9 +169,32 @@ struct MC_RTC_GUI_DLLAPI StateBuilder
   /** Remove a single element */
   void removeElement(const std::vector<std::string> & category, const std::string & name);
 
+  /** Remove all elements attached to the given source
+   *
+   * One should prefer to remove a category or target a specific category, otherwise the whole GUI has to be searched to
+   * find matching elements
+   *
+   * For example, if your source has added a category and a few elements in the root:
+   * gui()->removeCategory({"MyCategory"});
+   * gui()->removeElements({}, this);
+   * Should be used instead of:
+   * gui()->removeElements(this);
+   */
+  void removeElements(void * source);
+
+  /** Remove all elements attached to the given source in the specified category
+   *
+   * \param category Category where elements will be searched
+   *
+   * \param source Source that will be searched
+   *
+   * \param recurse Also search for elements in sub-categories of the given category
+   */
+  void removeElements(const std::vector<std::string> & category, void * source, bool recurse = false);
+
   /** Add a plot identified by the provided name
    *
-   * In this form, T and other Args are expected to provide XY-data
+   * In this form, Args are expected to provide 2D data
    *
    * \param name Name of the plot
    *
@@ -120,17 +205,16 @@ struct MC_RTC_GUI_DLLAPI StateBuilder
    * \param yRightConfig Configuration for the right axis
    *
    */
-  template<typename T, typename... Args>
+  template<typename... Args>
   void addXYPlot(const std::string & name,
                  plot::AxisConfiguration xConfig,
                  plot::AxisConfiguration yLeftConfig,
                  plot::AxisConfiguration yRightConfig,
-                 T data,
                  Args... args);
 
   /** Add a plot identified by the provided name
    *
-   * In this form, T and other Args are expected to provide XY-data
+   * In this form, Args are expected to provide 2D data
    *
    * \param name Name of the plot
    *
@@ -139,16 +223,15 @@ struct MC_RTC_GUI_DLLAPI StateBuilder
    * \param yLeftConfig Configuration for the left axis
    *
    */
-  template<typename T, typename... Args>
+  template<typename... Args>
   void addXYPlot(const std::string & name,
                  plot::AxisConfiguration xConfig,
                  plot::AxisConfiguration yLeftConfig,
-                 T data,
                  Args... args);
 
   /** Add a plot identified by the provided name
    *
-   * In this form, T and other Args are expected to provide XY-data
+   * In this form, Args are expected to provide 2D data
    *
    * \param name Name of the plot
    *
@@ -157,12 +240,12 @@ struct MC_RTC_GUI_DLLAPI StateBuilder
    * \param yLeftConfig Configuration for the left axis
    *
    */
-  template<typename T, typename... Args>
-  void addXYPlot(const std::string & name, plot::AxisConfiguration xConfig, T data, Args... args);
+  template<typename... Args>
+  void addXYPlot(const std::string & name, plot::AxisConfiguration xConfig, Args... args);
 
   /** Add a plot identified by the provided name
    *
-   * In this form, T and other Args are expected to provide XY-data
+   * In this form, Args are expected to provide 2D data
    *
    * \param name Name of the plot
    *
@@ -171,13 +254,13 @@ struct MC_RTC_GUI_DLLAPI StateBuilder
    * \param yLeftConfig Configuration for the left axis
    *
    */
-  template<typename T, typename... Args>
-  void addXYPlot(const std::string & name, T data, Args... args);
+  template<typename... Args>
+  void addXYPlot(const std::string & name, Args... args);
 
   /** Add a plot identified by the provided name
    *
    * In this form, T is expected to provide an abscissa, the other parameters
-   * are expected to provide Y-axis or XY-axis data
+   * are expected to provide Y-axis or 2D data
    *
    * \param name Name of the plot, this is a unique identifier
    *
@@ -197,7 +280,7 @@ struct MC_RTC_GUI_DLLAPI StateBuilder
   /** Add a plot identified by the provided name
    *
    * In this form, T is expected to provide an abscissa, the other parameters
-   * are expected to provide Y-axis or XY-axis data
+   * are expected to provide Y-axis or 2D data
    *
    * \param name Name of the plot, this is a unique identifier
    *
@@ -219,6 +302,24 @@ struct MC_RTC_GUI_DLLAPI StateBuilder
    */
   template<typename T, typename... Args>
   void addPlot(const std::string & name, T abscissa, Args... args);
+
+  /** Add more data to an existing plot
+   *
+   * T must be a Y-axis or 2D data
+   *
+   * No-op if the plot has not been added yet
+   *
+   * No-op if T a Y-axis and the plot was added with \ref addXYPlot
+   *
+   * \param name Name of the plot, it must have been added via \ref addPlot or \ref addXYPlot before
+   *
+   * \param data Extra data to be added
+   *
+   * \return True if the data was added, false otherwise
+   *
+   */
+  template<typename T>
+  bool addPlotData(const std::string & name, T data);
 
   /** Remove a plot identified by the provided name */
   void removePlot(const std::string & name);
@@ -253,19 +354,29 @@ struct MC_RTC_GUI_DLLAPI StateBuilder
 
 private:
   template<typename T>
-  void addElementImpl(const std::vector<std::string> & category, ElementsStacking stacking, T element, size_t rem = 0);
+  void addElementImpl(void * source,
+                      const std::vector<std::string> & category,
+                      ElementsStacking stacking,
+                      T element,
+                      size_t rem = 0);
 
   /** Holds static data for the GUI */
   mc_rtc::Configuration data_;
   /** Callback used to write plot data into the GUI message */
-  using plot_callback_t = std::function<void(mc_rtc::MessagePackBuilder &, const std::string &)>;
+  using plot_callback_function_t = std::function<void(mc_rtc::MessagePackBuilder &, const std::string &)>;
+  struct PlotCallback
+  {
+    plot::Plot type;
+    size_t msg_size;
+    plot_callback_function_t callback;
+  };
   /** A unique plot id used to identify plots with the same name
    *
    * This is mainly useful to restart a plot with the same name in a single iteration
    */
   uint64_t plot_id_ = 0;
   /** Holds all currently active plots */
-  std::unordered_map<std::string, plot_callback_t> plots_;
+  std::unordered_map<std::string, PlotCallback> plots_;
   /** True if data binary form needs to be generated again */
   bool update_data_ = true;
   /** Holds data's binary form */
@@ -280,9 +391,10 @@ private:
     std::function<Element &()> element;
     void (*write)(Element &, mc_rtc::MessagePackBuilder &);
     bool (*handleRequest)(Element &, const mc_rtc::Configuration &);
+    void * source;
 
     template<typename T>
-    ElementStore(T self, const Category & category, ElementsStacking stacking);
+    ElementStore(T self, const Category & category, ElementsStacking stacking, void * source);
   };
   struct Category
   {
@@ -309,34 +421,29 @@ private:
 
   /** Get a category
    *
-   * Returns false and parent category if the category does
-   * not exist, true and the request category otherwise
+   * Returns nullptr if the category does not exist
    *
    * \p category Requested category
    *
-   * \p getParent If true returns the parent category,
-   * otherwise returns the category
+   * \p depth Only consider the first \p depth elements in \p category (up-to category's size)
    */
-  std::pair<bool, Category &> getCategory(const std::vector<std::string> & category, bool getParent);
+  Category * getCategory(const std::vector<std::string> & category, size_t depth = std::numeric_limits<size_t>::max());
 
   /** Get a category, creates it if does not exist */
-  Category & getCategory(const std::vector<std::string> & category);
+  Category & getOrCreateCategory(const std::vector<std::string> & category);
 
   /** Update the GUI data state for a given category */
   void update(mc_rtc::MessagePackBuilder & builder, Category & category);
 
+  /** Remove all elements associated to the given in the given category */
+  void removeElements(Category & category, void * source);
+
   std::string cat2str(const std::vector<std::string> & category);
 
-  inline plot_callback_t makePlotCallback(plot_callback_t callback)
-  {
-    return callback;
-  }
-
-  template<typename T>
-  plot_callback_t makePlotCallback(plot_callback_t callback, T plot);
+  void addPlotData(PlotCallback &) {}
 
   template<typename T, typename... Args>
-  plot_callback_t makePlotCallback(plot_callback_t callback, T plot, Args... args);
+  void addPlotData(PlotCallback & callback, T plot, Args... args);
 };
 
 } // namespace gui

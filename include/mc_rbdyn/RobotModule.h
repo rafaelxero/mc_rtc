@@ -18,8 +18,6 @@
 
 #include <mc_rtc/constants.h>
 
-#include <mc_rbdyn_urdf/urdf.h>
-
 #include <RBDyn/parsers/common.h>
 
 #include <sch/S_Object/S_Object.h>
@@ -65,10 +63,6 @@ struct VisualMap : public std::map<std::string, std::vector<rbd::parsers::Visual
   inline VisualMap & operator=(VisualMap && v) = default;
 
   using std::map<std::string, std::vector<rbd::parsers::Visual>>::operator=;
-
-  MC_RTC_DEPRECATED MC_RBDYN_DLLAPI VisualMap(const std::map<std::string, std::vector<mc_rbdyn_urdf::Visual>> & rhs);
-  MC_RTC_DEPRECATED MC_RBDYN_DLLAPI VisualMap & operator=(
-      const std::map<std::string, std::vector<mc_rbdyn_urdf::Visual>> & rhs);
 };
 
 struct MC_RBDYN_DLLAPI RobotModule
@@ -208,6 +202,32 @@ struct MC_RBDYN_DLLAPI RobotModule
             const std::vector<Mimic> * mimics);
   };
 
+  /*! A lightweight frame description
+   *
+   * This will be used when creating extra frames in the robot
+   *
+   * These frames shouldn't:
+   * - share a name with bodies in the robot
+   * - share a name with surfaces in the robot
+   */
+  struct MC_RBDYN_DLLAPI FrameDescription
+  {
+    /** Constructor */
+    FrameDescription(const std::string & n, const std::string & p, const sva::PTransformd & pt, bool baked = false)
+    : name(n), parent(p), X_p_f(pt), baked(baked)
+    {
+    }
+
+    /** Name of the frame */
+    std::string name;
+    /** Frame's parent */
+    std::string parent;
+    /** Transformation from the parent frame to this one */
+    sva::PTransformd X_p_f;
+    /** If true the frame is baked */
+    bool baked = false;
+  };
+
   /** Construct from a provided path and name
    *
    * As a result:
@@ -248,9 +268,6 @@ struct MC_RBDYN_DLLAPI RobotModule
 
   /** Construct from a parser result */
   RobotModule(const std::string & name, const rbd::parsers::ParserResult & res);
-
-  /** \deprecated{Use rbd::parsers version instead } */
-  MC_RTC_DEPRECATED RobotModule(const std::string & name, const mc_rbdyn_urdf::URDFParserResult & res);
 
   /** Initialize the module from a parser result
    *
@@ -514,9 +531,6 @@ struct MC_RBDYN_DLLAPI RobotModule
    */
   void boundsFromURDF(const rbd::parsers::Limits & limits);
 
-  /** \deprecated{Use rbd::parsers version instead} */
-  MC_RTC_DEPRECATED void boundsFromURDF(const mc_rbdyn_urdf::Limits & limits);
-
   /** Add missing elements to the current module stance
    *
    * If joints are present in the MultiBody but absent from the default stance,
@@ -565,6 +579,12 @@ struct MC_RBDYN_DLLAPI RobotModule
   inline const DevicePtrVector & devices() const
   {
     return _devices;
+  }
+
+  /** Returns a list of robot frames supported by this module */
+  inline const std::vector<FrameDescription> & frames() const noexcept
+  {
+    return _frames;
   }
 
   /** Path to the robot's description package */
@@ -635,6 +655,8 @@ struct MC_RBDYN_DLLAPI RobotModule
   std::string _real_urdf;
   /** \see sensors() */
   DevicePtrVector _devices;
+  /** \see frames() */
+  std::vector<FrameDescription> _frames;
 };
 
 typedef std::shared_ptr<RobotModule> RobotModulePtr;
@@ -645,9 +667,6 @@ typedef std::shared_ptr<RobotModule> RobotModulePtr;
  *
  */
 RobotModule::bounds_t MC_RBDYN_DLLAPI urdf_limits_to_bounds(const rbd::parsers::Limits & limits);
-
-/** \deprecated{Use rbd::parsers version instead} */
-RobotModule::bounds_t MC_RTC_DEPRECATED MC_RBDYN_DLLAPI urdf_limits_to_bounds(const mc_rbdyn_urdf::Limits & limits);
 
 using RobotModuleVector = std::vector<RobotModule, Eigen::aligned_allocator<RobotModule>>;
 

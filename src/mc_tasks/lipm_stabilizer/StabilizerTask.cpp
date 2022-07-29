@@ -22,6 +22,7 @@ namespace lipm_stabilizer
 
 using internal::Contact;
 using ::mc_filter::utils::clamp;
+using ::mc_filter::utils::clampInPlace;
 using ::mc_filter::utils::clampInPlaceAndWarn;
 namespace constants = ::mc_rtc::constants;
 
@@ -122,25 +123,27 @@ void StabilizerTask::reset()
 
   omega_ = std::sqrt(constants::gravity.z() / robot().com().z());
   commitConfig();
+
+  setContacts({ContactState::Left, ContactState::Right});
 }
 
 void StabilizerTask::dimWeight(const Eigen::VectorXd & /* dim */)
 {
-  mc_rtc::log::error_and_throw<std::runtime_error>("dimWeight not implemented for task {}", type_);
+  mc_rtc::log::error_and_throw("dimWeight not implemented for task {}", type_);
 }
 
 Eigen::VectorXd StabilizerTask::dimWeight() const
 {
-  mc_rtc::log::error_and_throw<std::runtime_error>("dimWeight not implemented for task {}", type_);
+  mc_rtc::log::error_and_throw("dimWeight not implemented for task {}", type_);
 }
 
 void StabilizerTask::selectActiveJoints(mc_solver::QPSolver & /* solver */,
                                         const std::vector<std::string> & /* activeJointsName */,
                                         const std::map<std::string, std::vector<std::array<int, 2>>> & /* activeDofs */)
 {
-  mc_rtc::log::error_and_throw<std::runtime_error>("Task {} does not implement selectActiveJoints. Please configure it "
-                                                   "through the stabilizer configuration instead",
-                                                   name_);
+  mc_rtc::log::error_and_throw("Task {} does not implement selectActiveJoints. Please configure it "
+                               "through the stabilizer configuration instead",
+                               name_);
 }
 
 void StabilizerTask::selectUnactiveJoints(
@@ -148,18 +151,16 @@ void StabilizerTask::selectUnactiveJoints(
     const std::vector<std::string> & /* unactiveJointsName */,
     const std::map<std::string, std::vector<std::array<int, 2>>> & /* unactiveDofs */)
 {
-  mc_rtc::log::error_and_throw<std::runtime_error>(
-      "Task {} does not implement selectUnactiveJoints. Please configure it "
-      "through the stabilizer configuration instead.",
-      name_);
+  mc_rtc::log::error_and_throw("Task {} does not implement selectUnactiveJoints. Please configure it "
+                               "through the stabilizer configuration instead.",
+                               name_);
 }
 
 void StabilizerTask::resetJointsSelector(mc_solver::QPSolver & /* solver */)
 {
-  mc_rtc::log::error_and_throw<std::runtime_error>(
-      "Task {} does not implement resetJointsSelector. Please configure it "
-      "through the stabilizer configuration instead.",
-      name_);
+  mc_rtc::log::error_and_throw("Task {} does not implement resetJointsSelector. Please configure it "
+                               "through the stabilizer configuration instead.",
+                               name_);
 }
 
 Eigen::VectorXd StabilizerTask::eval() const
@@ -199,7 +200,7 @@ void StabilizerTask::removeFromSolver(mc_solver::QPSolver & solver)
   MetaTask::removeFromSolver(*comTask, solver);
   MetaTask::removeFromSolver(*pelvisTask, solver);
   MetaTask::removeFromSolver(*torsoTask, solver);
-  for(const auto footTask : contactTasks)
+  for(const auto & footTask : contactTasks)
   {
     MetaTask::removeFromSolver(*footTask, solver);
   }
@@ -261,7 +262,7 @@ void StabilizerTask::update(mc_solver::QPSolver & solver)
   MetaTask::update(*comTask, solver);
   MetaTask::update(*pelvisTask, solver);
   MetaTask::update(*torsoTask, solver);
-  for(const auto footTask : contactTasks)
+  for(const auto & footTask : contactTasks)
   {
     MetaTask::update(*footTask, solver);
   }
@@ -344,9 +345,11 @@ void StabilizerTask::configure_(mc_solver::QPSolver & solver)
   // // Configure upper-body tasks
   pelvisTask->stiffness(c_.pelvisStiffness);
   pelvisTask->weight(c_.pelvisWeight);
+  pelvisTask->dimWeight(c_.pelvisDimWeight);
 
   torsoTask->stiffness(c_.torsoStiffness);
   torsoTask->weight(c_.torsoWeight);
+  torsoTask->dimWeight(c_.torsoDimWeight);
   torsoTask->orientation(mc_rbdyn::rpyToMat({0, c_.torsoPitch, 0}));
 
   zmpcc_.configure(c_.zmpcc);
@@ -357,6 +360,7 @@ void StabilizerTask::configure_(mc_solver::QPSolver & solver)
   }
   comTask->setGains(c_.comStiffness, 2 * c_.comStiffness.cwiseSqrt());
   comTask->weight(c_.comWeight);
+  comTask->dimWeight(c_.comDimWeight);
 
   for(const auto & footTask : footTasks)
   {
@@ -375,13 +379,11 @@ void StabilizerTask::checkConfiguration(const StabilizerConfiguration & config)
   auto checkSurface = [&](const std::string & surfaceName) {
     if(!robot().hasSurface(surfaceName))
     {
-      mc_rtc::log::error_and_throw<std::runtime_error>("[{}] requires a surface named {} in robot {}", name(),
-                                                       surfaceName, robot().name());
+      mc_rtc::log::error_and_throw("[{}] requires a surface named {} in robot {}", name(), surfaceName, robot().name());
     }
     if(!robot().surfaceHasIndirectForceSensor(surfaceName))
     {
-      mc_rtc::log::error_and_throw<std::runtime_error>("[{}] Surface {} must have an associated force sensor.", name(),
-                                                       surfaceName);
+      mc_rtc::log::error_and_throw("[{}] Surface {} must have an associated force sensor.", name(), surfaceName);
     }
   };
   checkSurface(config.rightFootSurface);
@@ -471,7 +473,7 @@ void StabilizerTask::setContacts(const std::vector<ContactState> & contacts)
 void StabilizerTask::setContacts(const std::vector<std::pair<ContactState, sva::PTransformd>> & contacts)
 {
   ContactDescriptionVector addContacts;
-  for(const auto contact : contacts)
+  for(const auto & contact : contacts)
   {
     addContacts.push_back({contact.first, {robot(), footTasks[contact.first]->surface(), contact.second, c_.friction}});
   }
@@ -482,9 +484,8 @@ void StabilizerTask::setContacts(const ContactDescriptionVector & contacts)
 {
   if(contacts.empty())
   {
-    mc_rtc::log::error_and_throw<std::runtime_error>(
-        "[StabilizerTask] Cannot set contacts from an empty list, the stabilizer "
-        "requires at least one contact to be set.");
+    mc_rtc::log::error_and_throw("[StabilizerTask] Cannot set contacts from an empty list, the stabilizer "
+                                 "requires at least one contact to be set.");
   }
   contacts_.clear();
 
@@ -545,7 +546,7 @@ void StabilizerTask::setSupportFootGains()
 void StabilizerTask::checkInTheAir()
 {
   inTheAir_ = true;
-  for(const auto footT : footTasks)
+  for(const auto & footT : footTasks)
   {
     inTheAir_ = inTheAir_ && footT.second->measuredWrench().force().z() < c_.safetyThresholds.MIN_DS_PRESSURE;
   }
@@ -840,6 +841,19 @@ sva::ForceVecd StabilizerTask::computeDesiredWrench()
       comError.head<2>() -= dcmEstimator_.getBias();
       /// the unbiased dcm allows also to get the velocity of the CoM
       comdError.head<2>() = omega_ * (dcmError_.head<2>() - comError.head<2>());
+
+      Eigen::Vector2d comBias = dcmEstimator_.getBias();
+      clampInPlace(comBias, (-c_.dcmBias.comBiasLimit).eval(), c_.dcmBias.comBiasLimit);
+
+      measuredCoMUnbiased_.head<2>() = measuredCoM_.head<2>() + comBias;
+      measuredCoMUnbiased_.z() = measuredCoM_.z();
+
+      if(c_.dcmBias.correctCoMPos)
+      {
+        /// correct the estimated CoM Position
+        measuredCoM_ = measuredCoMUnbiased_;
+      }
+
       measuredDCMUnbiased_ = dcmTarget_ - dcmError_;
     }
     else

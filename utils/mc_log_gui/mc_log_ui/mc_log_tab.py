@@ -19,6 +19,9 @@ from functools import partial
 
 import copy
 import re
+import sys
+if sys.version_info.major == 3:
+    unicode = str
 
 class MCLogTreeWidgetItem(QtWidgets.QTreeWidgetItem):
   def __init__(self, parent, displayText, actualText, hasData):
@@ -158,7 +161,7 @@ class SpecialPlot(object):
       self.label = self.name + self.label
     self.plot()
   def __add_diff(self):
-    added = filter(lambda x: re.match("{}($|_.*$)".format(self.name), x) is not None, self.figure.data.keys())
+    added = list(filter(lambda x: re.match("{}($|_.*$)".format(self.name), x) is not None, self.figure.data.keys()))
     if self.idx == 0:
       add_fn = self.figure.add_diff_plot_left
     else:

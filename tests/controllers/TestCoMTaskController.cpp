@@ -21,7 +21,7 @@ public:
   TestCoMTaskController(std::shared_ptr<mc_rbdyn::RobotModule> rm, double dt) : MCController(rm, dt)
   {
     // Check that the default constructor loads the robot + ground environment
-    BOOST_CHECK_EQUAL(robots().robots().size(), 2);
+    BOOST_CHECK_EQUAL(robots().size(), 2);
     // Check that JVRC-1 was loaded
     BOOST_CHECK_EQUAL(robot().name(), "jvrc1");
     solver().addConstraintSet(contactConstraint);
@@ -45,6 +45,11 @@ public:
     bool ret = MCController::run();
     BOOST_CHECK(ret);
     nrIter++;
+    if(nrIter == 500)
+    {
+      // Swap the contact order
+      solver().setContacts({{robots(), 1, 0, "AllGround", "LeftFoot"}, {robots(), 1, 0, "AllGround", "RightFoot"}});
+    }
     if(nrIter == 1000)
     {
       /* Check that the task is "finished" */

@@ -55,11 +55,14 @@ MACRO(mc_rtc_test NAME)
     message(FATAL_ERROR "Cannot add mc_rtc_test: neither ${NAME}.cpp nor ${NAME}.in.cpp exists in ${CMAKE_CURRENT_SOURCE_DIR}")
   endif()
   target_link_libraries(${NAME} PUBLIC Boost::unit_test_framework Boost::disable_autolinking ${ARGN})
+  if(NOT Boost_USE_STATIC_LIBS)
+    target_link_libraries(${NAME} PUBLIC Boost::dynamic_linking)
+  endif()
   target_compile_definitions(${NAME} PRIVATE -DBOOST_TEST_DYN_LINK -DBOOST_TEST_MAIN)
   target_include_directories(${NAME} PRIVATE ${CONFIG_HEADER_INCLUDE_DIR})
   target_include_directories(${NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   set_target_properties(${NAME} PROPERTIES FOLDER tests/framework)
-  add_test(${NAME} ${NAME})
+  add_test(NAME ${NAME} COMMAND ${NAME})
   # Adding a project configuration file (for MSVC only)
   generate_msvc_dot_user_file(${NAME})
 ENDMACRO()
@@ -79,6 +82,9 @@ mc_rtc_test(test_io_utils mc_rtc_utils)
 get_filename_component(EXAMPLE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../doc/_examples" ABSOLUTE)
 mc_rtc_test(testSchemaExamples mc_tasks)
 mc_rtc_test(testLogger mc_rbdyn)
+mc_rtc_test(testRobotModule mc_rbdyn)
+find_description_package(jvrc_description)
+set_target_properties(testRobotModule PROPERTIES COMPILE_FLAGS "-DJVRC_DESCRIPTION_PATH=\"${JVRC_DESCRIPTION_PATH}\"")
 
 ###########################
 # -- FSM related tests -- #
@@ -87,6 +93,10 @@ mc_rtc_test(testLogger mc_rbdyn)
 add_subdirectory(fsm_states)
 
 mc_rtc_test(testFSMStateFactory mc_control_fsm ConfigureState)
+# Run in ConfigureState dir to find the DLL on Windows
+set_tests_properties(testFSMStateFactory PROPERTIES WORKING_DIRECTORY "$<TARGET_FILE_DIR:ConfigureState>")
+# Generate an MSVC .user file with the right path
+generate_msvc_dot_user_file(testFSMStateFactory "$(SolutionDir)/tests/fsm_states/ConfigureState/$(Configuration)")
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/testFSMStateFactoryConfig.in.h"
                "${CMAKE_CURRENT_BINARY_DIR}/testFSMStateFactoryConfig.cmake.h")
 file(GENERATE
@@ -100,6 +110,9 @@ file(GENERATE
 add_executable(test_controller_ticker test_controller_ticker.cpp)
 set_target_properties(test_controller_ticker PROPERTIES FOLDER tests/ticker)
 target_link_libraries(test_controller_ticker PUBLIC mc_control Boost::unit_test_framework Boost::disable_autolinking)
+if(NOT Boost_USE_STATIC_LIBS)
+  target_link_libraries(test_controller_ticker PUBLIC Boost::dynamic_linking)
+endif()
 target_compile_definitions(test_controller_ticker PRIVATE -DBOOST_TEST_DYN_LINK -DBOOST_TEST_MAIN)
 target_include_directories(test_controller_ticker PRIVATE ${CONFIG_HEADER_INCLUDE_DIR})
 # Adding a project configuration file (for MSVC only)

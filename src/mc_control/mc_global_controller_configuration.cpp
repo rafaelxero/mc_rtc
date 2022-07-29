@@ -53,7 +53,6 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
   //  General options  //
   ///////////////////////
   config("VerboseLoader", verbose_loader);
-  config("UseSandbox", use_sandbox);
   config("Timestep", timestep);
 
   //////////////
@@ -61,7 +60,6 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
   //////////////
   mc_rbdyn::RobotLoader::set_verbosity(verbose_loader);
   config("RobotModulePaths", robot_module_paths);
-  mc_rbdyn::RobotLoader::enable_sandboxing(use_sandbox);
   if(config("ClearRobotModulePath", false))
   {
     mc_rbdyn::RobotLoader::clear();
@@ -74,7 +72,7 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
     }
     catch(const mc_rtc::LoaderException & exc)
     {
-      mc_rtc::log::error_and_throw<std::runtime_error>("Failed to update robot module path(s)");
+      mc_rtc::log::error_and_throw("Failed to update robot module path(s)");
     }
   }
   if(rm)
@@ -94,13 +92,12 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
         }
         catch(const mc_rtc::LoaderException & exc)
         {
-          mc_rtc::log::error_and_throw<std::runtime_error>("Failed to create {} to use as a main robot", robot_name);
+          mc_rtc::log::error_and_throw("Failed to create {} to use as a main robot", robot_name);
         }
       }
       else
       {
-        mc_rtc::log::error_and_throw<std::runtime_error>(
-            "Trying to use {} as main robot but this robot cannot be loaded", robot_name);
+        mc_rtc::log::error_and_throw("Trying to use {} as main robot but this robot cannot be loaded", robot_name);
       }
     }
     else
@@ -129,14 +126,12 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
         }
         catch(const mc_rtc::LoaderException &)
         {
-          mc_rtc::log::error_and_throw<std::runtime_error>("Failed to create main robot using parameters {}",
-                                                           config("MainRobot").dump());
+          mc_rtc::log::error_and_throw("Failed to create main robot using parameters {}", config("MainRobot").dump());
         }
       }
       else
       {
-        mc_rtc::log::error_and_throw<std::runtime_error>(
-            "Trying to use {} as main robot but this robot cannot be loaded", params[0]);
+        mc_rtc::log::error_and_throw("Trying to use {} as main robot but this robot cannot be loaded", params[0]);
       }
     }
   }
@@ -149,7 +144,6 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
   /////////////////
   //  Observers  //
   /////////////////
-  mc_observers::ObserverLoader::enable_sandboxing(use_sandbox);
   mc_observers::ObserverLoader::set_verbosity(verbose_loader);
   config("ObserverModulePaths", observer_module_paths);
   if(config("ClearObserverModulePath", false))
@@ -164,7 +158,7 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
     }
     catch(const mc_rtc::LoaderException & exc)
     {
-      mc_rtc::log::error_and_throw<std::runtime_error>("Failed to update observer module path(s)");
+      mc_rtc::log::error_and_throw("Failed to update observer module path(s)");
     }
   }
 
@@ -236,8 +230,7 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
   }
   else
   {
-    mc_rtc::log::error_and_throw<std::runtime_error>(
-        "Enabled entry in mc_rtc must contain at least one controller name");
+    mc_rtc::log::error_and_throw("Enabled entry in mc_rtc must contain at least one controller name");
   }
   config("Default", initial_controller);
   config("IncludeHalfSitController", include_halfsit_controller);
@@ -252,7 +245,6 @@ MCGlobalController::GlobalConfiguration::GlobalConfiguration(const std::string &
   //  Logging  //
   ///////////////
   config("Log", enable_log);
-  config("LogReal", log_real);
   {
     std::string log_policy_str = "non-threaded";
     config("LogPolicy", log_policy_str);
@@ -381,34 +373,52 @@ bfs::path conf_or_yaml(bfs::path in)
   return in;
 }
 
+/** Load a single configuration */
+inline void load_config(const std::string & desc,
+                        const std::string name,
+                        const std::vector<std::string> & search_path,
+                        const bfs::path & user_path,
+                        std::unordered_map<std::string, mc_rtc::Configuration> & configs,
+                        const mc_rtc::Configuration & default_config = {},
+                        const std::initializer_list<const char *> & filter = {},
+                        const bfs::path & search_path_suffix = bfs::path("etc"))
+{
+  mc_rtc::Configuration c;
+  c.load(default_config);
+  for(const auto & k : filter)
+  {
+    c.remove(k);
+  }
+  for(const auto & p : search_path)
+  {
+    bfs::path global = conf_or_yaml(bfs::path(p) / search_path_suffix / (name + ".conf"));
+    if(bfs::exists(global))
+    {
+      mc_rtc::log::info("Loading additional {} configuration: {}", desc, global);
+      c.load(global.string());
+    }
+  }
+  bfs::path local = conf_or_yaml(user_path / (name + ".conf"));
+  if(bfs::exists(local))
+  {
+    mc_rtc::log::info("Loading additional {} configuration: {}", desc, local);
+    c.load(local.string());
+  }
+  configs[name] = c;
+}
+
 /** Load configurations */
-void load_configs(const std::string & desc,
-                  const std::vector<std::string> & names,
-                  const std::vector<std::string> & search_path,
-                  const bfs::path & user_path,
-                  std::unordered_map<std::string, mc_rtc::Configuration> & configs,
-                  const mc_rtc::Configuration & default_config = {})
+inline void load_configs(const std::string & desc,
+                         const std::vector<std::string> & names,
+                         const std::vector<std::string> & search_path,
+                         const bfs::path & user_path,
+                         std::unordered_map<std::string, mc_rtc::Configuration> & configs,
+                         const mc_rtc::Configuration & default_config = {},
+                         const std::initializer_list<const char *> & filter = {})
 {
   for(const auto & name : names)
   {
-    mc_rtc::Configuration c;
-    c.load(default_config);
-    for(const auto & p : search_path)
-    {
-      bfs::path global = conf_or_yaml(bfs::path(p) / "etc" / (name + ".conf"));
-      if(bfs::exists(global))
-      {
-        mc_rtc::log::info("Loading additional {} configuration: {}", desc, global);
-        c.load(global.string());
-      }
-    }
-    bfs::path local = conf_or_yaml(user_path / (name + ".conf"));
-    if(bfs::exists(local))
-    {
-      mc_rtc::log::info("Loading additional {} configuration: {}", desc, local);
-      c.load(local.string());
-    }
-    configs[name] = c;
+    load_config(desc, name, search_path, user_path, configs, default_config, filter);
   }
 }
 
@@ -416,6 +426,7 @@ void load_configs(const std::string & desc,
 
 void MCGlobalController::GlobalConfiguration::load_controllers_configs()
 {
+  controllers_configs.clear();
   // Load controller-specific configuration
   load_configs("controller", enabled_controllers, controller_module_paths,
 #ifndef WIN32
@@ -423,19 +434,39 @@ void MCGlobalController::GlobalConfiguration::load_controllers_configs()
 #else
                bfs::path(std::getenv("APPDATA")) / "mc_rtc/controllers",
 #endif
-               controllers_configs, config);
+               controllers_configs, config, {"Plugins"});
 }
 
 void MCGlobalController::GlobalConfiguration::load_plugin_configs()
 {
-  // Load plugins configurations
-  load_configs("plugin", global_plugins, global_plugin_paths,
+  load_controller_plugin_configs("", global_plugins);
+}
+
+void MCGlobalController::GlobalConfiguration::load_controller_plugin_configs(const std::string & controller,
+                                                                             const std::vector<std::string> & plugins)
+{
 #ifndef WIN32
-               bfs::path(std::getenv("HOME")) / ".config/mc_rtc/plugins",
+  bfs::path user_config = bfs::path(std::getenv("HOME")) / ".config" / "mc_rtc";
 #else
-               bfs::path(std::getenv("APPDATA")) / "mc_rtc/plugins",
+  bfs::path user_config = bfs::path(std::getenv("APPDATA")) / "mc_rtc";
 #endif
-               global_plugin_configs);
+  for(const auto & plugin : plugins)
+  {
+    auto plugin_c = global_plugin_configs.find(plugin);
+    if(plugin_c == global_plugin_configs.end())
+    {
+      // Global configuration for this plugin has not been loaded yet
+      load_config("plugin", plugin, global_plugin_paths, user_config / "plugins", global_plugin_configs);
+      plugin_c = global_plugin_configs.find(plugin);
+      assert(plugin_c != global_plugin_configs.end());
+    }
+    if(controller.empty())
+    {
+      continue;
+    }
+    load_config("plugin", plugin, controller_module_paths, user_config / "controllers" / controller / "plugins",
+                global_plugin_configs, plugin_c->second, {}, bfs::path("etc") / controller / "plugins");
+  }
 }
 
 bool MCGlobalController::GlobalConfiguration::enabled(const std::string & ctrl)

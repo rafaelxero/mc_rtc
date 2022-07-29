@@ -19,20 +19,36 @@ void StateBuilder::addElement(const std::vector<std::string> & category, T eleme
   addElement(category, ElementsStacking::Vertical, element);
 }
 
-template<typename T>
-void StateBuilder::addElement(const std::vector<std::string> & category, ElementsStacking stacking, T element)
+template<typename SourceT, typename T>
+void StateBuilder::addElement(SourceT * source, const std::vector<std::string> & category, T element)
 {
-  addElementImpl(category, stacking, element);
+  addElement(source, category, ElementsStacking::Vertical, element);
 }
 
 template<typename T>
-void StateBuilder::addElementImpl(const std::vector<std::string> & category,
+void StateBuilder::addElement(const std::vector<std::string> & category, ElementsStacking stacking, T element)
+{
+  addElementImpl(nullptr, category, stacking, element);
+}
+
+template<typename SourceT, typename T>
+void StateBuilder::addElement(SourceT * source,
+                              const std::vector<std::string> & category,
+                              ElementsStacking stacking,
+                              T element)
+{
+  addElementImpl(source, category, stacking, element);
+}
+
+template<typename T>
+void StateBuilder::addElementImpl(void * source,
+                                  const std::vector<std::string> & category,
                                   ElementsStacking stacking,
                                   T element,
                                   size_t rem)
 {
   static_assert(std::is_base_of<Element, T>::value, "You can only add elements that derive from the Element class");
-  Category & cat = getCategory(category);
+  Category & cat = getOrCreateCategory(category);
   auto it = std::find_if(cat.elements.begin(), cat.elements.end(),
                          [&element](const ElementStore & el) { return el().name() == element.name(); });
   if(it != cat.elements.end())
@@ -41,7 +57,7 @@ void StateBuilder::addElementImpl(const std::vector<std::string> & category,
     log::warning("Discarding request to add this element");
     return;
   }
-  cat.elements.emplace_back(element, cat, stacking);
+  cat.elements.emplace_back(element, cat, stacking, source);
   if(rem == 0)
   {
     cat.id += 1;
@@ -54,6 +70,12 @@ void StateBuilder::addElement(const std::vector<std::string> & category, T eleme
   addElement(category, ElementsStacking::Vertical, element, args...);
 }
 
+template<typename SourceT, typename T, typename... Args>
+void StateBuilder::addElement(SourceT * source, const std::vector<std::string> & category, T element, Args... args)
+{
+  addElement(source, category, ElementsStacking::Vertical, element, args...);
+}
+
 template<typename T, typename... Args>
 void StateBuilder::addElement(const std::vector<std::string> & category,
                               ElementsStacking stacking,
@@ -61,12 +83,24 @@ void StateBuilder::addElement(const std::vector<std::string> & category,
                               Args... args)
 {
   size_t rem = stacking == ElementsStacking::Vertical ? 0 : sizeof...(args);
-  addElementImpl(category, stacking, element, rem);
+  addElementImpl(nullptr, category, stacking, element, rem);
+  addElement(category, stacking, args...);
+}
+
+template<typename SourceT, typename T, typename... Args>
+void StateBuilder::addElement(SourceT * source,
+                              const std::vector<std::string> & category,
+                              ElementsStacking stacking,
+                              T element,
+                              Args... args)
+{
+  size_t rem = stacking == ElementsStacking::Vertical ? 0 : sizeof...(args);
+  addElementImpl(source, category, stacking, element, rem);
   addElement(category, stacking, args...);
 }
 
 template<typename T>
-StateBuilder::ElementStore::ElementStore(T self, const Category & category, ElementsStacking stacking)
+StateBuilder::ElementStore::ElementStore(T self, const Category & category, ElementsStacking stacking, void * source)
 {
   self.id(category.id);
   // FIXME In C++14 we could have T && self and move it into the lambda
@@ -97,60 +131,58 @@ StateBuilder::ElementStore::ElementStore(T self, const Category & category, Elem
     T & el_ = static_cast<T &>(el);
     return el_.handleRequest(data);
   };
+  this->source = source;
 }
 
-template<typename T, typename... Args>
-void StateBuilder::addXYPlot(const std::string & name, T data, Args... args)
+template<typename... Args>
+void StateBuilder::addXYPlot(const std::string & name, Args... args)
 {
-  addXYPlot(name, {}, {}, {}, data, args...);
+  addXYPlot(name, {}, {}, {}, args...);
 }
 
-template<typename T, typename... Args>
-void StateBuilder::addXYPlot(const std::string & name, plot::AxisConfiguration xConfig, T data, Args... args)
+template<typename... Args>
+void StateBuilder::addXYPlot(const std::string & name, plot::AxisConfiguration xConfig, Args... args)
 {
-  addXYPlot(name, xConfig, {}, {}, data, args...);
+  addXYPlot(name, xConfig, {}, {}, args...);
 }
 
-template<typename T, typename... Args>
+template<typename... Args>
 void StateBuilder::addXYPlot(const std::string & name,
                              plot::AxisConfiguration xConfig,
                              plot::AxisConfiguration yLeftConfig,
-                             T data,
                              Args... args)
 {
-  addXYPlot(name, xConfig, yLeftConfig, {}, data, args...);
+  addXYPlot(name, xConfig, yLeftConfig, {}, args...);
 }
 
-template<typename T, typename... Args>
+template<typename... Args>
 void StateBuilder::addXYPlot(const std::string & name,
                              plot::AxisConfiguration xConfig,
                              plot::AxisConfiguration yLeftConfig,
                              plot::AxisConfiguration yRightConfig,
-                             T data,
                              Args... args)
 {
-  static_assert(plot::is_2d<T, Args...>(), "All provided plots in an XY plot must provide 2d data");
+  static_assert(plot::is_2d<Args...>(), "All provided plots in an XY plot must provide 2d data");
   if(plots_.count(name) != 0)
   {
     log::error("A plot titled {} is still active", name);
     log::warning("Discarding request to add this plot");
     return;
   }
-  // One entry for the type, the plot id, the name, the x and y axis configs, the data and one entry per plot
-  uint64_t sz = 7 + sizeof...(args);
+  // One entry for the type, the plot id, the name, the x and y axis configs
+  uint64_t sz = 6;
   uint64_t id = ++plot_id_;
-  plot_callback_t cb = [data, id, sz, xConfig, yLeftConfig, yRightConfig](mc_rtc::MessagePackBuilder & builder,
-                                                                          const std::string & name) {
-    builder.start_array(sz);
+  plot_callback_function_t cb = [id, sz, xConfig, yLeftConfig, yRightConfig](mc_rtc::MessagePackBuilder & builder,
+                                                                             const std::string & name) {
     builder.write(static_cast<uint64_t>(plot::Plot::XY));
     builder.write(id);
     builder.write(name);
     xConfig.write(builder);
     yLeftConfig.write(builder);
     yRightConfig.write(builder);
-    data.write(builder);
   };
-  plots_[name] = makePlotCallback(cb, args...);
+  plots_[name] = {plot::Plot::XY, sz, cb};
+  addPlotData(plots_[name], args...);
 }
 
 template<typename T, typename... Args>
@@ -180,12 +212,11 @@ void StateBuilder::addPlot(const std::string & name,
     log::warning("Discarding request to add this plot");
     return;
   }
-  // One entry for the type, the plot id, the name, the abscissa and both axis configs plus one entry per plot
-  uint64_t sz = 6 + sizeof...(args);
+  // One entry for the type, the plot id, the name, the abscissa and both axis configs
+  uint64_t sz = 6;
   uint64_t id = ++plot_id_;
-  plot_callback_t cb = [abscissa, id, sz, yLeftConfig, yRightConfig](mc_rtc::MessagePackBuilder & builder,
-                                                                     const std::string & name) {
-    builder.start_array(sz);
+  plot_callback_function_t cb = [abscissa, id, sz, yLeftConfig, yRightConfig](mc_rtc::MessagePackBuilder & builder,
+                                                                              const std::string & name) {
     builder.write(static_cast<uint64_t>(plot::Plot::Standard));
     builder.write(id);
     builder.write(name);
@@ -193,27 +224,40 @@ void StateBuilder::addPlot(const std::string & name,
     yLeftConfig.write(builder);
     yRightConfig.write(builder);
   };
-  plots_[name] = makePlotCallback(cb, args...);
-}
-
-template<typename T>
-StateBuilder::plot_callback_t StateBuilder::makePlotCallback(plot_callback_t callback, T plot)
-{
-  return [callback, plot](mc_rtc::MessagePackBuilder & builder, const std::string & name) {
-    callback(builder, name);
-    plot.write(builder);
-    builder.finish_array();
-  };
+  plots_[name] = {plot::Plot::Standard, sz, cb};
+  addPlotData(plots_[name], args...);
 }
 
 template<typename T, typename... Args>
-StateBuilder::plot_callback_t StateBuilder::makePlotCallback(plot_callback_t callback, T plot, Args... args)
+void StateBuilder::addPlotData(PlotCallback & callback, T plot, Args... args)
 {
-  plot_callback_t cb = [callback, plot](mc_rtc::MessagePackBuilder & builder, const std::string & name) {
-    callback(builder, name);
+  callback.msg_size += 1;
+  auto prev_callback = callback.callback;
+  callback.callback = [prev_callback, plot](mc_rtc::MessagePackBuilder & builder, const std::string & name) {
+    prev_callback(builder, name);
     plot.write(builder);
   };
-  return makePlotCallback(cb, args...);
+  addPlotData(callback, args...);
+}
+
+template<typename T>
+bool StateBuilder::addPlotData(const std::string & name, T data)
+{
+  static_assert(!plot::is_Abscissa<T>(), "Extra abscissa cannot be added to the plot");
+  auto it = plots_.find(name);
+  if(it == plots_.end())
+  {
+    mc_rtc::log::error("Requested to add data to non-existing plot {}", name);
+    return false;
+  }
+  auto & callback = it->second;
+  if(callback.type == plot::Plot::XY && !plot::is_2d<T>())
+  {
+    mc_rtc::log::error("Requested to add non 2D data to XY plot {}", name);
+    return false;
+  }
+  addPlotData(callback, data);
+  return true;
 }
 
 } // namespace gui
