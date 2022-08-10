@@ -1336,12 +1336,12 @@ void Robot::feedforwardFriction(const rbd::MultiBodyConfig & mbc)
 {
   friction_->computeFriction(mb(), mbc);
 }
-  
+
 const std::shared_ptr<rbd::Friction> Robot::friction() const
 {
   return friction_;
 }
-  
+
 void mc_rbdyn::Robot::eulerIntegration(double step)
 {
   rbd::eulerIntegration(mb(), mbc(), step);

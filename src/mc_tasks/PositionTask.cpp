@@ -33,31 +33,36 @@ void PositionTask::reset()
   TrajectoryTaskGeneric::reset();
   errorT->position(frame_->position().translation());
 }
-  
+
+  /*
 Eigen::Vector3d PositionTask::position()
 {
   return errorT->position();
 }
-
+  */
+   /*
 void PositionTask::position(const Eigen::Vector3d & pos)
 {
   errorT->position(pos);
 }
-
+   */
 void PositionTask::move_position(const Eigen::Vector3d & pos)
 {
   errorT->position(errorT->position() + pos);
 }
-
+  
+  /*
 Eigen::Vector3d PositionTask::bodyPoint() const
 {
   return errorT->bodyPoint();
 }
-
+  */
+   /*
 void PositionTask::bodyPoint(const Eigen::Vector3d & bodyPoint)
 {
   errorT->bodyPoint(bodyPoint);
 }
+   */
 
 void PositionTask::addToLogger(mc_rtc::Logger & logger)
 {

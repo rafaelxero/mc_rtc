@@ -112,6 +112,8 @@ public:
    */
   MC_SOLVER_DLLAPI QPSolver(double timeStep);
 
+  MC_SOLVER_DLLAPI virtual ~QPSolver() = default;
+  
   /** Add a constraint set
    * \param cs Constraint set added to the solver
    */
@@ -123,7 +125,8 @@ public:
   MC_SOLVER_DLLAPI void removeConstraintSet(ConstraintSet & cs);
 
   /** Add a task to the solver
-   * \param task Pointer to the added task, QPSolver does not take ownership of this pointer and the caller should make sure the object remains valid until it is removed from the solver
+   * \param task Pointer to the added task, QPSolver does not take ownership of this pointer and the caller should make
+   * sure the object remains valid until it is removed from the solver
    */
   MC_SOLVER_DLLAPI void addTask(tasks::qp::Task * task);
 
@@ -149,8 +152,7 @@ public:
   template<typename T>
   inline void addTask(std::shared_ptr<T> task)
   {
-    static_assert(std::is_base_of<mc_tasks::MetaTask, T>::value ||
-                  std::is_base_of<tasks::qp::Task, T>::value,
+    static_assert(std::is_base_of<mc_tasks::MetaTask, T>::value || std::is_base_of<tasks::qp::Task, T>::value,
                   "You are trying to add a task that is neither a tasks::qp::Task or an mc_tasks::MetaTask");
     if(task)
     {
@@ -185,19 +187,19 @@ public:
   template<typename T>
   inline void removeTask(std::shared_ptr<T> task)
   {
-    static_assert(std::is_base_of<mc_tasks::MetaTask, T>::value ||
-                  std::is_base_of<tasks::qp::Task, T>::value,
+    static_assert(std::is_base_of<mc_tasks::MetaTask, T>::value || std::is_base_of<tasks::qp::Task, T>::value,
                   "You are trying to remove a task that is neither a tasks::qp::Task or an mc_tasks::MetaTask");
-    if (task)
+    if(task)
     {
       removeTask(task.get());
     }
   }
 
   /** Add a constraint function from the solver
-   * \param constraint Pointer to the ConstraintFunction. QPSolver does not take ownserhip of this pointer and the caller should make sure the object remains valid until it is removed from the solver
+   * \param constraint Pointer to the ConstraintFunction. QPSolver does not take ownserhip of this pointer and the
+   * caller should make sure the object remains valid until it is removed from the solver
    */
-  template<typename ... Fun>
+  template<typename... Fun>
   void addConstraint(tasks::qp::ConstraintFunction<Fun...> * constraint)
   {
     constraint->addToSolver(robots().mbs(), *solver);
@@ -208,7 +210,7 @@ public:
   /** Remove a constraint function from the solver
    * \param constraint Pointer to the constraint that will be removed. It is not destroyed afterwards
    */
-  template<typename ... Fun>
+  template<typename... Fun>
   void removeConstraint(tasks::qp::ConstraintFunction<Fun...> * constraint)
   {
     constraint->removeFromSolver(*solver);
@@ -216,11 +218,12 @@ public:
     solver->updateNrVars(robots().mbs());
   }
 
-  bool hasConstraint(const tasks::qp::Constraint* constraint);
+  MC_SOLVER_DLLAPI bool hasConstraint(const tasks::qp::Constraint* constraint);
 
   /** Gives access to the tasks::qp::BilateralContact entity in the solver from a contact id
    * \param id The contact id of the contact
-   * \return The tasks:qp::BilateralContact entity from the solver if id is valid, otherwise, the first element of the pair is -1 and the reference is invalid
+   * \return The tasks:qp::BilateralContact entity from the solver if id is valid, otherwise, the first element of the
+   * pair is -1 and the reference is invalid
    */
   MC_SOLVER_DLLAPI std::pair<int, const tasks::qp::BilateralContact &> contactById(
       const tasks::qp::ContactId & id) const;
@@ -268,10 +271,10 @@ public:
    * If successful, will update the robots' configurations
    * \return True if successful, false otherwise.
    */
-  virtual bool run(bool dummy); // Rafa's version
+  MC_SOLVER_DLLAPI virtual bool run(bool dummy); // Rafa's version
   
-  void updateCurrentState();
-  virtual bool solve();
+  MC_SOLVER_DLLAPI void updateCurrentState();
+  MC_SOLVER_DLLAPI virtual bool solve();
 
   /** Provides the result of run() for robots.robot()
    * \param curTime Unused
@@ -310,22 +313,22 @@ public:
   MC_SOLVER_DLLAPI mc_rbdyn::Robots & robots();
 
   /** Values calculated by the QP Solver for all robots */
-  const std::shared_ptr<std::vector<rbd::MultiBodyConfig>> mbcs_calc() const;
+  MC_SOLVER_DLLAPI const std::shared_ptr<std::vector<rbd::MultiBodyConfig>> mbcs_calc() const;
   
   /** Values calculated by the QP Solver for the main robot */
-  const rbd::MultiBodyConfig & mbc_calc() const;
+  MC_SOLVER_DLLAPI const rbd::MultiBodyConfig & mbc_calc() const;
 
-  const std::vector<tasks::qp::Task *> getTasks() const { return solver->getTasks(); }
-  const std::vector<tasks::qp::Equality *> & getEqConstr() const { return solver->getEqConstr(); }
-  const std::vector<tasks::qp::Inequality *> & getInEqConstr() const { return solver->getInEqConstr(); }
-  const std::vector<tasks::qp::GenInequality *> & getGenInEqConstr() const { return solver->getGenInEqConstr(); }
-  const std::vector<tasks::qp::Bound *> & getBoundConstr() const { return solver->getBoundConstr(); }
+  MC_SOLVER_DLLAPI const std::vector<tasks::qp::Task *> getTasks() const { return solver->getTasks(); }
+  MC_SOLVER_DLLAPI const std::vector<tasks::qp::Equality *> & getEqConstr() const { return solver->getEqConstr(); }
+  MC_SOLVER_DLLAPI const std::vector<tasks::qp::Inequality *> & getInEqConstr() const { return solver->getInEqConstr(); }
+  MC_SOLVER_DLLAPI const std::vector<tasks::qp::GenInequality *> & getGenInEqConstr() const { return solver->getGenInEqConstr(); }
+  MC_SOLVER_DLLAPI const std::vector<tasks::qp::Bound *> & getBoundConstr() const { return solver->getBoundConstr(); }
   
   /** Allows to set the real robots used by this solver
    * XXX could be dangerous / misleading if users set it but tasks have stored
    * it too
    */
-  void realRobots(std::shared_ptr<mc_rbdyn::Robots> realRobots);
+  //void realRobots(std::shared_ptr<mc_rbdyn::Robots> realRobots);
   
   /** Gives access to the real robots used by this solver */
   MC_SOLVER_DLLAPI const mc_rbdyn::Robots & realRobots() const;
@@ -396,9 +399,9 @@ public:
     return controller_;
   }
 
- protected:  
-  std::shared_ptr<mc_rbdyn::Robots> robots_p;
-  std::shared_ptr<mc_rbdyn::Robots> realRobots_p;
+protected:
+  mc_rbdyn::RobotsPtr robots_p;
+  mc_rbdyn::RobotsPtr realRobots_p;
   double timeStep;
 
   /** Holds mc_rbdyn::Contact in the solver */
@@ -409,7 +412,7 @@ public:
   std::vector<tasks::qp::BilateralContact> biContacts;
 
   /** Holds MetaTask currently in the solver */
-  std::vector<mc_tasks::MetaTask*> metaTasks_;
+  std::vector<mc_tasks::MetaTask *> metaTasks_;
 
   /** Holds dynamics constraint currently in the solver */
   std::vector<mc_solver::DynamicsConstraint *> dynamicsConstraints_;
@@ -495,11 +498,11 @@ public:
   ElapsedTimeMap & getElapsedTimes();
 };
 
-struct MC_SOLVER_DLLAPI IntglTerm_QPSolver : public QPSolver
+struct IntglTerm_QPSolver : public QPSolver
 {
  public:
 
-  IntglTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
+  MC_SOLVER_DLLAPI IntglTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
                      torque_control::IntegralTerm::IntegralTermType intTermType = torque_control::IntegralTerm::None,
                      torque_control::IntegralTerm::VelocityGainType velGainType = torque_control::IntegralTerm::Diagonal,
                      double lambda = 1, double phiSlow = 0, double phiFast = 0,
@@ -508,26 +511,28 @@ struct MC_SOLVER_DLLAPI IntglTerm_QPSolver : public QPSolver
   /** Constructor (the solver creates its own Robots instance)
    * \param timeStep Timestep of the solver
    */
-  IntglTerm_QPSolver(double timeStep,
+  MC_SOLVER_DLLAPI IntglTerm_QPSolver(double timeStep,
                      torque_control::IntegralTerm::IntegralTermType intTermType = torque_control::IntegralTerm::None,
                      torque_control::IntegralTerm::VelocityGainType velGainType = torque_control::IntegralTerm::Diagonal,
                      double lambda = 1, double phiSlow = 0, double phiFast = 0,
                      double fastFilterWeight = 0);
-  
-  bool run(bool dummy) override;
 
-  const std::shared_ptr<torque_control::IntegralTerm> fbTerm() const;
+  MC_SOLVER_DLLAPI ~IntglTerm_QPSolver() = default;
+  
+  MC_SOLVER_DLLAPI bool run(bool dummy) override;
+
+  MC_SOLVER_DLLAPI const std::shared_ptr<torque_control::IntegralTerm> fbTerm() const;
 
  protected:
 
   std::shared_ptr<torque_control::IntegralTerm> fbTerm_;
 };
 
-struct MC_SOLVER_DLLAPI IntglTermAntiWindup_QPSolver : public IntglTerm_QPSolver
+struct IntglTermAntiWindup_QPSolver : public IntglTerm_QPSolver
 {
  public:
 
-  IntglTermAntiWindup_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
+  MC_SOLVER_DLLAPI IntglTermAntiWindup_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
 			       torque_control::IntegralTerm::IntegralTermType intTermType,
 			       torque_control::IntegralTerm::VelocityGainType velGainType,
 			       double lambda, double perc,
@@ -541,7 +546,7 @@ struct MC_SOLVER_DLLAPI IntglTermAntiWindup_QPSolver : public IntglTerm_QPSolver
   /** Constructor (the solver creates its own Robots instance)
    * \param timeStep Timestep of the solver
    */
-  IntglTermAntiWindup_QPSolver(double timeStep,
+  MC_SOLVER_DLLAPI IntglTermAntiWindup_QPSolver(double timeStep,
 			       torque_control::IntegralTerm::IntegralTermType intTermType,
 			       torque_control::IntegralTerm::VelocityGainType velGainType,
 			       double lambda, double perc,
@@ -551,31 +556,35 @@ struct MC_SOLVER_DLLAPI IntglTermAntiWindup_QPSolver : public IntglTerm_QPSolver
 			       const Eigen::VectorXd & torqueU,
              double phiSlow, double phiFast, 
              double fastFilterWeight);
+
+    MC_SOLVER_DLLAPI ~IntglTermAntiWindup_QPSolver() = default;
 };
 
-struct MC_SOLVER_DLLAPI PassivityPIDTerm_QPSolver : public QPSolver
+struct PassivityPIDTerm_QPSolver : public QPSolver
 {
  public:
 
-  PassivityPIDTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
+  MC_SOLVER_DLLAPI PassivityPIDTerm_QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep,
                             double beta, double lambda, double mu, double sigma, double cis);
 
   /** Constructor (the solver creates its own Robots instance)
    * \param timeStep Timestep of the solver
    */
-  PassivityPIDTerm_QPSolver(double timeStep,
+  MC_SOLVER_DLLAPI PassivityPIDTerm_QPSolver(double timeStep,
                             double beta, double lambda, double mu, double sigma, double cis);
 
-  bool run(bool dummy) override;
-  bool solve() override;
+  MC_SOLVER_DLLAPI ~PassivityPIDTerm_QPSolver() = default;
+  
+  MC_SOLVER_DLLAPI bool run(bool dummy) override;
+  MC_SOLVER_DLLAPI bool solve() override;
 
-  const std::shared_ptr<torque_control::PassivityPIDTerm> fbTerm() const;
+  MC_SOLVER_DLLAPI const std::shared_ptr<torque_control::PassivityPIDTerm> fbTerm() const;
   
  protected:
   
   std::shared_ptr<torque_control::PassivityPIDTerm> fbTerm_;
 };
- 
-}
+
+} // namespace mc_solver
 
 #endif

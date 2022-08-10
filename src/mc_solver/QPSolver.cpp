@@ -34,8 +34,8 @@
 namespace
 {
 
-std::vector<mc_solver::ContactMsg> contactsMsgFromContacts
-  (const mc_rbdyn::Robots & robots, const std::vector<mc_rbdyn::Contact> & contacts)
+std::vector<mc_solver::ContactMsg> contactsMsgFromContacts(const mc_rbdyn::Robots & robots,
+                                                           const std::vector<mc_rbdyn::Contact> & contacts)
 {
   std::vector<mc_solver::ContactMsg> res;
 
@@ -49,7 +49,7 @@ std::vector<mc_solver::ContactMsg> contactsMsgFromContacts
 
     sva::PTransformd X_0_b1 = r1.mbc().bodyPosW[r1BodyIndex];
     sva::PTransformd X_0_b2 = r2.mbc().bodyPosW[r2BodyIndex];
-    sva::PTransformd X_b1_b2 = X_0_b2*X_0_b1.inv();
+    sva::PTransformd X_b1_b2 = X_0_b2 * X_0_b1.inv();
 
     mc_solver::ContactMsg msg;
     msg.r1_index = static_cast<uint16_t>(c.r1Index());
@@ -58,7 +58,7 @@ std::vector<mc_solver::ContactMsg> contactsMsgFromContacts
     msg.r2_body = c.r2Surface()->bodyName();
     msg.r1_surface = c.r1Surface()->name();
     msg.r2_surface = c.r2Surface()->name();
-    msg.r1_points = const_cast<const mc_rbdyn::Surface&>(*(c.r1Surface())).points();
+    msg.r1_points = const_cast<const mc_rbdyn::Surface &>(*(c.r1Surface())).points();
     msg.X_b1_b2 = X_b1_b2;
     msg.nr_generators = static_cast<uint16_t>(mc_rbdyn::Contact::nrConeGen);
     msg.mu = c.friction();
@@ -72,7 +72,7 @@ std::vector<mc_solver::ContactMsg> contactsMsgFromContacts
 
 namespace mc_solver
 {
-QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
+QPSolver::QPSolver(mc_rbdyn::RobotsPtr robots, double timeStep)
   : robots_p(robots), timeStep(timeStep),
     first_run_(true), feedback_(false), feedback_old_(false), switch_trigger(false)
 {
@@ -93,10 +93,7 @@ QPSolver::QPSolver(std::shared_ptr<mc_rbdyn::Robots> robots, double timeStep)
               {"solve", 0}};
 }
 
-QPSolver::QPSolver(double timeStep)
-: QPSolver{std::make_shared<mc_rbdyn::Robots>(), timeStep}
-{
-}
+QPSolver::QPSolver(double timeStep) : QPSolver{mc_rbdyn::Robots::make(), timeStep} {}
 
 void QPSolver::addConstraintSet(ConstraintSet & cs)
 {
@@ -148,12 +145,9 @@ void QPSolver::addTask(mc_tasks::MetaTask * task)
 void QPSolver::removeTask(tasks::qp::Task * task)
 {
   solver->removeTask(task);
-  shPtrTasksStorage.erase(std::remove_if(
-    shPtrTasksStorage.begin(), shPtrTasksStorage.end(),
-    [task](const std::shared_ptr<void> & p)
-    {
-      return task == p.get();
-    }), shPtrTasksStorage.end());
+  shPtrTasksStorage.erase(std::remove_if(shPtrTasksStorage.begin(), shPtrTasksStorage.end(),
+                                         [task](const std::shared_ptr<void> & p) { return task == p.get(); }),
+                          shPtrTasksStorage.end());
 }
 
 void QPSolver::removeTask(mc_tasks::MetaTask * task)
@@ -161,7 +155,6 @@ void QPSolver::removeTask(mc_tasks::MetaTask * task)
   auto it = std::find(metaTasks_.begin(), metaTasks_.end(), task);
   if(it != metaTasks_.end())
   {
-    metaTasks_.erase(it);
     task->removeFromSolver(*this);
     task->resetIterInSolver();
     if(logger_)
@@ -173,6 +166,10 @@ void QPSolver::removeTask(mc_tasks::MetaTask * task)
       task->removeFromGUI(*gui_);
     }
     mc_rtc::log::info("Removed task {}", task->name());
+    metaTasks_.erase(it);
+    shPtrTasksStorage.erase(std::remove_if(shPtrTasksStorage.begin(), shPtrTasksStorage.end(),
+                                           [task](const std::shared_ptr<void> & p) { return task == p.get(); }),
+                            shPtrTasksStorage.end());
   }
 }
 
@@ -181,18 +178,18 @@ bool QPSolver::hasConstraint(const tasks::qp::Constraint* constraint)
   return solver->hasConstraint(constraint);
 }
 
-std::pair<int, const tasks::qp::BilateralContact&> QPSolver::contactById(const tasks::qp::ContactId & id) const
+std::pair<int, const tasks::qp::BilateralContact &> QPSolver::contactById(const tasks::qp::ContactId & id) const
 {
   const std::vector<tasks::qp::BilateralContact> & contacts = solver->data().allContacts();
   for(size_t i = 0; i < contacts.size(); ++i)
   {
     if(id == contacts[i].contactId)
     {
-      return std::pair<int, const tasks::qp::BilateralContact&>(i, contacts[i]);
+      return std::pair<int, const tasks::qp::BilateralContact &>(static_cast<int>(i), contacts[i]);
     }
   }
   // Of course this ref has no value here...
-  return std::pair<int, const tasks::qp::BilateralContact&>(-1, tasks::qp::BilateralContact());
+  return std::pair<int, const tasks::qp::BilateralContact &>(-1, tasks::qp::BilateralContact());
 }
 
 Eigen::VectorXd QPSolver::lambdaVec(int cIndex) const
@@ -291,7 +288,7 @@ void QPSolver::setContacts(ControllerToken, const std::vector<mc_rbdyn::Contact>
   {
     qpRes.contacts_lambda_begin.push_back(data.lambdaBegin(i) - data.lambdaBegin());
   }
-  qpRes.lambdaVec = solver.lambdaVec();
+  qpRes.lambdaVec = solver->lambdaVec();
   updateConstrSize();
 }
 
@@ -524,7 +521,7 @@ bool QPSolver::runClosedLoop(bool integrateControlState)
   }
   return false;
 }
-  
+
 bool QPSolver::run(bool dummy) // Rafa's version
 {
   clock_t time;
@@ -533,7 +530,7 @@ bool QPSolver::run(bool dummy) // Rafa's version
   {
     t->update(*this);
   }
-
+  
   time = clock();
   updateCurrentState();
   elapsed_.at("updateCurrentState") = (int) (clock() - time);
@@ -808,7 +805,7 @@ tasks::qp::SolverData & QPSolver::data()
   return solver->data();
 }
 
-void QPSolver::fillTorque(const mc_solver::DynamicsConstraint& dynamicsConstraint)
+void QPSolver::fillTorque(const mc_solver::DynamicsConstraint & dynamicsConstraint)
 {
   fillTorque(dynamicsConstraint.motionConstr.get());
 }
@@ -862,6 +859,11 @@ boost::timer::cpu_times QPSolver::solveTime()
 boost::timer::cpu_times QPSolver::solveAndBuildTime()
 {
   return solver->solveAndBuildTime();
+}
+
+const Eigen::VectorXd & QPSolver::result() const
+{
+  return solver->result();
 }
 
 void QPSolver::logger(std::shared_ptr<mc_rtc::Logger> logger)

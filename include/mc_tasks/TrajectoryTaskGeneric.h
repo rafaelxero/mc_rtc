@@ -55,8 +55,7 @@ struct TrajectoryTaskGeneric : public TrajectoryTaskGenericCommon
    * \param weight Weight of the task
    *
    */
-  TrajectoryTaskGeneric(const mc_rbdyn::Robots & robots, unsigned int robotIndex,
-                        double stiffness, double weight);
+  TrajectoryTaskGeneric(const mc_rbdyn::Robots & robots, unsigned int robotIndex, double stiffness, double weight);
 
   /*! \brief Constructor (auto damping)
    *
@@ -273,8 +272,8 @@ struct TrajectoryTaskGeneric : public TrajectoryTaskGenericCommon
 protected:
   /*! This function should be called to finalize the task creation, it will
    * create the actual tasks objects */
-  template<typename ... Args>
-  void finalize(Args && ... args);
+  template<typename... Args>
+  void finalize(Args &&... args);
 
   void addToGUI(mc_rtc::gui::StateBuilder &) override;
 
@@ -284,7 +283,7 @@ protected:
       double dt,
       const mc_rtc::Configuration & config) const override;
 
- protected:
+protected:
   const mc_rbdyn::Robots & robots;
   unsigned int rIndex;
   std::shared_ptr<T> errorT = nullptr;
